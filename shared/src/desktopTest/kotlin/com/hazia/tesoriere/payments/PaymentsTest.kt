@@ -12,6 +12,7 @@ import com.hazia.tesoriere.model.Account
 import com.hazia.tesoriere.model.AccountType
 import com.hazia.tesoriere.model.ProfileData
 import kotlinx.datetime.LocalDate
+import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -166,6 +167,26 @@ class PaymentsTest {
         assertFalse(Payments.canSave(d, draft("10.00", PaymentSource.Savings, null to "10.00")))
         assertFalse(Payments.canSave(d, draft("10.00", PaymentSource.Goal("gone"), "fun" to "10.00")))
         assertFalse(Payments.canSave(d, draft("10.00", PaymentSource.Account("gone"), "fun" to "10.00")))
+    }
+
+    // SPEC:R21 SPEC:R20
+    @Test fun `R21 a payment round-trips through JSON with its source as goal_id and its logged instant in epoch milliseconds`() {
+        val p = Payment(
+            id = "pay-1", profileId = Fixture.PROFILE, date = day, loggedAt = clock.now(), total = cents("10.99"),
+            source = PaymentSource.Goal("g-1"), payee = "Supermarket A",
+            parts = listOf(Part("groc", cents("5.01")), Part("home", cents("5.98"))),
+            receiptId = "3f6c2a9e-0000-4000-8000-000000000001",
+            receiptLines = listOf(
+                ReceiptLine("cookies Q", "600 g", 3, cents("3.18"), "chat-food", "Food", "groc"),
+                ReceiptLine("bananas", "865 g", 1, cents("1.83"), "chat-food", "Food", "groc"),
+                ReceiptLine("batteries", null, 2, cents("5.98"), "chat-home", "Household", "home"),
+            ),
+            bankKeys = BankKeys(null, "syn:2026-03-14|-1099|SUPERMARKET A"),
+        )
+        val json = Json.encodeToString(Payment.serializer(), p)
+        assertTrue("\"source\":\"goal:g-1\"" in json, json)
+        assertTrue("\"loggedAt\":${clock.now().toEpochMilliseconds()}" in json, json)
+        assertEquals(p, Json.decodeFromString(Payment.serializer(), json))
     }
 
     // SPEC:R21
