@@ -46,7 +46,7 @@ object Goals {
      * to the cent; by amount, the months round up to a whole month.
      */
     fun derive(g: Goal, today: LocalDate): GoalDerivation {
-        val target = g.target ?: return GoalDerivation(null, null)          // a running tally
+        val target = g.target?.takeIf { it > 0 } ?: return GoalDerivation(null, null)   // a running tally
         val remaining = maxOf(0L, target - g.saved)
         g.targetDate?.let { date ->
             val months = calendarMonthsUntil(today, date)
@@ -70,8 +70,12 @@ object Goals {
         d.goals.filter { it.id != excludeId && it.target != null && !commitmentEnded(it) }
             .sumOf { derive(it, today).monthly ?: 0 }
 
-    /** SPEC R56's comparison. With Income on it reads the income received, never a forecast. */
-    fun frame(d: ProfileData, monthly: Money, excludeId: String?, scheduledRecurring: Money, today: LocalDate): GoalFrame {
+    /**
+     * SPEC R56's comparison. With Income on it reads the income received, never a forecast. With
+     * Income off it needs Savings, so it is skipped (null) while Savings is unset (SPEC R49).
+     */
+    fun frame(d: ProfileData, monthly: Money, excludeId: String?, scheduledRecurring: Money, today: LocalDate): GoalFrame? {
+        if (!d.settings.incomeEnabled && d.savings.amount == null) return null
         val others = otherGoalsMonthlyTotal(d, excludeId, today)
         return if (d.settings.incomeEnabled) {
             val available = Income.receivedThisMonth(d, today) - scheduledRecurring - others
@@ -86,9 +90,11 @@ object Goals {
      * SPEC R57: the base is income received this month with Income on (threshold 1/6) and
      * Savings with it off (threshold 1/12). The amounts offered are 1/14, 1/12 and 1/6 of income
      * or 1/20, 1/16 and 1/12 of Savings, each rounded to the nearest whole unit, halves up.
+     * Null when within the threshold, and with Income off while Savings is unset (SPEC R49).
      */
     fun sustainability(d: ProfileData, monthly: Money, today: LocalDate): Sustainability? {
         val incomeOn = d.settings.incomeEnabled
+        if (!incomeOn && d.savings.amount == null) return null
         val base = if (incomeOn) Income.receivedThisMonth(d, today) else d.savingsAmount
         val threshold = if (incomeOn) base / 6 else base / 12
         if (monthly <= threshold) return null

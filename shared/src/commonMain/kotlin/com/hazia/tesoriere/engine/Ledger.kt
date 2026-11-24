@@ -122,7 +122,8 @@ object Ledger {
         val pairs = HashMap<String, String>()
         transactions
             .filter { !it.key.startsWith("rec:") }                       // not a sweep
-            .groupBy { it.key }                                          // same target
+            // same target; an adjustment's target is its category's spent for one month (SPEC R25)
+            .groupBy { if (it.key.startsWith("cat:")) "${it.key}|${it.date.ymKey()}" else it.key }
             .values
             .forEach { rows ->
                 val sorted = rows.sortedWith(compareBy({ it.loggedAt }, { it.id }))   // next in logged order

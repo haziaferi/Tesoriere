@@ -13,6 +13,8 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+private val GoalDerivationNone = com.hazia.tesoriere.engine.GoalDerivation(null, null)
+
 /** Ported from Sci-Fin native/shared/src/desktopTest/kotlin/app/scifin/GoalsTest.kt at 2892110. */
 class GoalsTest {
     private val today = LocalDate(2026, 9, 14)
@@ -135,6 +137,27 @@ class GoalsTest {
         val s = Goals.sustainability(d, cents("201.00"), today)!!
         assertTrue(s.incomeOn)
         assertEquals(listOf(cents("86.00"), cents("100.00"), cents("200.00")), s.suggestions)     // 85.71 rounds to 86.00
+    }
+
+    // SPEC:R49 SPEC:R56 SPEC:R57
+    @Test fun `R49 with Income off and Savings unset the goal checks are skipped, not read as zero`() {
+        val d = profile(savings = null)
+        assertNull(Goals.frame(d, cents("250.00"), "new", cents("300.00"), today))
+        assertNull(Goals.sustainability(d, cents("250.00"), today))
+    }
+
+    // SPEC:R49 SPEC:R56
+    @Test fun `R49 with Income on the room is worked out even while Savings is unset`() {
+        var d = profile(savings = null)
+        d = d.copy(settings = d.settings.copy(incomeEnabled = true, incomeEnabledDate = LocalDate(2026, 1, 1)))
+        val f = Goals.frame(d, cents("100.00"), "new", cents("0.00"), today) as GoalFrame.IncomeOn
+        assertEquals(0L, f.available)
+    }
+
+    // SPEC:R55
+    @Test fun `R55 a target of zero has no monthly amount, even with a date`() {
+        val g = Goal("g", p, "Jar", target = 0, targetDate = LocalDate(2027, 3, 14), mode = GoalMode.DATE)
+        assertEquals(GoalDerivationNone, Goals.derive(g, today))
     }
 
     // SPEC:R57

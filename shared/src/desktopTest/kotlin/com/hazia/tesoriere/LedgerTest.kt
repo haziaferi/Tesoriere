@@ -192,6 +192,13 @@ class LedgerTest {
         assertTrue(Ledger.pairEligibility(listOf(tx("a", "goal:g", "40.00", t0), tx("b", "goal:g", "-40.00", t0 + 49.hours))).isEmpty())
     }
 
+    // SPEC:R53 SPEC:R25
+    @Test fun `R53 adjustments on one category pair only within one month`() {
+        val march = tx("a", "cat:c", "20.00", t0, date = LocalDate(2026, 3, 31))
+        assertTrue(Ledger.pairEligibility(listOf(march, tx("b", "cat:c", "-20.00", t0 + 1.hours, date = LocalDate(2026, 4, 1)))).isEmpty())
+        assertEquals("b", Ledger.pairEligibility(listOf(march, tx("b", "cat:c", "-20.00", t0 + 1.hours, date = LocalDate(2026, 3, 31))))["a"])
+    }
+
     // SPEC:R53
     @Test fun `R53 sweep rows and zero rows never pair`() {
         assertTrue(Ledger.pairEligibility(listOf(tx("a", "rec:e", "100.00", t0), tx("b", "rec:e", "-100.00", t0 + 1.hours))).isEmpty())

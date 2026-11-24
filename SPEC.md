@@ -355,7 +355,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Evidence:** Sci-Fin's spec, section 3.1, and `engine/Ledger.kt` at `2892110`.
 
-**Acceptance:** A fresh Profile's Savings is unset; a 60.00 movement out of an unset Savings leaves it at -60.00; a direct edit to 0.00 leaves it at 0.00, no longer unset.
+**Acceptance:** A fresh Profile's Savings is unset; a 60.00 movement out of an unset Savings leaves it at -60.00; a direct edit to 0.00 leaves it at 0.00, no longer unset; with Income off and Savings unset, R56's comparison and R57's amounts are skipped.
 
 **Not:** Reading unset as zero: an honest zero must stay distinguishable from no answer.
 
@@ -416,7 +416,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 | Condition | Holds when |
 |---|---|
-| Same target | both rows have the same `key` |
+| Same target | both rows have the same `key`; two `cat:` adjustments are also dated in the same month (R25) |
 | Opposite | the amounts are equal, opposite and not zero |
 | Next | the second is the next row on that key in logged order, with none between |
 | Window | they were logged at most 48 hours apart |
@@ -881,7 +881,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R18 · Ported pieces: On a fresh install the pieces marked off show no screen, row or notification until switched on; Profiles off means one Profile and no switcher.
 - R19 · Sci-Fin backup import: Importing a Sci-Fin schema-10 backup yields one new Tesoriere Profile per Sci-Fin Profile, with the same Savings, Goals, Categories, Recurring expenses, Accounts and ledger counts the review showed; a schema-11 file is refused and nothing is written.
 - R20 · Money and time: No floating-point type holds money in `shared/`; every date field is a calendar day and every logged time an instant.
-- R49 · Savings: A fresh Profile's Savings is unset; a 60.00 movement out of an unset Savings leaves it at -60.00; a direct edit to 0.00 leaves it at 0.00, no longer unset.
+- R49 · Savings: A fresh Profile's Savings is unset; a 60.00 movement out of an unset Savings leaves it at -60.00; a direct edit to 0.00 leaves it at 0.00, no longer unset; with Income off and Savings unset, R56's comparison and R57's amounts are skipped.
 - R50 · Goals hold money out of Savings: Adding 150.00 to a Goal raises its saved money by 150.00 and lowers Savings by 150.00.
 - R51 · The ledger: A 20.00 adjustment on a category is stored as `cat:<id>` with amount 2000 and lowers Savings by 20.00; a 100.00 sweep is `rec:<id>` with amount 10000 and lowers Savings by 100.00; an `acct:` row leaves Savings as it was.
 - R52 · Direct edits log the change: Setting Savings from 150.00 to 1,000.00 logs a `savings` row of +850.00; setting a Goal's saved money from 400.00 to 300.00 logs a `goal:<id>` row of -100.00 and raises Savings by 100.00.

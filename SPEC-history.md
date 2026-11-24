@@ -71,3 +71,5 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-24 · R57 · added · gentler monthly amounts · builder
 - 2026-11-24 · R58 · added · deleting a goal · builder
 - 2026-11-24 · R59 · added · plan against spent · builder
+- 2026-11-24 · R49 · changed · acceptance: goal checks skipped with Income off while Savings is unset · builder
+- 2026-11-24 · R53 · changed · two cat: adjustments pair only within one month · builder
