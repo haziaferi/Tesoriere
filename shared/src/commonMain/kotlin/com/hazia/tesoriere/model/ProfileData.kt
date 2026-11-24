@@ -1,5 +1,7 @@
 package com.hazia.tesoriere.model
 
+import com.hazia.tesoriere.payments.Payment
+
 /*
  * Ported from Sci-Fin native/shared/src/commonMain/kotlin/app/scifin/model/ProfileData.kt at 2892110.
  */
@@ -21,6 +23,8 @@ data class ProfileData(
     val transactions: List<Transaction> = emptyList(),
     /** Hours logged since the last payday that paid them. */
     val shifts: List<Shift> = emptyList(),
+    /** Every expense (SPEC R21). */
+    val payments: List<Payment> = emptyList(),
 ) {
     val profileId: String get() = profile.id
 
