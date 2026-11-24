@@ -45,40 +45,50 @@ Kinds: O owner rule · D decided · I inherited · A assumed · Q open.
 | D-R57 | Gentler monthly amounts | 6. Goals and the monthly plan |
 | D-R58 | Deleting a goal | 6. Goals and the monthly plan |
 | D-R59 | Plan against spent | 6. Goals and the monthly plan |
-| D-R60 | Recurring expenses | 7. Recurring expenses |
-| D-R61 | The chain of due dates | 7. Recurring expenses |
-| D-R62 | Apportioned share | 7. Recurring expenses |
-| D-R63 | Sweeps | 7. Recurring expenses |
-| D-R64 | Creating a recurring expense | 7. Recurring expenses |
-| D-R65 | Editing a recurring expense | 7. Recurring expenses |
-| D-R66 | Deleting a recurring expense | 7. Recurring expenses |
-| O-R67 | Every recurring expense has a category | 7. Recurring expenses |
-| D-R68 | Recurring threshold note | 7. Recurring expenses |
-| D-R69 | Reminder dates | 7. Recurring expenses |
-| D-R70 | The month cycle | 8. The month cycle |
-| D-R71 | Automatic deposits on the same open | 8. The month cycle |
-| D-R72 | End of a term | 8. The month cycle |
-| D-R73 | A Loan that follows its payment | 8. The month cycle |
-| D-R74 | Catch-up summary | 8. The month cycle |
-| D-R26 | Statement import | 9. Statement import |
-| D-R27 | The receipt contract | 10. Chatelaine receipts |
-| D-R28 | Receipt folder | 10. Chatelaine receipts |
-| D-R29 | Picking up receipts | 10. Chatelaine receipts |
-| D-R30 | Receipt files Tesoriere cannot take | 10. Chatelaine receipts |
-| D-R31 | Receipt review | 10. Chatelaine receipts |
-| D-R32 | Category links | 10. Chatelaine receipts |
-| D-R33 | Closing a review | 10. Chatelaine receipts |
-| D-R34 | Changing a link | 10. Chatelaine receipts |
-| D-R35 | A receipt's source | 10. Chatelaine receipts |
-| D-R36 | Store links | 11. One payment, two sources |
-| D-R37 | Pairing rule | 11. One payment, two sources |
-| D-R38 | Whichever arrives first | 11. One payment, two sources |
-| D-R39 | Difference part | 11. One payment, two sources |
-| D-R40 | Pairing by hand | 11. One payment, two sources |
-| D-R41 | Deleting a receipt payment | 12. Edge cases |
-| D-R42 | Deleting a linked category | 12. Edge cases |
-| D-R43 | Test plan | 13. Test plan |
-| D-R44 | Rollout phases | 14. Rollout |
+| D-R75 | Income switch | 7. Income |
+| D-R76 | Paydays | 7. Income |
+| D-R77 | Income received this month | 7. Income |
+| D-R78 | No income logged | 7. Income |
+| D-R79 | Salaried or hourly | 7. Income |
+| D-R80 | Logged hours | 7. Income |
+| D-R81 | Hourly payday | 7. Income |
+| D-R82 | Hourly estimate | 7. Income |
+| D-R83 | Leaving hourly | 7. Income |
+| D-R84 | A salaried payday logged by hand | 7. Income |
+| D-R60 | Recurring expenses | 8. Recurring expenses |
+| D-R61 | The chain of due dates | 8. Recurring expenses |
+| D-R62 | Apportioned share | 8. Recurring expenses |
+| D-R63 | Sweeps | 8. Recurring expenses |
+| D-R64 | Creating a recurring expense | 8. Recurring expenses |
+| D-R65 | Editing a recurring expense | 8. Recurring expenses |
+| D-R66 | Deleting a recurring expense | 8. Recurring expenses |
+| O-R67 | Every recurring expense has a category | 8. Recurring expenses |
+| D-R68 | Recurring threshold note | 8. Recurring expenses |
+| D-R69 | Reminder dates | 8. Recurring expenses |
+| D-R70 | The month cycle | 9. The month cycle |
+| D-R71 | Automatic deposits on the same open | 9. The month cycle |
+| D-R72 | End of a term | 9. The month cycle |
+| D-R73 | A Loan that follows its payment | 9. The month cycle |
+| D-R74 | Catch-up summary | 9. The month cycle |
+| D-R26 | Statement import | 10. Statement import |
+| D-R27 | The receipt contract | 11. Chatelaine receipts |
+| D-R28 | Receipt folder | 11. Chatelaine receipts |
+| D-R29 | Picking up receipts | 11. Chatelaine receipts |
+| D-R30 | Receipt files Tesoriere cannot take | 11. Chatelaine receipts |
+| D-R31 | Receipt review | 11. Chatelaine receipts |
+| D-R32 | Category links | 11. Chatelaine receipts |
+| D-R33 | Closing a review | 11. Chatelaine receipts |
+| D-R34 | Changing a link | 11. Chatelaine receipts |
+| D-R35 | A receipt's source | 11. Chatelaine receipts |
+| D-R36 | Store links | 12. One payment, two sources |
+| D-R37 | Pairing rule | 12. One payment, two sources |
+| D-R38 | Whichever arrives first | 12. One payment, two sources |
+| D-R39 | Difference part | 12. One payment, two sources |
+| D-R40 | Pairing by hand | 12. One payment, two sources |
+| D-R41 | Deleting a receipt payment | 13. Edge cases |
+| D-R42 | Deleting a linked category | 13. Edge cases |
+| D-R43 | Test plan | 14. Test plan |
+| D-R44 | Rollout phases | 15. Rollout |
 | D-R45 | Price comparison | Out of scope |
 | D-R46 | Households in v1 | Out of scope |
 | D-R47 | Currency conversion in v1 | Out of scope |
@@ -100,6 +110,8 @@ Kinds: O owner rule · D decided · I inherited · A assumed · Q open.
 | Adjustment | A logged change to a category's spent figure for one month, written as a `cat:` ledger row (R25, R51). |
 | Recurring expense | A cost known in advance and the same each time, such as rent, set aside from Savings by sweeps (R60). |
 | Sweep | A `rec:` ledger row that sets a recurring expense's money aside, filed under its category (R63, R67). |
+| Payday | A day income is paid, following its cadence from the payday the user chose (R76). |
+| Shift | Hours worked on one day at a rate per hour, logged for hourly income; it moves no money until a payday pays it (R80, R81). |
 | Pair | A receipt and a bank row recorded as the same payment. |
 | Category link | A remembered match from a Chatelaine category id to a Tesoriere category. |
 | Store link | A remembered match from a Chatelaine store name to a bank row's payee text. |
@@ -617,7 +629,159 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · builder · own words
 
-## 7. Recurring expenses
+## 7. Income
+
+### D-R75 · Income switch
+
+**Rule:** Income is off on a fresh Profile (R18) and the user switches it on in the settings. Switching it on keeps the day it was switched on and takes that day as the payday until the user chooses another. Switching it off clears every income setting and the hours not yet paid, as below, so switching it on again starts blank; money already received stays in Savings.
+
+**Why:** A pay figure kept from a harder period could resurface later, and a stale deposit marker would deposit paydays that never arrived (R71).
+
+**Values:**
+
+| Setting | After switching off |
+|---|---|
+| amount per paycheck | 0 |
+| automatic deposit | off |
+| both paydays | none |
+| the day Income was switched on | none |
+| the last day income was logged, the last automatic deposit | none |
+| how income is paid (R79) | salaried, a rate of 0, no payday answered |
+| hours logged and not yet paid (R80) | removed |
+
+**Evidence:** Sci-Fin's spec, sections 3.3 and 3.10, and `engine/Income.kt` and `engine/Hourly.kt` at `2892110`.
+
+**Acceptance:** A fresh Profile has Income off, salaried, with automatic deposit off. Switched on on 14 September 2026, Income has that day as its switch-on day and its payday. A semimonthly income of 1,450.00 on the 15th and the 30th with automatic deposit on, switched off, has an amount of 0.00, automatic deposit off, and no payday, switch-on day, last logged day or last deposit. An hourly income with two shifts logged, switched off, has no shift and is salaried at a rate of 0.00.
+
+**Not:** Taking back money already deposited: the switch controls only what comes after it.
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R76 · Paydays
+
+**Rule:** Income has an amount per paycheck and a cadence, and its paydays follow the cadence from the payday the user chose, as below; a day a month lacks falls on that month's last day, and the next month returns to the chosen day. With no payday chosen, or a semimonthly income with one of its two days not chosen, there is no payday, so nothing is deposited or asked. Changing the cadence clears the chosen payday, the second one unless the new cadence is semimonthly, and the last automatic deposit, so no payday is counted across the change.
+
+**Values:**
+
+| Cadence | Paydays |
+|---|---|
+| weekly | every 7 days from the chosen payday |
+| biweekly | every 14 days from the chosen payday |
+| semimonthly | two days of each month: the chosen payday's and a second chosen day's |
+| monthly | the chosen payday's day of each month |
+
+**Evidence:** Sci-Fin's spec, section 3.3, and `engine/Income.kt` at `2892110`.
+
+**Acceptance:** A biweekly income first paid 11 September 2026 is next paid 11 September read that day, 25 September read on 12 September and 9 October read on 26 September; a weekly one is next paid 18 September read on 12 September. A monthly income paid on 31 January 2026 is next paid 28 February read on 1 February, then 31 March. A semimonthly income on the 15th and the 30th is next paid 15 September read on 2 September, 30 September read on 16 September and 15 October read on 1 October; one on the 15th and the 31st is paid 28 February 2026. A semimonthly income changed to monthly has no payday, no second payday and no last deposit; set to the cadence it has, it is unchanged.
+
+**Not:** A flat 30 days for monthly pay: the payday would drift across the calendar.
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R77 · Income received this month
+
+**Rule:** The income received this month is worked out when read, never stored: the sum of the income rows dated in the month and on or after the day Income was switched on. An income row is one the user logs as income, an automatic deposit (R71) or a confirmed hourly payday (R81); it counts in the month of its date, whatever day it was logged. Nothing is counted before it arrives.
+
+**Why:** Worked out from the rows, the figure needs no monthly reset and gives the same answer whichever runs first, the month cycle or the deposits (R71).
+
+**Evidence:** Sci-Fin's spec, section 3.3, and `engine/Income.kt` at `2892110`.
+
+**Acceptance:** With Income switched on on 5 September 2026 and read on 14 September: 1,450.00 of income dated 11 September counts; 1,450.00 of income dated 28 August, 300.00 of income dated 2 September and 50.00 into Savings not logged as income do not; the figure is 1,450.00.
+
+**Not:** A monthly figure worked out from the cadence: a month with a third biweekly payday, or a payday not yet arrived, would misstate the money there is.
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R78 · No income logged
+
+**Rule:** For salaried income with automatic deposit off, the engine gives the number of days with no income logged once a payday has passed with none, as below; it is shown as a note that informs and never blocks (R12), and how it reads is the design pass's (R16). The count is today minus the reference day: the last day income was logged or, with none logged since Income was switched on, the switch-on day. Hourly income has none: its payday asks instead (R81).
+
+**Values:**
+
+| Cadence | Given when |
+|---|---|
+| weekly | more than 7 days have passed since the reference day |
+| biweekly | more than 14 days have passed since the reference day |
+| monthly | the first payday after the reference day is today or earlier |
+| semimonthly | the latest payday on or before today is after the reference day |
+
+**Evidence:** Sci-Fin's spec, section 3.3, and `engine/Income.kt` at `2892110`.
+
+**Acceptance:** A biweekly income last logged 20 August 2026 gives 25 on 14 September, none on 3 September and 15 on 4 September. A weekly income switched on on 10 September 2026 with nothing logged gives none on 14 September and 8 on 18 September. A monthly income on the 10th last logged 10 August 2026 gives none on 9 September and 31 on 10 September. A semimonthly income on the 15th and the 30th last logged 1 September 2026 gives none on 14 September and 15 on 16 September. With automatic deposit on, or hourly, it gives none.
+
+**Not:** Counting from the missed payday: the count would read lower than the days that have passed with nothing logged.
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R79 · Salaried or hourly
+
+**Rule:** Income is paid either salaried, a set amount per paycheck, or hourly, by a rate per hour on the same paydays (R76); a Profile has one type. Hourly income has no automatic deposit (R71) and no count of days with no income (R78): what arrives is confirmed on its payday (R81). Changing the type needs no hours left logged (R83), turns automatic deposit off and clears the last automatic deposit; a change to hourly counts paydays after the day of the change only.
+
+**Evidence:** Sci-Fin's spec, section 3.10, and `engine/Hourly.kt` at `2892110`.
+
+**Acceptance:** A salaried income with automatic deposit on, changed to hourly on 2 November 2026, has automatic deposit off and asks about no payday on or before 2 November. Changed to hourly on its payday of 13 November 2026, it does not ask about 13 November and asks about 27 November. An hourly income with automatic deposit set and 1,000.00 per paycheck deposits nothing by 31 December 2026 and gives no count.
+
+**Not:** Automatic deposit for hourly pay: what arrives varies with the hours.
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R80 · Logged hours
+
+**Rule:** Hourly income logs hours as shifts: a day, the hours worked and a rate per hour, which starts from the income's rate and can be changed per shift. A shift moves no money and adds nothing to the income received (R77); it can be edited or removed until a payday pays it. A shift's pay before deductions is its hours times its rate, rounded to the cent with a half cent rounded up, and a set of shifts' is the sum of each shift's.
+
+**Evidence:** Sci-Fin's spec, section 3.10, and `engine/Hourly.kt` at `2892110`.
+
+**Acceptance:** A 6-hour shift at 20.00 logged on 3 November 2026 leaves Savings, the ledger and the income received as they were. Shifts of 6 and 8.5 hours at 20.00 come to 290.00 before deductions. A shift of 1.5 hours at 13.33 comes to 20.00.
+
+**Not:** Hours worked times the rate stored as money with fractions of a cent (R20).
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R81 · Hourly payday
+
+**Rule:** Each payday of hourly income, from the first on or after the day Income was switched on, is asked about once its day has come, the oldest first, until answered, whether or not hours are logged, and covers every shift dated on or before it. Confirmed with what arrived, above zero, it writes one income row of that amount dated to the payday, carrying the hours and their rate (the pay before deductions divided by the hours, rounded to the cent), and the shifts it paid are removed. Answered with nothing this time, it writes nothing and its shifts wait for the next payday.
+
+**Evidence:** Sci-Fin's spec, section 3.10, and `engine/Hourly.kt` at `2892110`.
+
+**Acceptance:** A biweekly hourly income at 20.00, switched on on 1 November 2026 and paid from 13 November, with shifts of 6, 8.5 and 4 hours dated 3, 10 and 14 November, asks nothing on 12 November and on 13 November asks about 13 November with 14.5 hours and 290.00. Confirmed with 232.00, Savings goes from 1,000.00 to 1,232.00 by one income row dated 13 November with 14.5 hours at 20.00, the 4-hour shift stays, nothing is asked on 20 November and 27 November is asked on that day. Answered with nothing this time, a 6-hour shift waits for 27 November; with no hours logged, 13 November is still asked.
+
+**Not:** Writing each shift as income: it would count money that has not arrived.
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R82 · Hourly estimate
+
+**Rule:** The estimate for logged hours is their pay before deductions (R80), marked as such, while no payday has been confirmed. With a confirmed payday it is the pay before deductions times the average, over the last three confirmed hourly paydays, of what arrived divided by the hours times their rate, rounded to the cent, and unmarked. The user is never asked for a tax rate.
+
+**Why:** With varying hours the share taken from pay is not one steady figure the user could enter; what arrived tells it.
+
+**Evidence:** Sci-Fin's spec, section 3.10, and `engine/Hourly.kt` at `2892110`.
+
+**Acceptance:** 10 hours at 20.00 are estimated at 200.00 before deductions. After four paydays of 10 hours at 20.00 at which 160.00, 160.00, 100.00 and 200.00 arrived, 10 more hours at 20.00 are estimated at 153.33, from the last three.
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R83 · Leaving hourly
+
+**Rule:** Hours still logged when hourly income is left, for salaried or by switching Income off, are settled first: what arrived for them is confirmed as one income row dated today, carrying their hours and rate as a payday's does (R81), or they are discarded. Either way no shift is left.
+
+**Evidence:** Sci-Fin's spec, section 3.10, and `engine/Hourly.kt` at `2892110`.
+
+**Acceptance:** Shifts of 6 and 4 hours settled on 2 November 2026 with 170.00 leave no shift and one income row of 170.00 dated 2 November with 10 hours; discarded, they leave no shift and no row, and the income can then be made salaried. Changing the type with a shift still logged is refused.
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R84 · A salaried payday logged by hand
+
+**Rule:** Salaried income with automatic deposit off offers one payday for logging by hand: the latest payday since the last one offered, or since the day Income was switched on, on that payday or the day after, while no income has been logged on or after it. Earlier missed paydays are left to the count of days with no income (R78). The engine gives the payday's date; how the offer reads is the design pass's (R16).
+
+**Evidence:** Sci-Fin's spec, section 3.10, and `engine/Hourly.kt` at `2892110`.
+
+**Acceptance:** A 1,450.00 monthly income on the 10th, switched on on 1 November 2026, offers nothing on 9 November, 10 November on 10 November, nothing on 12 November, and 10 December on 11 December. With 1,450.00 logged on 10 November, with 10 November already offered, or with automatic deposit on, nothing is offered on 11 November.
+
+**Since:** 2026-11-24 · builder · own words
+
+## 8. Recurring expenses
 
 ### D-R60 · Recurring expenses
 
@@ -774,14 +938,15 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 | a recurring expense's | its next due date minus the lead |
 | statement import, when turned on | its day of the month, 1 to 28, today or later, else next month |
 | New Month | this month's 1st while its 09:00 is ahead, else next month's 1st |
+| payday, while income is hourly or salaried with automatic deposit off, and the payday reminder is on | the next payday (R76) whose 09:00 is ahead |
 
-**Evidence:** Sci-Fin's spec, sections 3.9, 3.11 and 4.3, and `engine/Reminders.kt` at `2892110`.
+**Evidence:** Sci-Fin's spec, sections 3.9, 3.10, 3.11 and 4.3, and `engine/Reminders.kt` at `2892110`.
 
-**Acceptance:** A rent on the 31st with a 3-day lead reminds on 25 February 2026 and then on 28 March 2026. With the import reminder on day 1, read on 14 September 2026, it falls on 1 October. The New Month reminder read at 08:30 on 1 October 2026 is 1 October at 09:00; read at 09:00 that day, 1 November at 09:00; read at 23:00 on 31 December 2026, 1 January 2027 at 09:00.
+**Acceptance:** A rent on the 31st with a 3-day lead reminds on 25 February 2026 and then on 28 March 2026. With the import reminder on day 1, read on 14 September 2026, it falls on 1 October. The New Month reminder read at 08:30 on 1 October 2026 is 1 October at 09:00; read at 09:00 that day, 1 November at 09:00; read at 23:00 on 31 December 2026, 1 January 2027 at 09:00. An hourly income paid every 14 days from 13 November 2026, read at 12:00 on 2 November, reminds on 13 November; read at 09:00 on 13 November, on 27 November. A salaried income with automatic deposit on, an income with the payday reminder off, and income switched off have no payday reminder.
 
 **Since:** 2026-11-24 · builder · own words
 
-## 8. The month cycle
+## 9. The month cycle
 
 ### D-R70 · The month cycle
 
@@ -799,11 +964,13 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R71 · Automatic deposits on the same open
 
-**Rule:** On the same open, salaried income with automatic deposit on deposits each payday passed since the last automatic deposit, or since the chosen payday when there has been none, as its own income row dated to that payday. Hourly income, and income switched off, deposits nothing by itself. The deposits and the month cycle (R70) do not depend on each other, so their order does not change the result.
+**Rule:** On the same open, salaried income with automatic deposit on deposits each payday passed since the last automatic deposit, or since the chosen payday when there has been none, as its own income row dated to that payday; switched back on after an earlier period on, it counts from the day it is switched on, so no payday passed while it was off is deposited. Hourly income (R79), and income switched off, deposits nothing by itself. The deposits and the month cycle (R70) do not depend on each other, so their order does not change the result.
+
+**Why:** Paydays replayed across a period with automatic deposit off would put money that never arrived into Savings.
 
 **Evidence:** Sci-Fin's spec, sections 3.3 and 3.9, and `engine/Income.kt` and `engine/NewMonth.kt` at `2892110`.
 
-**Acceptance:** Opened on 2 October 2026 with Savings at 5,000.00, a 950.00 rent swept for September, and a 1,450.00 biweekly income first paid 11 September 2026 with automatic deposit on: one month is processed, two deposits are dated 11 and 25 September, and Savings is 6,950.00.
+**Acceptance:** Opened on 2 October 2026 with Savings at 5,000.00, a 950.00 rent swept for September, and a 1,450.00 biweekly income first paid 11 September 2026 with automatic deposit on: one month is processed, two deposits are dated 11 and 25 September, and Savings is 6,950.00. A 1,450.00 monthly income paid the 5th, last deposited 5 June 2026, with automatic deposit switched back on on 14 September 2026, deposits nothing that day and one row dated 5 October when opened on 5 October; switched on for the first time on 14 September, a 100.00 monthly income paid from 5 August deposits rows dated 5 August and 5 September.
 
 **Since:** 2026-11-24 · builder · own words
 
@@ -853,7 +1020,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · builder · own words
 
-## 9. Statement import
+## 10. Statement import
 
 ### D-R26 · Statement import
 
@@ -863,7 +1030,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
-## 10. Chatelaine receipts
+## 11. Chatelaine receipts
 
 ### D-R27 · The receipt contract
 
@@ -989,7 +1156,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
-## 11. One payment, two sources
+## 12. One payment, two sources
 
 ### D-R36 · Store links
 
@@ -1059,7 +1226,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
-## 12. Edge cases
+## 13. Edge cases
 
 ### D-R41 · Deleting a receipt payment
 
@@ -1079,7 +1246,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · builder · own words
 
-## 13. Test plan
+## 14. Test plan
 
 ### D-R43 · Test plan
 
@@ -1100,7 +1267,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · builder · own words
 
-## 14. Rollout
+## 15. Rollout
 
 ### D-R44 · Rollout phases
 
@@ -1153,6 +1320,16 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R57 · Gentler monthly amounts: With Income off and Savings 2,400.00, a goal at 250.00 a month is offered 120.00, 150.00 and 200.00; one at 200.00 a month is offered nothing.
 - R58 · Deleting a goal: Deleting a Goal holding 300.00 with the money returned logs a `goal:<id>` row of -300.00 and raises Savings by 300.00; without, Savings is unchanged; both remove the Goal.
 - R59 · Plan against spent: A category planned at 300.00 with payments of 320.00 in March reads planned 300.00 and spent 320.00 for March.
+- R75 · Income switch: A fresh Profile has Income off, salaried, with automatic deposit off. Switched on on 14 September 2026, Income has that day as its switch-on day and its payday. A semimonthly income of 1,450.00 on the 15th and the 30th with automatic deposit on, switched off, has an amount of 0.00, automatic deposit off, and no payday, switch-on day, last logged day or last deposit. An hourly income with two shifts logged, switched off, has no shift and is salaried at a rate of 0.00.
+- R76 · Paydays: A biweekly income first paid 11 September 2026 is next paid 11 September read that day, 25 September read on 12 September and 9 October read on 26 September; a weekly one is next paid 18 September read on 12 September. A monthly income paid on 31 January 2026 is next paid 28 February read on 1 February, then 31 March. A semimonthly income on the 15th and the 30th is next paid 15 September read on 2 September, 30 September read on 16 September and 15 October read on 1 October; one on the 15th and the 31st is paid 28 February 2026. A semimonthly income changed to monthly has no payday, no second payday and no last deposit; set to the cadence it has, it is unchanged.
+- R77 · Income received this month: With Income switched on on 5 September 2026 and read on 14 September: 1,450.00 of income dated 11 September counts; 1,450.00 of income dated 28 August, 300.00 of income dated 2 September and 50.00 into Savings not logged as income do not; the figure is 1,450.00.
+- R78 · No income logged: A biweekly income last logged 20 August 2026 gives 25 on 14 September, none on 3 September and 15 on 4 September. A weekly income switched on on 10 September 2026 with nothing logged gives none on 14 September and 8 on 18 September. A monthly income on the 10th last logged 10 August 2026 gives none on 9 September and 31 on 10 September. A semimonthly income on the 15th and the 30th last logged 1 September 2026 gives none on 14 September and 15 on 16 September. With automatic deposit on, or hourly, it gives none.
+- R79 · Salaried or hourly: A salaried income with automatic deposit on, changed to hourly on 2 November 2026, has automatic deposit off and asks about no payday on or before 2 November. Changed to hourly on its payday of 13 November 2026, it does not ask about 13 November and asks about 27 November. An hourly income with automatic deposit set and 1,000.00 per paycheck deposits nothing by 31 December 2026 and gives no count.
+- R80 · Logged hours: A 6-hour shift at 20.00 logged on 3 November 2026 leaves Savings, the ledger and the income received as they were. Shifts of 6 and 8.5 hours at 20.00 come to 290.00 before deductions. A shift of 1.5 hours at 13.33 comes to 20.00.
+- R81 · Hourly payday: A biweekly hourly income at 20.00, switched on on 1 November 2026 and paid from 13 November, with shifts of 6, 8.5 and 4 hours dated 3, 10 and 14 November, asks nothing on 12 November and on 13 November asks about 13 November with 14.5 hours and 290.00. Confirmed with 232.00, Savings goes from 1,000.00 to 1,232.00 by one income row dated 13 November with 14.5 hours at 20.00, the 4-hour shift stays, nothing is asked on 20 November and 27 November is asked on that day. Answered with nothing this time, a 6-hour shift waits for 27 November; with no hours logged, 13 November is still asked.
+- R82 · Hourly estimate: 10 hours at 20.00 are estimated at 200.00 before deductions. After four paydays of 10 hours at 20.00 at which 160.00, 160.00, 100.00 and 200.00 arrived, 10 more hours at 20.00 are estimated at 153.33, from the last three.
+- R83 · Leaving hourly: Shifts of 6 and 4 hours settled on 2 November 2026 with 170.00 leave no shift and one income row of 170.00 dated 2 November with 10 hours; discarded, they leave no shift and no row, and the income can then be made salaried. Changing the type with a shift still logged is refused.
+- R84 · A salaried payday logged by hand: A 1,450.00 monthly income on the 10th, switched on on 1 November 2026, offers nothing on 9 November, 10 November on 10 November, nothing on 12 November, and 10 December on 11 December. With 1,450.00 logged on 10 November, with 10 November already offered, or with automatic deposit on, nothing is offered on 11 November.
 - R60 · Recurring expenses: A weekly expense first due 2 January 2026 falls due 5 times in January and 4 times in February; a biweekly one falls due 3 times in January (2, 16 and 30) and twice in February. A monthly interval expense first due 1 January 2026 falls due on 1 and 31 January, none in February, then 2 March. A weekly expense saved with fixed-date mode keeps no date mode.
 - R61 · The chain of due dates: A monthly expense due 10 September 2026 is still due 10 September on that day, due 10 October on 11 September, and due 10 January 2027 when read on 25 December 2026. A fixed-date rent on the 31st falls due on 28 February 2026 and then 31 March 2026; a monthly interval expense due 31 January falls due next on 2 March. An expense entered on 14 September 2026 with a first due date of 5 March 2026 keeps 5 March as its first due date and is next due 5 October. A monthly expense on the 20th with an end date of 20 September 2026, read on 2 October, stays due 20 September.
 - R62 · Apportioned share: A 1,200.00 yearly expense due 15 July 2027 has a share of 100.00 from a cycle that started 15 July 2026, and of 120.00 when created on 14 September 2026. A 1,000.00 yearly expense due 1 April 2026 has a share of 333.34 from 1 January 2026; a 1,200.00 one due 25 June 2026 has a share of 1,200.00 from 20 June. An expense holding 300.00 whose due date of 15 July 2026 has passed holds 100.00 for its next cycle. Renaming an expense keeps its share of 100.00; changing its amount to 2,400.00 on 14 September 2026 gives 240.00.
@@ -1162,9 +1339,9 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R66 · Deleting a recurring expense: A semimonthly 300.00 expense due the 15th and 30th, created on 1 September 2026 from Savings of 2,000.00, offers 300.00 when deleted on 20 September; accepted, Savings is 1,700.00 and three rows remain. A rent swept at 1,000.00 and edited to 1,200.00 with the difference declined offers 1,000.00. An expense due 1 September offers its 100.00 on 1 September and nothing on 2 September. A yearly expense that swept 100.00 on 1 August and on 1 September 2026 offers 200.00. Deleting an expense linked to a Loan of 5,000.00 removes both and logs a -5,000.00 `acct:` row.
 - R67 · Every recurring expense has a category: An expense with no category, or naming a category that does not exist, cannot be saved. A 60.00 monthly expense under Phone adds 60.00 to Phone's spent in each month it sweeps; a yearly 600.00 expense sweeps a 50.00 share into its category each month; a return of 300.00 on 20 September 2026 lowers its category's spent for September by 300.00. After an expense moves from Phone to Internet, Phone's spent for the past months is unchanged and the next sweep counts under Internet.
 - R68 · Recurring threshold note: With Income off and Savings at 12,000.00, a scheduled 900.00 shows no note and 1,100.00 shows one holding 1,100.00 and 12,000.00; with Savings at -5.00 the note is marked as having no base; with Savings unset, or nothing scheduled, there is none. With Income on and nothing received, 900.00 shows a note with no base; after 1,450.00 received it holds a base of 1,450.00; after 2,900.00 there is none.
-- R69 · Reminder dates: A rent on the 31st with a 3-day lead reminds on 25 February 2026 and then on 28 March 2026. With the import reminder on day 1, read on 14 September 2026, it falls on 1 October. The New Month reminder read at 08:30 on 1 October 2026 is 1 October at 09:00; read at 09:00 that day, 1 November at 09:00; read at 23:00 on 31 December 2026, 1 January 2027 at 09:00.
+- R69 · Reminder dates: A rent on the 31st with a 3-day lead reminds on 25 February 2026 and then on 28 March 2026. With the import reminder on day 1, read on 14 September 2026, it falls on 1 October. The New Month reminder read at 08:30 on 1 October 2026 is 1 October at 09:00; read at 09:00 that day, 1 November at 09:00; read at 23:00 on 31 December 2026, 1 January 2027 at 09:00. An hourly income paid every 14 days from 13 November 2026, read at 12:00 on 2 November, reminds on 13 November; read at 09:00 on 13 November, on 27 November. A salaried income with automatic deposit on, an income with the payday reminder off, and income switched off have no payday reminder.
 - R70 · The month cycle: Opened on 1 September 2026 with Savings at 5,000.00, a 950.00 rent due the 1st and a 45.00 phone bill due the 10th, both swept for August, leave 4,005.00 and two rows, dated 1 and 10 September; opened again that day, nothing changes. Opened on 14 November 2026 instead, the rent writes rows dated 1 September, 1 October and 1 November and is next due 1 December. A category with 120.00 spent in August reads 0.00 for September after the open, and the categories are unchanged.
-- R71 · Automatic deposits on the same open: Opened on 2 October 2026 with Savings at 5,000.00, a 950.00 rent swept for September, and a 1,450.00 biweekly income first paid 11 September 2026 with automatic deposit on: one month is processed, two deposits are dated 11 and 25 September, and Savings is 6,950.00.
+- R71 · Automatic deposits on the same open: Opened on 2 October 2026 with Savings at 5,000.00, a 950.00 rent swept for September, and a 1,450.00 biweekly income first paid 11 September 2026 with automatic deposit on: one month is processed, two deposits are dated 11 and 25 September, and Savings is 6,950.00. A 1,450.00 monthly income paid the 5th, last deposited 5 June 2026, with automatic deposit switched back on on 14 September 2026, deposits nothing that day and one row dated 5 October when opened on 5 October; switched on for the first time on 14 September, a 100.00 monthly income paid from 5 August deposits rows dated 5 August and 5 September.
 - R72 · End of a term: A 260.00 payment due the 15th, ending 15 August 2026 and linked to a fixed-rate Loan of 120.00, finishes on 1 September 2026 when opened that day: the Loan is 0.00 after one -120.00 `acct:` row, and the code is `loanPaidOff`. On an interest-only Loan of 5,000.00 the same payment leaves 5,000.00 with no closing row and the code `interestOnlyEnded`. A 40.00 gym fee due the 15th, swept for August and ending 15 October 2026, opened on 20 November, writes rows dated 15 September and 15 October, leaves Savings 80.00 lower and ends with `ended`. A payment ending 15 October 2026 is not finished when opened on 20 October; opened on 2 November, it finishes on 1 November.
 - R73 · A Loan that follows its payment: A Loan of 6,000.00 at 6 % with a 260.00 payment due the 15th, opened on 1 September 2026, falls to 5,770.00 after 30.00 of interest, with a -230.00 row dated 15 September; Savings falls by the 260.00 sweep only. A Loan of 200.00 at 0 % falls to 0.00 and its payment finishes though it ends in 2030. A variable-rate Loan of 100.00 cleared by its final 260.00 payment ends with `loanPaidOff`.
 - R74 · Catch-up summary: A 950.00 rent swept for August, opened on 14 November 2026, keeps a summary of 3 months and 2,850.00 swept; opened again that day it still reads 3 months; dismissed, there is none. Opened on 14 October 2026 it reads 2 months; opened again on 3 November, still 2; then on 3 January 2027, 4. Opened on 1 September 2026 alone, it keeps none.

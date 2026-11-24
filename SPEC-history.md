@@ -91,3 +91,15 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-24 · R72 · added · end of a term: finishing, the closing Loan row, the notice codes · builder
 - 2026-11-24 · R73 · added · a Loan that follows its payment · builder
 - 2026-11-24 · R74 · added · catch-up summary kept until dismissed · builder
+- 2026-11-24 · R75 · added · the Income switch: off on a fresh Profile, what switching off clears · builder
+- 2026-11-24 · R76 · added · paydays by cadence; a cadence change clears the paydays and the deposit marker · builder
+- 2026-11-24 · R77 · added · income received this month, worked out from the rows · builder
+- 2026-11-24 · R78 · added · the count of days with no income logged, salaried by hand · builder
+- 2026-11-24 · R79 · added · salaried or hourly; changing the type · builder
+- 2026-11-24 · R80 · added · logged hours as shifts that move no money · builder
+- 2026-11-24 · R81 · added · the hourly payday: confirmed or nothing this time · builder
+- 2026-11-24 · R82 · added · the hourly estimate learned from the last three paydays · builder
+- 2026-11-24 · R83 · added · leaving hourly settles the logged hours · builder
+- 2026-11-24 · R84 · added · a salaried payday offered for logging by hand · builder
+- 2026-11-24 · R71 · changed · automatic deposit switched back on counts from that day · builder
+- 2026-11-24 · R69 · changed · the payday reminder's date · builder
