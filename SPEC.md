@@ -45,25 +45,35 @@ Kinds: O owner rule · D decided · I inherited · A assumed · Q open.
 | D-R57 | Gentler monthly amounts | 6. Goals and the monthly plan |
 | D-R58 | Deleting a goal | 6. Goals and the monthly plan |
 | D-R59 | Plan against spent | 6. Goals and the monthly plan |
-| D-R26 | Statement import | 7. Statement import |
-| D-R27 | The receipt contract | 8. Chatelaine receipts |
-| D-R28 | Receipt folder | 8. Chatelaine receipts |
-| D-R29 | Picking up receipts | 8. Chatelaine receipts |
-| D-R30 | Receipt files Tesoriere cannot take | 8. Chatelaine receipts |
-| D-R31 | Receipt review | 8. Chatelaine receipts |
-| D-R32 | Category links | 8. Chatelaine receipts |
-| D-R33 | Closing a review | 8. Chatelaine receipts |
-| D-R34 | Changing a link | 8. Chatelaine receipts |
-| D-R35 | A receipt's source | 8. Chatelaine receipts |
-| D-R36 | Store links | 9. One payment, two sources |
-| D-R37 | Pairing rule | 9. One payment, two sources |
-| D-R38 | Whichever arrives first | 9. One payment, two sources |
-| D-R39 | Difference part | 9. One payment, two sources |
-| D-R40 | Pairing by hand | 9. One payment, two sources |
-| D-R41 | Deleting a receipt payment | 10. Edge cases |
-| D-R42 | Deleting a linked category | 10. Edge cases |
-| D-R43 | Test plan | 11. Test plan |
-| D-R44 | Rollout phases | 12. Rollout |
+| D-R60 | Recurring expenses | 7. Recurring expenses |
+| D-R61 | The chain of due dates | 7. Recurring expenses |
+| D-R62 | Apportioned share | 7. Recurring expenses |
+| D-R63 | Sweeps | 7. Recurring expenses |
+| D-R64 | Creating a recurring expense | 7. Recurring expenses |
+| D-R65 | Editing a recurring expense | 7. Recurring expenses |
+| D-R66 | Deleting a recurring expense | 7. Recurring expenses |
+| O-R67 | Every recurring expense has a category | 7. Recurring expenses |
+| D-R68 | Recurring threshold note | 7. Recurring expenses |
+| D-R69 | Reminder dates | 7. Recurring expenses |
+| D-R26 | Statement import | 8. Statement import |
+| D-R27 | The receipt contract | 9. Chatelaine receipts |
+| D-R28 | Receipt folder | 9. Chatelaine receipts |
+| D-R29 | Picking up receipts | 9. Chatelaine receipts |
+| D-R30 | Receipt files Tesoriere cannot take | 9. Chatelaine receipts |
+| D-R31 | Receipt review | 9. Chatelaine receipts |
+| D-R32 | Category links | 9. Chatelaine receipts |
+| D-R33 | Closing a review | 9. Chatelaine receipts |
+| D-R34 | Changing a link | 9. Chatelaine receipts |
+| D-R35 | A receipt's source | 9. Chatelaine receipts |
+| D-R36 | Store links | 10. One payment, two sources |
+| D-R37 | Pairing rule | 10. One payment, two sources |
+| D-R38 | Whichever arrives first | 10. One payment, two sources |
+| D-R39 | Difference part | 10. One payment, two sources |
+| D-R40 | Pairing by hand | 10. One payment, two sources |
+| D-R41 | Deleting a receipt payment | 11. Edge cases |
+| D-R42 | Deleting a linked category | 11. Edge cases |
+| D-R43 | Test plan | 12. Test plan |
+| D-R44 | Rollout phases | 13. Rollout |
 | D-R45 | Price comparison | Out of scope |
 | D-R46 | Households in v1 | Out of scope |
 | D-R47 | Currency conversion in v1 | Out of scope |
@@ -73,7 +83,7 @@ Kinds: O owner rule · D decided · I inherited · A assumed · Q open.
 
 | Term | Meaning |
 |---|---|
-| Payment | One movement of money out, with one date, one total, one source and one or more parts. Every expense in Tesoriere is a payment. |
+| Payment | One movement of money out, with one date, one total, one source and one or more parts. Every expense in Tesoriere is a payment, except a recurring expense's sweeps. |
 | Part | One category's share of a payment, in cents. A payment's parts add up to its total. |
 | Split | A payment with more than one part. |
 | Source | Where a payment's money came from: Savings, a Goal, or a credit or loan Account. |
@@ -83,6 +93,8 @@ Kinds: O owner rule · D decided · I inherited · A assumed · Q open.
 | Bank row | One line of an imported bank statement (CSV or OFX). |
 | Ledger | The log of every money movement that is not a payment, one row per movement (R51). |
 | Adjustment | A logged change to a category's spent figure for one month, written as a `cat:` ledger row (R25, R51). |
+| Recurring expense | A cost known in advance and the same each time, such as rent, set aside from Savings by sweeps (R60). |
+| Sweep | A `rec:` ledger row that sets a recurring expense's money aside, filed under its category (R63, R67). |
 | Pair | A receipt and a bank row recorded as the same payment. |
 | Category link | A remembered match from a Chatelaine category id to a Tesoriere category. |
 | Store link | A remembered match from a Chatelaine store name to a bank row's payee text. |
@@ -434,7 +446,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R21 · Payment
 
-**Rule:** Every expense is a payment with the fields below. A payment from a receipt keeps the receipt's lines, so each part can be traced to the lines it came from.
+**Rule:** Every expense is a payment with the fields below, except a recurring expense's sweeps, which are ledger rows filed under its category (R63, R67). A payment from a receipt keeps the receipt's lines, so each part can be traced to the lines it came from.
 
 **Values:**
 
@@ -451,7 +463,9 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 | `receiptLines` | per line: name, pack, quantity, price paid, Chatelaine category id and name, Tesoriere category |
 | `bankKeys` | the bank row's FITID and its date, amount and description key, when it came from or was paired with a bank row (R26) |
 
-**Acceptance:** A recorded receipt payment holds every receipt line; a paired payment holds both its `receiptId` and its `bankKeys`.
+**Acceptance:** A recorded receipt payment holds every receipt line; a paired payment holds both its `receiptId` and its `bankKeys`; a recurring expense's sweep records no payment.
+
+**Not:** A sweep as a payment: a return on deletion is negative and an apportioned share is a monthly set-aside, which a payment's positive total cannot hold.
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
@@ -510,11 +524,11 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R25 · Spent is derived
 
-**Rule:** A category's spent figure for a month is computed when read, from the parts of the payments dated in that month and the category's logged adjustments. It is never stored.
+**Rule:** A category's spent figure for a month is computed when read, from the parts of the payments dated in that month, the category's logged adjustments dated in it, and the recurring expense rows filed under the category and dated in it (R67). It is never stored.
 
 **Why:** A late receipt can re-file a payment that is already recorded (R38); with a derived figure that is one change to the payment, not correction rows.
 
-**Acceptance:** Re-filing a payment's parts changes the spent figures of the categories involved, for the payment's month, and writes no correction row.
+**Acceptance:** Re-filing a payment's parts changes the spent figures of the categories involved, for the payment's month, and writes no correction row. A 60.00 sweep filed under Phone and dated in March adds 60.00 to Phone's spent for March, and no payment exists for it.
 
 **Not:** Sci-Fin's stored spent figure, edited directly and incremented by each entry: every re-filing would need correction rows. Sci-Fin's direct edit of spent becomes a logged adjustment.
 
@@ -598,7 +612,171 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · builder · own words
 
-## 7. Statement import
+## 7. Recurring expenses
+
+### D-R60 · Recurring expenses
+
+**Rule:** A recurring expense is a cost known in advance and the same each time until the user changes it, such as rent, a subscription or a loan payment. It has a name, an amount, a cadence, a first due date, an optional end date and a category (R67); its money leaves Savings by sweeps (R63), never by payments. Its due dates follow its cadence as below; a date mode exists only where the table gives one.
+
+**Values:**
+
+| Cadence | Due dates | Date mode |
+|---|---|---|
+| weekly | every 7 days from the first due date | none |
+| biweekly | every 14 days from the first due date | none |
+| semimonthly | two days of each month: the first due date's and a second due date's | none |
+| monthly | fixed date: the same day each month; interval: every 30 days | fixed date or interval |
+| bimonthly | fixed date: the same day every 2 months; interval: every 60 days | fixed date or interval |
+| yearly | fixed date: the same day every 12 months; interval: every 365 days | fixed date or interval |
+
+**Evidence:** Sci-Fin's spec, section 3.11, and `engine/Recurring.kt` at `2892110`.
+
+**Acceptance:** A weekly expense first due 2 January 2026 falls due 5 times in January and 4 times in February; a biweekly one falls due 3 times in January (2, 16 and 30) and twice in February. A monthly interval expense first due 1 January 2026 falls due on 1 and 31 January, none in February, then 2 March. A weekly expense saved with fixed-date mode keeps no date mode.
+
+**Not:** A cost that changes every time, such as groceries: it belongs in a category's plan (R59).
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R61 · The chain of due dates
+
+**Rule:** Each expense keeps its first due date, before which no due date falls, and its next due date, which moves on to the following due date once its day has passed, from the start of the next day, never when a sweep runs. A day a month lacks falls on that month's last day, and a fixed-date expense returns to its own day in the months after. A first due date entered in the past moves the next due date forward to today or later; the chain stops at the last due date on or before the end date.
+
+**Evidence:** Sci-Fin's spec, section 3.11, and `engine/Recurring.kt` at `2892110`.
+
+**Acceptance:** A monthly expense due 10 September 2026 is still due 10 September on that day, due 10 October on 11 September, and due 10 January 2027 when read on 25 December 2026. A fixed-date rent on the 31st falls due on 28 February 2026 and then 31 March 2026; a monthly interval expense due 31 January falls due next on 2 March. An expense entered on 14 September 2026 with a first due date of 5 March 2026 keeps 5 March as its first due date and is next due 5 October. A monthly expense on the 20th with an end date of 20 September 2026, read on 2 October, stays due 20 September.
+
+**Not:** Taking the day a short month fell on as the expense's new day: a rent on the 31st would fall on the 28th for good.
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R62 · Apportioned share
+
+**Rule:** A bimonthly or yearly expense sets aside a share each month instead of its whole amount once. The share is the amount divided by the number of 1sts of a month after the cycle's start and on or before the next due date, at least 1, rounded up to the cent, so the whole amount is set aside by the time it falls due. The share is held for the cycle and worked out again only as below; after the last due date the end date allows, nothing more is set aside.
+
+**Values:**
+
+| When | The share is worked out from |
+|---|---|
+| the expense is created | today |
+| the next due date moves on (R61) | the due date just passed |
+| an edit changes the amount, the cadence, a due date, the date mode or the end date | today |
+| any other edit | nothing: the held share is kept |
+
+**Evidence:** Sci-Fin's spec, section 3.11, and `engine/Recurring.kt` at `2892110`.
+
+**Acceptance:** A 1,200.00 yearly expense due 15 July 2027 has a share of 100.00 from a cycle that started 15 July 2026, and of 120.00 when created on 14 September 2026. A 1,000.00 yearly expense due 1 April 2026 has a share of 333.34 from 1 January 2026; a 1,200.00 one due 25 June 2026 has a share of 1,200.00 from 20 June. An expense holding 300.00 whose due date of 15 July 2026 has passed holds 100.00 for its next cycle. Renaming an expense keeps its share of 100.00; changing its amount to 2,400.00 on 14 September 2026 gives 240.00.
+
+**Not:** Dividing by a count that shrinks month by month: the share would grow through the cycle.
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R63 · Sweeps
+
+**Rule:** A recurring expense's money leaves Savings by sweeps, ledger rows with its `rec:` key (R51), on the 1st of each month and on creation (R64); a finished expense sweeps nothing. For a weekly, biweekly, semimonthly or monthly expense, each due date in the month, on or after the first due date and on or before the end date, writes its own row of the whole amount, dated to that due date; a bimonthly or yearly expense writes one row of its share (R62), dated to the 1st. The month's scheduled total is what every expense sweeps for that month, whether or not its sweep has run.
+
+**Evidence:** Sci-Fin's spec, sections 3.5 and 3.11, and `engine/Recurring.kt` at `2892110`.
+
+**Acceptance:** A semimonthly 300.00 expense on the 15th and the 31st falls due on 15 and 28 February 2026. A monthly 100.00 expense on the 20th with an end date of 20 September 2026 sweeps in September and not in October; with an end date of 19 September it sweeps nothing in September. A yearly expense holding a 50.00 share sweeps 50.00 for September 2026; a bimonthly 90.00 expense with no share held sweeps 45.00. Two sweeps on 1 August and 1 September 2026 leave two rows dated to those days.
+
+**Not:** One row per month for the combined amount: a return on deletion (R66) could not tell the due dates passed from those ahead.
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R64 · Creating a recurring expense
+
+**Rule:** Creating an expense sweeps at once only as the table says; otherwise its first sweep is a later 1st. Every case marks the current month as swept, so the month is never swept twice.
+
+**Values:**
+
+| Cadence | First due date | On creation |
+|---|---|---|
+| weekly to monthly | today or later this month | sweeps this month's due dates (R63) |
+| weekly to monthly | earlier this month or in an earlier month | sweeps nothing, even with a later due date this month |
+| weekly to monthly | a later month | sweeps nothing |
+| bimonthly or yearly | any | sweeps nothing; its share is worked out from today (R62) |
+
+**Evidence:** Sci-Fin's spec, section 3.11, and `engine/Recurring.kt` at `2892110`.
+
+**Acceptance:** On 14 September 2026 with Savings at 1,000.00: a 100.00 monthly expense first due 20 September leaves 900.00 and one row dated 20 September; first due 10 September, it leaves 1,000.00; a biweekly one first due 10 September leaves 1,000.00 though 24 September is ahead; a yearly 1,200.00 one due 15 July 2027 leaves 1,000.00 and a share of 120.00. On 25 September a monthly one first due 5 October leaves 1,000.00. Each is marked swept for September 2026.
+
+**Not:** Sweeping a due date already passed at creation: the expense did not exist when it fell due.
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R65 · Editing a recurring expense
+
+**Rule:** An edit that moves the cadence, a due date or the date mode starts the chain again from the date entered (R61); an edit to only the second semimonthly date keeps the first. When the current month has swept and the edit changes what the month sweeps, the difference is offered, never moved on its own. Accepted, it writes one `rec:` row dated to the month's earliest due date not yet passed, else its last, or the 1st for a bimonthly or yearly expense; on an expense linked to a Loan, the Loan's balance also falls by the difference, with an `acct:` row on the same date.
+
+**Evidence:** Sci-Fin's spec, section 3.11, and `engine/Recurring.kt` at `2892110`.
+
+**Acceptance:** On 10 September 2026, a 1,000.00 monthly rent due the 20th, swept from Savings of 2,000.00 and edited to 1,200.00, offers 200.00 dated 20 September; accepted, Savings is 800.00. The same edit before the month has swept offers nothing. A swept 260.00 Loan payment due the 20th edited to 300.00 and accepted leaves the Loan at 3,960.00 from 4,000.00, with a -40.00 `acct:` row dated 20 September. A fixed-date rent on the 1st moved to the 15th on 10 September falls due on 15 November.
+
+**Not:** Moving the difference without asking: a mistyped digit would move money at once.
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R66 · Deleting a recurring expense
+
+**Rule:** Deleting an expense offers back what its rows hold for due dates not yet passed, when that is above zero: the sum of its `rec:` rows dated today or later, or, for a bimonthly or yearly expense, of its rows dated after its previous due date; a finished expense offers nothing. Accepted, the sum returns to Savings as one `rec:` row of the opposite sign, dated today, and the earlier rows stay. An Account linked to the expense is deleted with it, with a closing `acct:` row for its balance.
+
+**Evidence:** Sci-Fin's spec, sections 3.11 and 7.2, and `engine/Recurring.kt` at `2892110`.
+
+**Acceptance:** A semimonthly 300.00 expense due the 15th and 30th, created on 1 September 2026 from Savings of 2,000.00, offers 300.00 when deleted on 20 September; accepted, Savings is 1,700.00 and three rows remain. A rent swept at 1,000.00 and edited to 1,200.00 with the difference declined offers 1,000.00. An expense due 1 September offers its 100.00 on 1 September and nothing on 2 September. A yearly expense that swept 100.00 on 1 August and on 1 September 2026 offers 200.00. Deleting an expense linked to a Loan of 5,000.00 removes both and logs a -5,000.00 `acct:` row.
+
+**Not:** Offering the expense's amount: after an edit it differs from what the sweeps took.
+
+**Since:** 2026-11-24 · builder · own words
+
+### O-R67 · Every recurring expense has a category
+
+**Rule:** Every recurring expense has a category, picked from the existing ones or created on the spot when the expense is created or edited, and it cannot be saved without one. Each row the expense writes (a sweep, a share, an accepted difference, a return on deletion) carries the category the expense has when the row is written, and counts in that category's spent for the row's month (R25). Changing the category applies to rows written after the change, as R34 does for links.
+
+**Why:** Rent and subscriptions are spending; left out of every category, a month's spent figures would miss them.
+
+**Acceptance:** An expense with no category, or naming a category that does not exist, cannot be saved. A 60.00 monthly expense under Phone adds 60.00 to Phone's spent in each month it sweeps; a yearly 600.00 expense sweeps a 50.00 share into its category each month; a return of 300.00 on 20 September 2026 lowers its category's spent for September by 300.00. After an expense moves from Phone to Internet, Phone's spent for the past months is unchanged and the next sweep counts under Internet.
+
+**Not:** Moving past rows to the new category: past months' figures would shift on their own.
+
+**Since:** 2026-11-24 · owner · agreed rewording
+
+### D-R68 · Recurring threshold note
+
+**Rule:** A note, which informs and never blocks (R12), is shown when the month's scheduled total (R63) is above the share of the base the table gives. At a base of zero or below it is still shown, marked as having no base, and takes no ratio. The engine gives a code and the two figures; how the note reads is the design pass's (R16).
+
+**Values:**
+
+| Income | Base | Shown when the scheduled total is above |
+|---|---|---|
+| off | Savings; no note while Savings is unset (R49) | 1/12 of the base |
+| on | the income received this month | 1/3 of the base |
+
+**Evidence:** Sci-Fin's spec, section 3.5, and `engine/Threshold.kt` at `2892110`.
+
+**Acceptance:** With Income off and Savings at 12,000.00, a scheduled 900.00 shows no note and 1,100.00 shows one holding 1,100.00 and 12,000.00; with Savings at -5.00 the note is marked as having no base; with Savings unset, or nothing scheduled, there is none. With Income on and nothing received, 900.00 shows a note with no base; after 1,450.00 received it holds a base of 1,450.00; after 2,900.00 there is none.
+
+**Not:** Counting Savings when Income is on: a large balance would hide a monthly rate that cannot last.
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R69 · Reminder dates
+
+**Rule:** The engine works out the dates of the reminders below; delivering them is the platform's, and how they read is the design pass's (R16). An expense's reminder is off until the user turns it on, with a lead of 1, 3, 7 or 14 days counted back from the next due date (R61), so it follows the chain; a finished expense has none. Each reminder fires at 09:00 on its day, device time.
+
+**Values:**
+
+| Reminder | Falls on |
+|---|---|
+| a recurring expense's | its next due date minus the lead |
+| statement import, when turned on | its day of the month, 1 to 28, today or later, else next month |
+| New Month | this month's 1st while its 09:00 is ahead, else next month's 1st |
+
+**Evidence:** Sci-Fin's spec, sections 3.9, 3.11 and 4.3, and `engine/Reminders.kt` at `2892110`.
+
+**Acceptance:** A rent on the 31st with a 3-day lead reminds on 25 February 2026 and then on 28 March 2026. With the import reminder on day 1, read on 14 September 2026, it falls on 1 October. The New Month reminder read at 08:30 on 1 October 2026 is 1 October at 09:00; read at 09:00 that day, 1 November at 09:00; read at 23:00 on 31 December 2026, 1 January 2027 at 09:00.
+
+**Since:** 2026-11-24 · builder · own words
+
+## 8. Statement import
 
 ### D-R26 · Statement import
 
@@ -608,7 +786,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
-## 8. Chatelaine receipts
+## 9. Chatelaine receipts
 
 ### D-R27 · The receipt contract
 
@@ -734,7 +912,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
-## 9. One payment, two sources
+## 10. One payment, two sources
 
 ### D-R36 · Store links
 
@@ -804,7 +982,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
-## 10. Edge cases
+## 11. Edge cases
 
 ### D-R41 · Deleting a receipt payment
 
@@ -824,7 +1002,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · builder · own words
 
-## 11. Test plan
+## 12. Test plan
 
 ### D-R43 · Test plan
 
@@ -845,7 +1023,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · builder · own words
 
-## 12. Rollout
+## 13. Rollout
 
 ### D-R44 · Rollout phases
 
@@ -887,17 +1065,27 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R51 · The ledger: A 20.00 adjustment on a category is stored as `cat:<id>` with amount 2000 and lowers Savings by 20.00; a 100.00 sweep is `rec:<id>` with amount 10000 and lowers Savings by 100.00; an `acct:` row leaves Savings as it was.
 - R52 · Direct edits log the change: Setting Savings from 150.00 to 1,000.00 logs a `savings` row of +850.00; setting a Goal's saved money from 400.00 to 300.00 logs a `goal:<id>` row of -100.00 and raises Savings by 100.00.
 - R53 · Undoing a mistaken entry: Rows of +40.00 and -40.00 on one Goal logged 47 hours apart pair; 49 hours apart they do not; four rows +40.00, -40.00, +40.00, -40.00 logged in that order make two pairs, the first two and the last two.
-- R21 · Payment: A recorded receipt payment holds every receipt line; a paired payment holds both its `receiptId` and its `bankKeys`.
+- R21 · Payment: A recorded receipt payment holds every receipt line; a paired payment holds both its `receiptId` and its `bankKeys`; a recurring expense's sweep records no payment.
 - R22 · Source and parts are separate: A EUR 40 receipt charged to a card adds its parts to their categories' spent figures and EUR 40 to the card's balance, and moves nothing in Savings.
 - R54 · What a payment's source moves: A 42.30 payment from Savings lowers Savings by 42.30; a 30.00 payment from a Goal holding 50.00 leaves it 20.00 and Savings unchanged, and one of 60.00 cannot be saved; a 40.00 payment charged to a card with a 0.00 balance leaves the balance at 40.00. With Savings at 1,000.00: 100.00 into a Goal, a 30.00 payment from it, the Goal deleted with its 70.00 returned leaves 970.00; removing the payment then gives 1,000.00, and re-filing its parts leaves 970.00.
 - R23 · Parts add up: A EUR 42.30 payment with parts of EUR 30.00 and EUR 12.00 shows EUR 0.30 left and cannot be saved; with a third part of EUR 0.30 it can.
 - R24 · Any payment can be split: A bank row and a hand-logged payment can each be saved with two parts in two categories.
-- R25 · Spent is derived: Re-filing a payment's parts changes the spent figures of the categories involved, for the payment's month, and writes no correction row.
+- R25 · Spent is derived: Re-filing a payment's parts changes the spent figures of the categories involved, for the payment's month, and writes no correction row. A 60.00 sweep filed under Phone and dated in March adds 60.00 to Phone's spent for March, and no payment exists for it.
 - R55 · Goal calculator: A 1,200.00 goal with 400.00 saved and a target date six calendar months ahead needs 133.34 a month; the same goal at 150.00 a month takes 6 months.
 - R56 · Where a goal fits: With Income off, Savings 1,000.00, recurring expenses of 300.00 and another goal at 200.00 a month, a goal at 133.34 a month adds up to 633.34 against 1,000.00 and fits; if the other goal has reached its target, it adds nothing.
 - R57 · Gentler monthly amounts: With Income off and Savings 2,400.00, a goal at 250.00 a month is offered 120.00, 150.00 and 200.00; one at 200.00 a month is offered nothing.
 - R58 · Deleting a goal: Deleting a Goal holding 300.00 with the money returned logs a `goal:<id>` row of -300.00 and raises Savings by 300.00; without, Savings is unchanged; both remove the Goal.
 - R59 · Plan against spent: A category planned at 300.00 with payments of 320.00 in March reads planned 300.00 and spent 320.00 for March.
+- R60 · Recurring expenses: A weekly expense first due 2 January 2026 falls due 5 times in January and 4 times in February; a biweekly one falls due 3 times in January (2, 16 and 30) and twice in February. A monthly interval expense first due 1 January 2026 falls due on 1 and 31 January, none in February, then 2 March. A weekly expense saved with fixed-date mode keeps no date mode.
+- R61 · The chain of due dates: A monthly expense due 10 September 2026 is still due 10 September on that day, due 10 October on 11 September, and due 10 January 2027 when read on 25 December 2026. A fixed-date rent on the 31st falls due on 28 February 2026 and then 31 March 2026; a monthly interval expense due 31 January falls due next on 2 March. An expense entered on 14 September 2026 with a first due date of 5 March 2026 keeps 5 March as its first due date and is next due 5 October. A monthly expense on the 20th with an end date of 20 September 2026, read on 2 October, stays due 20 September.
+- R62 · Apportioned share: A 1,200.00 yearly expense due 15 July 2027 has a share of 100.00 from a cycle that started 15 July 2026, and of 120.00 when created on 14 September 2026. A 1,000.00 yearly expense due 1 April 2026 has a share of 333.34 from 1 January 2026; a 1,200.00 one due 25 June 2026 has a share of 1,200.00 from 20 June. An expense holding 300.00 whose due date of 15 July 2026 has passed holds 100.00 for its next cycle. Renaming an expense keeps its share of 100.00; changing its amount to 2,400.00 on 14 September 2026 gives 240.00.
+- R63 · Sweeps: A semimonthly 300.00 expense on the 15th and the 31st falls due on 15 and 28 February 2026. A monthly 100.00 expense on the 20th with an end date of 20 September 2026 sweeps in September and not in October; with an end date of 19 September it sweeps nothing in September. A yearly expense holding a 50.00 share sweeps 50.00 for September 2026; a bimonthly 90.00 expense with no share held sweeps 45.00. Two sweeps on 1 August and 1 September 2026 leave two rows dated to those days.
+- R64 · Creating a recurring expense: On 14 September 2026 with Savings at 1,000.00: a 100.00 monthly expense first due 20 September leaves 900.00 and one row dated 20 September; first due 10 September, it leaves 1,000.00; a biweekly one first due 10 September leaves 1,000.00 though 24 September is ahead; a yearly 1,200.00 one due 15 July 2027 leaves 1,000.00 and a share of 120.00. On 25 September a monthly one first due 5 October leaves 1,000.00. Each is marked swept for September 2026.
+- R65 · Editing a recurring expense: On 10 September 2026, a 1,000.00 monthly rent due the 20th, swept from Savings of 2,000.00 and edited to 1,200.00, offers 200.00 dated 20 September; accepted, Savings is 800.00. The same edit before the month has swept offers nothing. A swept 260.00 Loan payment due the 20th edited to 300.00 and accepted leaves the Loan at 3,960.00 from 4,000.00, with a -40.00 `acct:` row dated 20 September. A fixed-date rent on the 1st moved to the 15th on 10 September falls due on 15 November.
+- R66 · Deleting a recurring expense: A semimonthly 300.00 expense due the 15th and 30th, created on 1 September 2026 from Savings of 2,000.00, offers 300.00 when deleted on 20 September; accepted, Savings is 1,700.00 and three rows remain. A rent swept at 1,000.00 and edited to 1,200.00 with the difference declined offers 1,000.00. An expense due 1 September offers its 100.00 on 1 September and nothing on 2 September. A yearly expense that swept 100.00 on 1 August and on 1 September 2026 offers 200.00. Deleting an expense linked to a Loan of 5,000.00 removes both and logs a -5,000.00 `acct:` row.
+- R67 · Every recurring expense has a category: An expense with no category, or naming a category that does not exist, cannot be saved. A 60.00 monthly expense under Phone adds 60.00 to Phone's spent in each month it sweeps; a yearly 600.00 expense sweeps a 50.00 share into its category each month; a return of 300.00 on 20 September 2026 lowers its category's spent for September by 300.00. After an expense moves from Phone to Internet, Phone's spent for the past months is unchanged and the next sweep counts under Internet.
+- R68 · Recurring threshold note: With Income off and Savings at 12,000.00, a scheduled 900.00 shows no note and 1,100.00 shows one holding 1,100.00 and 12,000.00; with Savings at -5.00 the note is marked as having no base; with Savings unset, or nothing scheduled, there is none. With Income on and nothing received, 900.00 shows a note with no base; after 1,450.00 received it holds a base of 1,450.00; after 2,900.00 there is none.
+- R69 · Reminder dates: A rent on the 31st with a 3-day lead reminds on 25 February 2026 and then on 28 March 2026. With the import reminder on day 1, read on 14 September 2026, it falls on 1 October. The New Month reminder read at 08:30 on 1 October 2026 is 1 October at 09:00; read at 09:00 that day, 1 November at 09:00; read at 23:00 on 31 December 2026, 1 January 2027 at 09:00.
 - R26 · Statement import: Importing the same OFX statement twice records nothing the second time; importing a CSV export of the same period also records nothing; a payee filed under a category once is pre-filled on the next statement.
 - R27 · The receipt contract: The receipt parser's tests cite Chatelaine's rule 123 field by field; no Tesoriere code opens the receipt folder for writing.
 - R28 · Receipt folder: With the folder set in Profile A, receipts are reviewed and recorded only in Profile A; Profile B offers no receipt folder while A has one.

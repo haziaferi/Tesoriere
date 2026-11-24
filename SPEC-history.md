@@ -74,3 +74,15 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-24 · R49 · changed · acceptance: goal checks skipped with Income off while Savings is unset · builder
 - 2026-11-24 · R53 · changed · two cat: adjustments pair only within one month · builder
 - 2026-11-24 · R54 · changed · a deleted Goal's payment moves Savings when undone, after a dismissable warning · owner
+- 2026-11-24 · R60 · added · recurring expenses, cadences and date modes · builder
+- 2026-11-24 · R61 · added · the chain of due dates · builder
+- 2026-11-24 · R62 · added · apportioned share · builder
+- 2026-11-24 · R63 · added · sweeps, one row per due date · builder
+- 2026-11-24 · R64 · added · creating a recurring expense: when it sweeps · builder
+- 2026-11-24 · R65 · added · editing a recurring expense: the difference offered · builder
+- 2026-11-24 · R66 · added · deleting a recurring expense: the return offered · builder
+- 2026-11-24 · R67 · added · every recurring expense has a category; its rows count in that category's spent · owner
+- 2026-11-24 · R68 · added · recurring threshold note · builder
+- 2026-11-24 · R69 · added · reminder dates · builder
+- 2026-11-24 · R21 · changed · a recurring expense's sweeps are ledger rows, not payments · owner
+- 2026-11-24 · R25 · changed · spent counts the recurring expense rows filed under the category · owner
