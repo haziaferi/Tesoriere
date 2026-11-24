@@ -680,7 +680,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Not:** Taking back money already deposited: the switch controls only what comes after it.
 
-**Since:** 2026-11-24 · builder · own words
+**Since:** 2026-11-25 · builder · own words
 
 ### D-R76 · Paydays
 
@@ -701,7 +701,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Not:** A flat 30 days for monthly pay: the payday would drift across the calendar.
 
-**Since:** 2026-11-24 · builder · own words
+**Since:** 2026-11-25 · builder · own words
 
 ### D-R77 · Income received this month
 
@@ -715,7 +715,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Not:** A monthly figure worked out from the cadence: a month with a third biweekly payday, or a payday not yet arrived, would misstate the money there is.
 
-**Since:** 2026-11-24 · builder · own words
+**Since:** 2026-11-25 · builder · own words
 
 ### D-R78 · No income logged
 
@@ -736,7 +736,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Not:** Counting from the missed payday: the count would read lower than the days that have passed with nothing logged.
 
-**Since:** 2026-11-24 · builder · own words
+**Since:** 2026-11-25 · builder · own words
 
 ### D-R79 · Salaried or hourly
 
@@ -748,7 +748,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Not:** Automatic deposit for hourly pay: what arrives varies with the hours.
 
-**Since:** 2026-11-24 · builder · own words
+**Since:** 2026-11-25 · builder · own words
 
 ### D-R80 · Logged hours
 
@@ -760,7 +760,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Not:** Hours worked times the rate stored as money with fractions of a cent (R20).
 
-**Since:** 2026-11-24 · builder · own words
+**Since:** 2026-11-25 · builder · own words
 
 ### D-R81 · Hourly payday
 
@@ -772,7 +772,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Not:** Writing each shift as income: it would count money that has not arrived.
 
-**Since:** 2026-11-24 · builder · own words
+**Since:** 2026-11-25 · builder · own words
 
 ### D-R82 · Hourly estimate
 
@@ -784,7 +784,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Acceptance:** 10 hours at 20.00 are estimated at 200.00 before deductions. After four paydays of 10 hours at 20.00 at which 160.00, 160.00, 100.00 and 200.00 arrived, 10 more hours at 20.00 are estimated at 153.33, from the last three.
 
-**Since:** 2026-11-24 · builder · own words
+**Since:** 2026-11-25 · builder · own words
 
 ### D-R83 · Leaving hourly
 
@@ -794,7 +794,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Acceptance:** Shifts of 6 and 4 hours settled on 2 November 2026 with 170.00 leave no shift and one income row of 170.00 dated 2 November with 10 hours; discarded, they leave no shift and no row, and the income can then be made salaried. Changing the type with a shift still logged is refused.
 
-**Since:** 2026-11-24 · builder · own words
+**Since:** 2026-11-25 · builder · own words
 
 ### D-R84 · A salaried payday logged by hand
 
@@ -804,7 +804,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Acceptance:** A 1,450.00 monthly income on the 10th, switched on on 1 November 2026, offers nothing on 9 November, 10 November on 10 November, nothing on 12 November, and 10 December on 11 December. With 1,450.00 logged on 10 November, with 10 November already offered, or with automatic deposit on, nothing is offered on 11 November.
 
-**Since:** 2026-11-24 · builder · own words
+**Since:** 2026-11-25 · builder · own words
 
 ## 8. Recurring expenses
 
