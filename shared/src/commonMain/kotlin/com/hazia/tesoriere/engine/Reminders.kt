@@ -4,6 +4,7 @@ import com.hazia.tesoriere.model.ProfileData
 import com.hazia.tesoriere.model.RecurringExpense
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.LocalTime
 import kotlinx.datetime.atTime
 import kotlinx.datetime.number
 
@@ -12,9 +13,10 @@ import kotlinx.datetime.number
  * 2892110: the dates only (SPEC R69). The engine says when each reminder falls; delivering it is
  * the platform's, and how it reads is the design pass's (SPEC R16).
  *
- * Changed from Sci-Fin: `ReminderEntry` holds the expense's id and dates, not its name or amount.
- * Not ported: `registrations` and `ReminderRegistration` (the platform's), the notification
- * bodies, the payday reminder (with the Income piece), the registration keys and `localNow`.
+ * Changed from Sci-Fin: `ReminderEntry` holds the expense's id and dates, not its name or amount;
+ * the payday reminder's date, which Sci-Fin worked out inside `registrations`, is its own
+ * function, `nextPaydayFire`. Not ported: `registrations` and `ReminderRegistration` (the
+ * platform's), the notification bodies, the registration keys and `localNow`.
  */
 
 /** The hour, device time, at which every reminder fires (SPEC R69). */
@@ -43,6 +45,19 @@ object Reminders {
         val day = d.importState.importReminderDay.coerceIn(1, 28)
         val thisMonth = dateWithDay(from.year, from.month.number, day)
         return if (thisMonth >= from) thisMonth else from.firstOfNextMonth().let { dateWithDay(it.year, it.month.number, day) }
+    }
+
+    /**
+     * The payday reminder (SPEC R69): the next payday whose 09:00 is ahead of [now], only while
+     * income is not recorded by itself (hourly, or salaried without automatic deposit) and the
+     * payday reminder is on; null otherwise.
+     */
+    fun nextPaydayFire(d: ProfileData, now: LocalDateTime): LocalDateTime? {
+        val s = d.settings
+        if (!Hourly.manualPayday(s) || !s.paydayNotificationEnabled) return null
+        val at = LocalTime(NOTIFY_HOUR, 0)
+        val day = Income.nextOccurrence(s, now.date)?.let { if (it.atTime(at) > now) it else Income.nextOccurrence(s, now.date.plusDays(1)) }
+        return day?.atTime(at)
     }
 
     /** The New Month reminder: this month's 1st at 09:00 while it is ahead of [now], else next month's (SPEC R69). */

@@ -14,6 +14,8 @@ object StoredLabels {
     const val STARTING_BALANCE = "Starting balance"
     /** The payee of an income row the app deposited by itself. */
     const val AUTO_DEPOSIT = "Auto-deposit"
+    /** The payee of a confirmed hourly payday's income row (SPEC R81). */
+    const val PAYDAY = "Payday"
     /** The target name of a `savings` ledger row. */
     const val SAVINGS = "Savings"
     /** The note of the row that returns a deleted Goal's money to Savings (SPEC R58). */

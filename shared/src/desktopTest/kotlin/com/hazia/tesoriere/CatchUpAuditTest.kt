@@ -21,10 +21,9 @@ import kotlin.test.assertNull
 /**
  * Ported from Sci-Fin native/shared/src/desktopTest/kotlin/app/scifin/CatchUpAuditTest.kt at
  * 2892110. Changed: the restart test runs on the engine (the stored summary read back with
- * `persistedSummary`), since the app store is not ported; the first switch-on sets the automatic
- * deposit directly. Not ported here: switching to a Profile last open months ago (the app store,
- * and a Profile with only categories has no month to process, SPEC R70), and turning automatic
- * deposit back on (`Income.setAutoDeposit`, ported with Income).
+ * `persistedSummary`), since the app store is not ported. Not ported here: switching to a Profile
+ * last open months ago (the app store, and a Profile with only categories has no month to
+ * process, SPEC R70).
  */
 class CatchUpAuditTest {
     private val ids = Ids("cu")
@@ -78,11 +77,25 @@ class CatchUpAuditTest {
     }
 
     // SPEC:R71
+    @Test fun `R71 automatic deposit switched back on on 14 September 2026 deposits nothing that day and 5 October on 5 October`() {
+        val base = profile(savings = "1,000.00")
+        val off = base.copy(settings = base.settings.copy(incomeEnabled = true, income = cents("1,450.00"), incomeCadence = IncomeCadence.MONTHLY,
+            incomePayDate = LocalDate(2026, 5, 5), incomeAutoDeposit = false, lastIncomeDepositDate = LocalDate(2026, 6, 5)))
+        val today = LocalDate(2026, 9, 14)
+        val on = Income.setAutoDeposit(off, true, today)
+        val (d, c) = Income.runCatchUp(on, TestClock(today)) { ids.next() }
+        assertEquals(0, c.count); assertEquals(cents("1,000.00"), d.savingsAmount)
+        val (later, c2) = Income.runCatchUp(d, TestClock(LocalDate(2026, 10, 5))) { ids.next() }
+        assertEquals(1, c2.count); assertEquals(LocalDate(2026, 10, 5), later.transactions.single().date)
+        assertEquals(on, Income.setAutoDeposit(on, true, today))                  // already on: unchanged
+    }
+
+    // SPEC:R71
     @Test fun `R71 a first switch-on on 14 September 2026 of a 100_00 monthly income paid the 5th deposits 5 August and 5 September`() {
         val base = profile(savings = "1,000.00")
         val d = base.copy(settings = base.settings.copy(incomeEnabled = true, income = cents("100.00"), incomeCadence = IncomeCadence.MONTHLY,
-            incomePayDate = LocalDate(2026, 8, 5), incomeAutoDeposit = true))
-        val (after, c) = Income.runCatchUp(d, TestClock(LocalDate(2026, 9, 14))) { ids.next() }
+            incomePayDate = LocalDate(2026, 8, 5)))
+        val (after, c) = Income.runCatchUp(Income.setAutoDeposit(d, true, LocalDate(2026, 9, 14)), TestClock(LocalDate(2026, 9, 14))) { ids.next() }
         assertEquals(2, c.count); assertEquals(cents("1,200.00"), after.savingsAmount)
         assertEquals(listOf(LocalDate(2026, 8, 5), LocalDate(2026, 9, 5)), after.transactions.map { it.date })
     }
