@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  No permission, no activity, no label and no icon: the app's screens, name on the launcher and
+  icon are decided in the design pass (SPEC R13, R16).
+
+  INTERNET is absent on purpose (SPEC R08) and :androidApp's verifyNoNetworkPermission task fails
+  the build if the merged manifest ever declares it.
+
+  allowBackup=false: backups are the user's own files, made on purpose (SPEC R18); a cloud copy
+  taken by the platform would be a network feature R08's table does not list.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application android:allowBackup="false" />
+
+</manifest>
