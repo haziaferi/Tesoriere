@@ -1,5 +1,5 @@
 # The same pins as Sci-Fin's build at 2892110 (SPEC R17), so the project resolves from the
-# local Gradle cache. Room, KSP and Compose join when the pieces that need them land.
+# local Gradle cache. KSP, the Room compiler and Compose join when the pieces that need them land.
 [versions]
 agp = "9.3.2"
 kotlin = "2.4.10"
@@ -7,8 +7,10 @@ kotlinxCoroutines = "1.11.0"
 kotlinxSerializationJson = "1.11.0"
 kotlinxDatetime = "0.7.1"
 junit = "4.13.2"
+room = "2.8.4"
 
 [libraries]
+androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
 kotlinx-datetime = { group = "org.jetbrains.kotlinx", name = "kotlinx-datetime", version.ref = "kotlinxDatetime" }
