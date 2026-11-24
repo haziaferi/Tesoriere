@@ -1,0 +1,52 @@
+# Tesoriere spec history
+
+Not a source of current rules: `SPEC.md` is. One line per change, newest at the bottom. Retired wording is in git.
+
+- 2026-11-24 · R01 · added · jobs and how often · owner
+- 2026-11-24 · R02 · added · who uses it · builder
+- 2026-11-24 · R03 · added · a standalone app · owner
+- 2026-11-24 · R04 · added · a selective port of Sci-Fin · owner
+- 2026-11-24 · R05 · added · repository and licence · owner
+- 2026-11-24 · R06 · added · platforms · owner
+- 2026-11-24 · R07 · added · languages · owner
+- 2026-11-24 · R08 · added · offline first · owner
+- 2026-11-24 · R09 · added · minimum android version · builder
+- 2026-11-24 · R10 · added · no valence colour · owner
+- 2026-11-24 · R11 · added · no grading, no streaks · owner
+- 2026-11-24 · R12 · added · inform, never block · owner
+- 2026-11-24 · R13 · added · visible decisions are the owner's · owner
+- 2026-11-24 · R14 · added · no stock look · owner
+- 2026-11-24 · R15 · added · accessibility values · owner
+- 2026-11-24 · R16 · added · visible design · owner
+- 2026-11-24 · R17 · added · port source · builder
+- 2026-11-24 · R18 · added · ported pieces · owner
+- 2026-11-24 · R19 · added · Sci-Fin backup import · owner
+- 2026-11-24 · R20 · added · money and time · builder
+- 2026-11-24 · R21 · added · payment · builder
+- 2026-11-24 · R22 · added · source and parts are separate · owner
+- 2026-11-24 · R23 · added · parts add up · owner
+- 2026-11-24 · R24 · added · any payment can be split · owner
+- 2026-11-24 · R25 · added · spent is derived · owner
+- 2026-11-24 · R26 · added · statement import · owner
+- 2026-11-24 · R27 · added · the receipt contract · owner
+- 2026-11-24 · R28 · added · receipt folder · owner
+- 2026-11-24 · R29 · added · picking up receipts · owner
+- 2026-11-24 · R30 · added · receipt files tesoriere cannot take · owner
+- 2026-11-24 · R31 · added · receipt review · owner
+- 2026-11-24 · R32 · added · category links · owner
+- 2026-11-24 · R33 · added · a link from a closed review · builder
+- 2026-11-24 · R34 · added · changing a link · owner
+- 2026-11-24 · R35 · added · a receipt's source · builder
+- 2026-11-24 · R36 · added · store links · owner
+- 2026-11-24 · R37 · added · pairing rule · owner
+- 2026-11-24 · R38 · added · whichever arrives first · owner
+- 2026-11-24 · R39 · added · difference part · owner
+- 2026-11-24 · R40 · added · pairing by hand · builder
+- 2026-11-24 · R41 · added · deleting a receipt payment · builder
+- 2026-11-24 · R42 · added · deleting a linked category · builder
+- 2026-11-24 · R43 · added · test plan · builder
+- 2026-11-24 · R44 · added · rollout phases · builder
+- 2026-11-24 · R45 · added · price comparison · owner
+- 2026-11-24 · R46 · added · households in v1 · owner
+- 2026-11-24 · R47 · added · currency conversion in v1 · owner
+- 2026-11-24 · R48 · added · splitting a receipt by payment · owner
