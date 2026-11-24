@@ -59,3 +59,18 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-24 · R44 · changed · gate by events, no minimum time; one month dropped · owner
 - 2026-11-24 · R15 · retired · folded into R16: the design pass decides accessibility, no prior values · owner · 0ba319f
 - 2026-11-24 · R16 · changed · no rule set before the design pass; accessibility row added · owner
+- 2026-11-24 · R49 · added · Savings, its unset state · builder
+- 2026-11-24 · R50 · added · Goals hold money out of Savings · builder
+- 2026-11-24 · R51 · added · the ledger and its key table · builder
+- 2026-11-24 · R52 · added · direct edits log the change · builder
+- 2026-11-24 · R53 · added · undoing a mistaken entry: pair deletion · builder
+- 2026-11-24 · R54 · added · what a payment's source moves; a Goal cannot pay past what it holds · owner
+- 2026-11-24 · R21 · changed · a part read from a Sci-Fin backup may have no category · owner
+- 2026-11-24 · R55 · added · goal calculator · builder
+- 2026-11-24 · R56 · added · where a goal fits · builder
+- 2026-11-24 · R57 · added · gentler monthly amounts · builder
+- 2026-11-24 · R58 · added · deleting a goal · builder
+- 2026-11-24 · R59 · added · plan against spent · builder
+- 2026-11-24 · R49 · changed · acceptance: goal checks skipped with Income off while Savings is unset · builder
+- 2026-11-24 · R53 · changed · two cat: adjustments pair only within one month · builder
+- 2026-11-24 · R54 · changed · a deleted Goal's payment moves Savings when undone, after a dismissable warning · owner

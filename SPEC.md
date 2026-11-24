@@ -29,30 +29,41 @@ Kinds: O owner rule · D decided · I inherited · A assumed · Q open.
 | D-R18 | Ported pieces | 4. The port from Sci-Fin |
 | D-R19 | Sci-Fin backup import | 4. The port from Sci-Fin |
 | D-R20 | Money and time | 5. Money model |
+| D-R49 | Savings | 5. Money model |
+| D-R50 | Goals hold money out of Savings | 5. Money model |
+| D-R51 | The ledger | 5. Money model |
+| D-R52 | Direct edits log the change | 5. Money model |
+| D-R53 | Undoing a mistaken entry | 5. Money model |
 | D-R21 | Payment | 5. Money model |
 | D-R22 | Source and parts are separate | 5. Money model |
+| D-R54 | What a payment's source moves | 5. Money model |
 | D-R23 | Parts add up | 5. Money model |
 | D-R24 | Any payment can be split | 5. Money model |
 | D-R25 | Spent is derived | 5. Money model |
-| D-R26 | Statement import | 6. Statement import |
-| D-R27 | The receipt contract | 7. Chatelaine receipts |
-| D-R28 | Receipt folder | 7. Chatelaine receipts |
-| D-R29 | Picking up receipts | 7. Chatelaine receipts |
-| D-R30 | Receipt files Tesoriere cannot take | 7. Chatelaine receipts |
-| D-R31 | Receipt review | 7. Chatelaine receipts |
-| D-R32 | Category links | 7. Chatelaine receipts |
-| D-R33 | Closing a review | 7. Chatelaine receipts |
-| D-R34 | Changing a link | 7. Chatelaine receipts |
-| D-R35 | A receipt's source | 7. Chatelaine receipts |
-| D-R36 | Store links | 8. One payment, two sources |
-| D-R37 | Pairing rule | 8. One payment, two sources |
-| D-R38 | Whichever arrives first | 8. One payment, two sources |
-| D-R39 | Difference part | 8. One payment, two sources |
-| D-R40 | Pairing by hand | 8. One payment, two sources |
-| D-R41 | Deleting a receipt payment | 9. Edge cases |
-| D-R42 | Deleting a linked category | 9. Edge cases |
-| D-R43 | Test plan | 10. Test plan |
-| D-R44 | Rollout phases | 11. Rollout |
+| D-R55 | Goal calculator | 6. Goals and the monthly plan |
+| D-R56 | Where a goal fits | 6. Goals and the monthly plan |
+| D-R57 | Gentler monthly amounts | 6. Goals and the monthly plan |
+| D-R58 | Deleting a goal | 6. Goals and the monthly plan |
+| D-R59 | Plan against spent | 6. Goals and the monthly plan |
+| D-R26 | Statement import | 7. Statement import |
+| D-R27 | The receipt contract | 8. Chatelaine receipts |
+| D-R28 | Receipt folder | 8. Chatelaine receipts |
+| D-R29 | Picking up receipts | 8. Chatelaine receipts |
+| D-R30 | Receipt files Tesoriere cannot take | 8. Chatelaine receipts |
+| D-R31 | Receipt review | 8. Chatelaine receipts |
+| D-R32 | Category links | 8. Chatelaine receipts |
+| D-R33 | Closing a review | 8. Chatelaine receipts |
+| D-R34 | Changing a link | 8. Chatelaine receipts |
+| D-R35 | A receipt's source | 8. Chatelaine receipts |
+| D-R36 | Store links | 9. One payment, two sources |
+| D-R37 | Pairing rule | 9. One payment, two sources |
+| D-R38 | Whichever arrives first | 9. One payment, two sources |
+| D-R39 | Difference part | 9. One payment, two sources |
+| D-R40 | Pairing by hand | 9. One payment, two sources |
+| D-R41 | Deleting a receipt payment | 10. Edge cases |
+| D-R42 | Deleting a linked category | 10. Edge cases |
+| D-R43 | Test plan | 11. Test plan |
+| D-R44 | Rollout phases | 12. Rollout |
 | D-R45 | Price comparison | Out of scope |
 | D-R46 | Households in v1 | Out of scope |
 | D-R47 | Currency conversion in v1 | Out of scope |
@@ -70,6 +81,8 @@ Kinds: O owner rule · D decided · I inherited · A assumed · Q open.
 | Receipt file | The file Chatelaine writes for one receipt, in the format of Chatelaine's spec, rule 123. |
 | Receipt folder | The folder the user chooses, where Chatelaine writes receipt files and Tesoriere reads them. |
 | Bank row | One line of an imported bank statement (CSV or OFX). |
+| Ledger | The log of every money movement that is not a payment, one row per movement (R51). |
+| Adjustment | A logged change to a category's spent figure for one month, written as a `cat:` ledger row (R25, R51). |
 | Pair | A receipt and a bank row recorded as the same payment. |
 | Category link | A remembered match from a Chatelaine category id to a Tesoriere category. |
 | Store link | A remembered match from a Chatelaine store name to a bank row's payee text. |
@@ -336,6 +349,89 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · builder · own words
 
+### D-R49 · Savings
+
+**Rule:** Each Profile has one Savings figure: the money not set aside in a Goal. It may go below zero. Until it is first given a value it is unset, which is not zero: checks that compare against Savings are skipped while it is unset, and any movement that touches Savings ends the unset state, counting from zero.
+
+**Evidence:** Sci-Fin's spec, section 3.1, and `engine/Ledger.kt` at `2892110`.
+
+**Acceptance:** A fresh Profile's Savings is unset; a 60.00 movement out of an unset Savings leaves it at -60.00; a direct edit to 0.00 leaves it at 0.00, no longer unset; with Income off and Savings unset, R56's comparison and R57's amounts are skipped.
+
+**Not:** Reading unset as zero: an honest zero must stay distinguishable from no answer.
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R50 · Goals hold money out of Savings
+
+**Rule:** Money put into a Goal leaves Savings and is held by the Goal, so no figure read from Savings counts it. Taking it back out of the Goal returns it to Savings.
+
+**Evidence:** Sci-Fin's spec, section 3.2.
+
+**Acceptance:** Adding 150.00 to a Goal raises its saved money by 150.00 and lowers Savings by 150.00.
+
+**Not:** Counting Goal money in Savings as well: the same euro would count twice.
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R51 · The ledger
+
+**Rule:** Every movement of money other than a payment is a ledger row: a key naming what it changes, the signed change to it, a date, the instant it was logged and the target's name at that instant. How Savings moves follows from the key, as below. The date places the row in its month and in reports; the figure it changes moves when the row is written, whatever its date.
+
+**Values:**
+
+| `key` | `amount` is the change to | Savings moves by |
+|---|---|---|
+| `savings` | Savings | `+amount` |
+| `goal:<id>` | the Goal's saved money | `-amount` |
+| `cat:<id>` | the category's spent figure, as an adjustment (R25) | `-amount` |
+| `rec:<id>` | the money swept for the recurring expense, positive when swept out | `-amount` |
+| `acct:<id>` | the Account's balance | 0 |
+| `spend:<goalId>` | the Goal's saved money, negative; only in rows read from a Sci-Fin backup (R19) | 0 |
+
+**Evidence:** Sci-Fin's spec, section 3.6, and `engine/Ledger.kt` at `2892110`.
+
+**Acceptance:** A 20.00 adjustment on a category is stored as `cat:<id>` with amount 2000 and lowers Savings by 20.00; a 100.00 sweep is `rec:<id>` with amount 10000 and lowers Savings by 100.00; an `acct:` row leaves Savings as it was.
+
+**Not:** Storing the Savings effect instead of the change to the target: every goal and adjustment row would read inverted.
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R52 · Direct edits log the change
+
+**Rule:** Savings and a Goal's saved money can be set directly to a new figure. The edit logs one ledger row holding the change, never the new figure, with the note `Correction` unless the user writes one; a change to a Goal's saved money moves Savings by its opposite. An edit to the same figure logs nothing.
+
+**Evidence:** Sci-Fin's spec, section 3.6, and `engine/Writes.kt` at `2892110`.
+
+**Acceptance:** Setting Savings from 150.00 to 1,000.00 logs a `savings` row of +850.00; setting a Goal's saved money from 400.00 to 300.00 logs a `goal:<id>` row of -100.00 and raises Savings by 100.00.
+
+**Not:** Logging the new figure itself: a second statement of the truth that the ledger's sums could no longer match.
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R53 · Undoing a mistaken entry
+
+**Rule:** The ledger's rows are never edited or deleted one by one. The one exception is a pair: two rows deleted together when the second cancels the first under every condition below. Deleting a pair changes no balance; the date of the last logged income is recomputed from the rows left.
+
+**Values:**
+
+| Condition | Holds when |
+|---|---|
+| Same target | both rows have the same `key`; two `cat:` adjustments are also dated in the same month (R25) |
+| Opposite | the amounts are equal, opposite and not zero |
+| Next | the second is the next row on that key in logged order, with none between |
+| Window | they were logged at most 48 hours apart |
+| Once | each row belongs to at most one pair, pairing forward only |
+| Fixed | which rows pair is found once, from the ledger before any delete |
+| Not a sweep | neither row has a `rec:` key |
+
+**Evidence:** Sci-Fin's spec, section 7.3, and `engine/Ledger.kt` at `2892110`.
+
+**Acceptance:** Rows of +40.00 and -40.00 on one Goal logged 47 hours apart pair; 49 hours apart they do not; four rows +40.00, -40.00, +40.00, -40.00 logged in that order make two pairs, the first two and the last two.
+
+**Not:** Deleting single rows: the ledger would stop adding up to the figures it moved.
+
+**Since:** 2026-11-24 · builder · own words
+
 ### D-R21 · Payment
 
 **Rule:** Every expense is a payment with the fields below. A payment from a receipt keeps the receipt's lines, so each part can be traced to the lines it came from.
@@ -350,14 +446,14 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 | `total` | cents, positive |
 | `source` | Savings, a Goal, or an Account (R22) |
 | `payee` | optional text: the store or the bank row's payee |
-| `parts` | one or more: category id and cents (R23) |
+| `parts` | one or more: category id and cents (R23); only a part read from a Sci-Fin backup may have no category (R19) |
 | `receiptId` | the receipt file's id, when the payment came from or was paired with a receipt |
 | `receiptLines` | per line: name, pack, quantity, price paid, Chatelaine category id and name, Tesoriere category |
 | `bankKeys` | the bank row's FITID and its date, amount and description key, when it came from or was paired with a bank row (R26) |
 
 **Acceptance:** A recorded receipt payment holds every receipt line; a paired payment holds both its `receiptId` and its `bankKeys`.
 
-**Since:** 2026-11-24 · builder · own words
+**Since:** 2026-11-24 · owner · agreed rewording
 
 ### D-R22 · Source and parts are separate
 
@@ -368,6 +464,27 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 **Acceptance:** A EUR 40 receipt charged to a card adds its parts to their categories' spent figures and EUR 40 to the card's balance, and moves nothing in Savings.
 
 **Not:** Sci-Fin's model, where a charge to a card has no category.
+
+**Since:** 2026-11-24 · owner · agreed rewording
+
+### D-R54 · What a payment's source moves
+
+**Rule:** A payment's source decides what its total moves, as below; its parts move only the categories' spent figures (R25). A payment is its own record and writes no ledger row. Editing a payment undoes its old source's effect and applies the new one; removing it undoes its effect.
+
+**Values:**
+
+| Source | Its total | Savings |
+|---|---|---|
+| Savings | lowers Savings | lowered by the total |
+| Goal | lowers the Goal's saved money; a total above what the Goal holds cannot be saved | unchanged |
+| Account | raises the Account's balance | unchanged |
+| a Goal deleted since (R58) | keeps the Goal as its recorded source; undoing, editing or removing it moves Savings in the Goal's place, after a warning the user can dismiss | moves as for a Savings source |
+
+**Evidence:** Sci-Fin's spec, sections 3.6 and 7.2, at `2892110`. The deleted-Goal row: owner, 2026-11-24, after review of PR 2.
+
+**Acceptance:** A 42.30 payment from Savings lowers Savings by 42.30; a 30.00 payment from a Goal holding 50.00 leaves it 20.00 and Savings unchanged, and one of 60.00 cannot be saved; a 40.00 payment charged to a card with a 0.00 balance leaves the balance at 40.00. With Savings at 1,000.00: 100.00 into a Goal, a 30.00 payment from it, the Goal deleted with its 70.00 returned leaves 970.00; removing the payment then gives 1,000.00, and re-filing its parts leaves 970.00.
+
+**Not:** Spending past what a Goal holds: the Goal would hold less than nothing. Leaving a deleted Goal's payment with nowhere to return its money: Savings would stay short by the payment.
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
@@ -403,7 +520,85 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
-## 6. Statement import
+## 6. Goals and the monthly plan
+
+### D-R55 · Goal calculator
+
+**Rule:** A Goal with a target is planned either by a date, which gives a monthly amount, or by a monthly amount, which gives a number of months. Both are worked out from the money still needed, the target minus the saved money, whenever they are read, as below. A Goal with no target, or a target of zero, is a running tally with no monthly amount.
+
+**Values:**
+
+| Figure | Worked out as |
+|---|---|
+| Months, by date | calendar months from the current month to the target's month, at least 1 |
+| Monthly amount, by date | money still needed divided by the months, rounded up to the cent |
+| Months, by amount | money still needed divided by the monthly amount, rounded up to a whole month |
+
+**Evidence:** Sci-Fin's spec, sections 6.1 and 6.3, and `engine/Goals.kt` at `2892110`.
+
+**Acceptance:** A 1,200.00 goal with 400.00 saved and a target date six calendar months ahead needs 133.34 a month; the same goal at 150.00 a month takes 6 months.
+
+**Not:** A deadline with no target: there is nothing to divide.
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R56 · Where a goal fits
+
+**Rule:** A goal with a monthly amount is compared with the month's room as below, which informs and never blocks (R12). Another goal stops counting once its saved money reaches its target; one whose date has passed short of its target keeps counting.
+
+**Values:**
+
+| Income | Compared | It fits when |
+|---|---|---|
+| on | the goal's monthly amount with the income received this month, minus this month's recurring expenses, minus the other goals' monthly amounts | the monthly amount is at most that room |
+| off | the recurring expenses plus the other goals' monthly amounts plus this goal's, with Savings | that sum is at most Savings |
+
+**Evidence:** Sci-Fin's spec, sections 6.2 and 6.4, and `engine/Goals.kt` at `2892110`.
+
+**Acceptance:** With Income off, Savings 1,000.00, recurring expenses of 300.00 and another goal at 200.00 a month, a goal at 133.34 a month adds up to 633.34 against 1,000.00 and fits; if the other goal has reached its target, it adds nothing.
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R57 · Gentler monthly amounts
+
+**Rule:** When a goal's monthly amount is above the threshold below, three gentler monthly amounts are offered, each rounded to a whole currency unit, which the user may take or ignore. When the base is zero or less, no amounts are offered.
+
+**Values:**
+
+| Income | Base | Threshold | Amounts offered |
+|---|---|---|---|
+| on | income received this month | 1/6 of the base | 1/14, 1/12 and 1/6 of the base |
+| off | Savings | 1/12 of the base | 1/20, 1/16 and 1/12 of the base |
+
+**Evidence:** Sci-Fin's spec, section 6.4, and `engine/Goals.kt` at `2892110`.
+
+**Acceptance:** With Income off and Savings 2,400.00, a goal at 250.00 a month is offered 120.00, 150.00 and 200.00; one at 200.00 a month is offered nothing.
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R58 · Deleting a goal
+
+**Rule:** Deleting a Goal that holds money asks whether to return it to Savings. Returned, it moves back with a logged `goal:<id>` row; kept, Savings stays as it was. Either way the Goal's past rows stay in the ledger.
+
+**Evidence:** Sci-Fin's spec, section 3.6, and `engine/GoalEditing.kt` at `2892110`.
+
+**Acceptance:** Deleting a Goal holding 300.00 with the money returned logs a `goal:<id>` row of -300.00 and raises Savings by 300.00; without, Savings is unchanged; both remove the Goal.
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R59 · Plan against spent
+
+**Rule:** Each category has one planned amount, the same every month, read beside its spent figure for the month (R25). The category editor holds the name, the icon and the planned amount; spent changes only through payments and logged adjustments.
+
+**Evidence:** Sci-Fin's spec, section 4.3, and `engine/CategoryEditing.kt` at `2892110`.
+
+**Acceptance:** A category planned at 300.00 with payments of 320.00 in March reads planned 300.00 and spent 320.00 for March.
+
+**Not:** Sci-Fin's reset of spent at each new month: a figure worked out per month needs none.
+
+**Since:** 2026-11-24 · builder · own words
+
+## 7. Statement import
 
 ### D-R26 · Statement import
 
@@ -413,7 +608,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
-## 7. Chatelaine receipts
+## 8. Chatelaine receipts
 
 ### D-R27 · The receipt contract
 
@@ -539,7 +734,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
-## 8. One payment, two sources
+## 9. One payment, two sources
 
 ### D-R36 · Store links
 
@@ -609,7 +804,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
-## 9. Edge cases
+## 10. Edge cases
 
 ### D-R41 · Deleting a receipt payment
 
@@ -629,7 +824,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · builder · own words
 
-## 10. Test plan
+## 11. Test plan
 
 ### D-R43 · Test plan
 
@@ -650,7 +845,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · builder · own words
 
-## 11. Rollout
+## 12. Rollout
 
 ### D-R44 · Rollout phases
 
@@ -687,11 +882,22 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R18 · Ported pieces: On a fresh install the pieces marked off show no screen, row or notification until switched on; Profiles off means one Profile and no switcher.
 - R19 · Sci-Fin backup import: Importing a Sci-Fin schema-10 backup yields one new Tesoriere Profile per Sci-Fin Profile, with the same Savings, Goals, Categories, Recurring expenses, Accounts and ledger counts the review showed; a schema-11 file is refused and nothing is written.
 - R20 · Money and time: No floating-point type holds money in `shared/`; every date field is a calendar day and every logged time an instant.
+- R49 · Savings: A fresh Profile's Savings is unset; a 60.00 movement out of an unset Savings leaves it at -60.00; a direct edit to 0.00 leaves it at 0.00, no longer unset; with Income off and Savings unset, R56's comparison and R57's amounts are skipped.
+- R50 · Goals hold money out of Savings: Adding 150.00 to a Goal raises its saved money by 150.00 and lowers Savings by 150.00.
+- R51 · The ledger: A 20.00 adjustment on a category is stored as `cat:<id>` with amount 2000 and lowers Savings by 20.00; a 100.00 sweep is `rec:<id>` with amount 10000 and lowers Savings by 100.00; an `acct:` row leaves Savings as it was.
+- R52 · Direct edits log the change: Setting Savings from 150.00 to 1,000.00 logs a `savings` row of +850.00; setting a Goal's saved money from 400.00 to 300.00 logs a `goal:<id>` row of -100.00 and raises Savings by 100.00.
+- R53 · Undoing a mistaken entry: Rows of +40.00 and -40.00 on one Goal logged 47 hours apart pair; 49 hours apart they do not; four rows +40.00, -40.00, +40.00, -40.00 logged in that order make two pairs, the first two and the last two.
 - R21 · Payment: A recorded receipt payment holds every receipt line; a paired payment holds both its `receiptId` and its `bankKeys`.
 - R22 · Source and parts are separate: A EUR 40 receipt charged to a card adds its parts to their categories' spent figures and EUR 40 to the card's balance, and moves nothing in Savings.
+- R54 · What a payment's source moves: A 42.30 payment from Savings lowers Savings by 42.30; a 30.00 payment from a Goal holding 50.00 leaves it 20.00 and Savings unchanged, and one of 60.00 cannot be saved; a 40.00 payment charged to a card with a 0.00 balance leaves the balance at 40.00. With Savings at 1,000.00: 100.00 into a Goal, a 30.00 payment from it, the Goal deleted with its 70.00 returned leaves 970.00; removing the payment then gives 1,000.00, and re-filing its parts leaves 970.00.
 - R23 · Parts add up: A EUR 42.30 payment with parts of EUR 30.00 and EUR 12.00 shows EUR 0.30 left and cannot be saved; with a third part of EUR 0.30 it can.
 - R24 · Any payment can be split: A bank row and a hand-logged payment can each be saved with two parts in two categories.
 - R25 · Spent is derived: Re-filing a payment's parts changes the spent figures of the categories involved, for the payment's month, and writes no correction row.
+- R55 · Goal calculator: A 1,200.00 goal with 400.00 saved and a target date six calendar months ahead needs 133.34 a month; the same goal at 150.00 a month takes 6 months.
+- R56 · Where a goal fits: With Income off, Savings 1,000.00, recurring expenses of 300.00 and another goal at 200.00 a month, a goal at 133.34 a month adds up to 633.34 against 1,000.00 and fits; if the other goal has reached its target, it adds nothing.
+- R57 · Gentler monthly amounts: With Income off and Savings 2,400.00, a goal at 250.00 a month is offered 120.00, 150.00 and 200.00; one at 200.00 a month is offered nothing.
+- R58 · Deleting a goal: Deleting a Goal holding 300.00 with the money returned logs a `goal:<id>` row of -300.00 and raises Savings by 300.00; without, Savings is unchanged; both remove the Goal.
+- R59 · Plan against spent: A category planned at 300.00 with payments of 320.00 in March reads planned 300.00 and spent 320.00 for March.
 - R26 · Statement import: Importing the same OFX statement twice records nothing the second time; importing a CSV export of the same period also records nothing; a payee filed under a category once is pre-filled on the next statement.
 - R27 · The receipt contract: The receipt parser's tests cite Chatelaine's rule 123 field by field; no Tesoriere code opens the receipt folder for writing.
 - R28 · Receipt folder: With the folder set in Profile A, receipts are reviewed and recorded only in Profile A; Profile B offers no receipt folder while A has one.

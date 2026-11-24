@@ -1,0 +1,201 @@
+package com.hazia.tesoriere.payments
+
+import com.hazia.tesoriere.Fixture
+import com.hazia.tesoriere.Fixture.category
+import com.hazia.tesoriere.Fixture.goal
+import com.hazia.tesoriere.Fixture.profile
+import com.hazia.tesoriere.TestClock
+import com.hazia.tesoriere.cents
+import com.hazia.tesoriere.engine.GoalEditing
+import com.hazia.tesoriere.engine.Writes
+import com.hazia.tesoriere.model.Account
+import com.hazia.tesoriere.model.AccountType
+import com.hazia.tesoriere.model.ProfileData
+import kotlinx.datetime.LocalDate
+import kotlinx.serialization.json.Json
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+class PaymentsTest {
+    private val day = LocalDate(2026, 3, 14)
+    private val clock = TestClock(day)
+
+    private fun world(savings: String? = "1,000.00"): ProfileData = profile(
+        savings = savings,
+        goals = listOf(goal("trip", "Trip", saved = "50.00")),
+        categories = listOf(category("groc", "Groceries"), category("home", "Household"), category("fun", "Fun")),
+    ).copy(accounts = listOf(Account("card", Fixture.PROFILE, "Card", type = AccountType.CREDIT, balance = 0)))
+
+    private fun draft(total: String, source: PaymentSource = PaymentSource.Savings, vararg parts: Pair<String?, String>, date: LocalDate = day) =
+        PaymentDraft(date, cents(total), source, payee = "Corner shop", parts = parts.map { (c, a) -> Part(c, cents(a)) })
+
+    // SPEC:R23
+    @Test fun `R23 a 42_30 payment with parts 30_00 and 12_00 leaves 0_30 and cannot be saved`() {
+        val d = world()
+        val short = draft("42.30", PaymentSource.Savings, "groc" to "30.00", "home" to "12.00")
+        assertEquals(30L, Payments.remainder(short))
+        assertFalse(Payments.canSave(d, short))
+        val whole = draft("42.30", PaymentSource.Savings, "groc" to "30.00", "home" to "12.00", "fun" to "0.30")
+        assertEquals(0L, Payments.remainder(whole))
+        assertTrue(Payments.canSave(d, whole))
+        assertFailsWith<IllegalArgumentException> { Payments.record(d, short, clock, "pay-1") }
+    }
+
+    // SPEC:R22 SPEC:R54 SPEC:R25
+    @Test fun `R22 a 40_00 receipt charged to a card adds its parts to spent and 40_00 to the card and leaves Savings`() {
+        val d0 = world()
+        val d1 = Payments.record(d0, draft("40.00", PaymentSource.Account("card"), "groc" to "25.00", "home" to "15.00"), clock, "pay-1")
+        assertEquals(cents("40.00"), d1.accounts.single().balance)
+        assertEquals(d0.savings, d1.savings)
+        assertEquals(cents("25.00"), Spent.of(d1, "groc", "2026-03"))
+        assertEquals(cents("15.00"), Spent.of(d1, "home", "2026-03"))
+    }
+
+    // SPEC:R24
+    @Test fun `R24 a hand-logged payment saves with two parts in two categories`() {
+        val d1 = Payments.record(world(), draft("18.00", PaymentSource.Savings, "groc" to "10.00", "fun" to "8.00"), clock, "pay-1")
+        val p = d1.payments.single()
+        assertEquals(listOf(Part("groc", cents("10.00")), Part("fun", cents("8.00"))), p.parts)
+        assertEquals(clock.now(), p.loggedAt)
+        assertEquals("Corner shop", p.payee)
+    }
+
+    // SPEC:R25
+    @Test fun `R25 re-filing a payment's parts changes both categories' spent for its month and writes no transaction`() {
+        val d1 = Payments.record(world(), draft("40.00", PaymentSource.Savings, "groc" to "40.00"), clock, "pay-1")
+        val d2 = Payments.edit(d1, "pay-1", draft("40.00", PaymentSource.Savings, "groc" to "25.00", "home" to "15.00"))
+        assertEquals(cents("25.00"), Spent.of(d2, "groc", "2026-03"))
+        assertEquals(cents("15.00"), Spent.of(d2, "home", "2026-03"))
+        assertEquals(d1.transactions.size, d2.transactions.size)
+        assertEquals(d1.savings, d2.savings)
+    }
+
+    // SPEC:R54
+    @Test fun `R54 a 42_30 payment from Savings lowers Savings by 42_30 and writes no ledger row`() {
+        val d1 = Payments.record(world(), draft("42.30", PaymentSource.Savings, "groc" to "42.30"), clock, "pay-1")
+        assertEquals(cents("957.70"), d1.savings.amount)
+        assertTrue(d1.transactions.isEmpty())
+    }
+
+    // SPEC:R54 SPEC:R49
+    @Test fun `R49 a payment from an unset Savings ends the unset state, counting from zero`() {
+        val d1 = Payments.record(world(savings = null), draft("12.00", PaymentSource.Savings, "fun" to "12.00"), clock, "pay-1")
+        assertEquals(cents("-12.00"), d1.savings.amount)
+    }
+
+    // SPEC:R54
+    @Test fun `R54 a 30_00 payment from a Goal holding 50_00 leaves it 20_00 and Savings unchanged`() {
+        val d0 = world()
+        val d1 = Payments.record(d0, draft("30.00", PaymentSource.Goal("trip"), "fun" to "30.00"), clock, "pay-1")
+        assertEquals(cents("20.00"), d1.goals.single().saved)
+        assertEquals(d0.savings, d1.savings)
+    }
+
+    // SPEC:R54
+    @Test fun `R54 a 60_00 payment from a Goal holding 50_00 cannot be saved`() {
+        val over = draft("60.00", PaymentSource.Goal("trip"), "fun" to "60.00")
+        assertFalse(Payments.canSave(world(), over))
+        assertTrue(Payments.canSave(world(), draft("50.00", PaymentSource.Goal("trip"), "fun" to "50.00")))
+    }
+
+    // SPEC:R54
+    @Test fun `R54 editing a payment undoes its old source and applies the new one`() {
+        val d1 = Payments.record(world(), draft("30.00", PaymentSource.Goal("trip"), "fun" to "30.00"), clock, "pay-1")
+        // the Goal can take back its own 30.00 plus the 20.00 it still holds
+        assertTrue(Payments.canSave(d1, draft("50.00", PaymentSource.Goal("trip"), "fun" to "50.00"), editing = "pay-1"))
+        val d2 = Payments.edit(d1, "pay-1", draft("30.00", PaymentSource.Savings, "fun" to "30.00"))
+        assertEquals(cents("50.00"), d2.goals.single().saved)
+        assertEquals(cents("970.00"), d2.savings.amount)
+        assertEquals("pay-1", d2.payments.single().id)
+        assertEquals(d1.payments.single().loggedAt, d2.payments.single().loggedAt)
+    }
+
+    // SPEC:R54
+    @Test fun `R54 removing a payment undoes its effect`() {
+        val d0 = world()
+        val d1 = Payments.record(d0, draft("40.00", PaymentSource.Account("card"), "groc" to "40.00"), clock, "pay-1")
+        val d2 = Payments.remove(d1, "pay-1")
+        assertEquals(d0, d2)
+    }
+
+    /** Savings 1,000.00; 100.00 into Trip; a 30.00 payment from Trip; Trip deleted with its 70.00 returned. */
+    private fun paidFromDeletedGoal(): ProfileData {
+        var d = profile(savings = "1,000.00", goals = listOf(goal("trip", "Trip")), categories = listOf(category("fun", "Fun"), category("groc", "Groceries")))
+        d = Writes.goalQuickAdd(d, "trip", cents("100.00"), null, clock, "t1")
+        d = Payments.record(d, draft("30.00", PaymentSource.Goal("trip"), "fun" to "30.00"), clock, "pay-1")
+        d = GoalEditing.delete(d, "trip", returnSaved = true, clock) { "t2" }
+        assertEquals(cents("970.00"), d.savings.amount)
+        return d
+    }
+
+    // SPEC:R54 SPEC:R58
+    @Test fun `R54 removing a payment from a deleted Goal returns its 30_00 to Savings`() {
+        val d = Payments.remove(paidFromDeletedGoal(), "pay-1")
+        assertEquals(cents("1,000.00"), d.savings.amount)
+        assertTrue(d.payments.isEmpty())
+    }
+
+    // SPEC:R54 SPEC:R25
+    @Test fun `R54 re-filing a deleted Goal's payment keeps its source and leaves Savings at 970_00`() {
+        val d0 = paidFromDeletedGoal()
+        val refiled = draft("30.00", PaymentSource.Goal("trip"), "fun" to "10.00", "groc" to "20.00")
+        assertTrue(Payments.canSave(d0, refiled, editing = "pay-1"))
+        val d1 = Payments.edit(d0, "pay-1", refiled)
+        assertEquals(cents("970.00"), d1.savings.amount)
+        assertEquals(PaymentSource.Goal("trip"), d1.payments.single().source)
+        assertEquals(cents("20.00"), Spent.of(d1, "groc", "2026-03"))
+    }
+
+    // SPEC:R54
+    @Test fun `R54 a deleted Goal's payment carries a warning code, and a new payment from it cannot be saved`() {
+        val d = paidFromDeletedGoal()
+        assertEquals(PaymentNotice.SOURCE_GOAL_DELETED, Payments.notice(d, "pay-1"))
+        assertFalse(Payments.canSave(d, draft("5.00", PaymentSource.Goal("trip"), "fun" to "5.00")))
+        val live = Payments.record(world(), draft("5.00", PaymentSource.Goal("trip"), "fun" to "5.00"), clock, "pay-2")
+        assertNull(Payments.notice(live, "pay-2"))
+    }
+
+    // SPEC:R21
+    @Test fun `R21 a payment needs a positive total, parts in categories that exist, and a source that exists`() {
+        val d = world()
+        assertFalse(Payments.canSave(d, draft("0.00", PaymentSource.Savings)))
+        assertFalse(Payments.canSave(d, draft("10.00", PaymentSource.Savings, "nowhere" to "10.00")))
+        assertFalse(Payments.canSave(d, draft("10.00", PaymentSource.Savings, null to "10.00")))
+        assertFalse(Payments.canSave(d, draft("10.00", PaymentSource.Goal("gone"), "fun" to "10.00")))
+        assertFalse(Payments.canSave(d, draft("10.00", PaymentSource.Account("gone"), "fun" to "10.00")))
+    }
+
+    // SPEC:R21 SPEC:R20
+    @Test fun `R21 a payment round-trips through JSON with its source as goal_id and its logged instant in epoch milliseconds`() {
+        val p = Payment(
+            id = "pay-1", profileId = Fixture.PROFILE, date = day, loggedAt = clock.now(), total = cents("10.99"),
+            source = PaymentSource.Goal("g-1"), payee = "Supermarket A",
+            parts = listOf(Part("groc", cents("5.01")), Part("home", cents("5.98"))),
+            receiptId = "3f6c2a9e-0000-4000-8000-000000000001",
+            receiptLines = listOf(
+                ReceiptLine("cookies Q", "600 g", 3, cents("3.18"), "chat-food", "Food", "groc"),
+                ReceiptLine("bananas", "865 g", 1, cents("1.83"), "chat-food", "Food", "groc"),
+                ReceiptLine("batteries", null, 2, cents("5.98"), "chat-home", "Household", "home"),
+            ),
+            bankKeys = BankKeys(null, "syn:2026-03-14|-1099|SUPERMARKET A"),
+        )
+        val json = Json.encodeToString(Payment.serializer(), p)
+        assertTrue("\"source\":\"goal:g-1\"" in json, json)
+        assertTrue("\"loggedAt\":${clock.now().toEpochMilliseconds()}" in json, json)
+        assertEquals(p, Json.decodeFromString(Payment.serializer(), json))
+    }
+
+    // SPEC:R21
+    @Test fun `R21 a source is stored as savings, goal or account with its id`() {
+        for (s in listOf(PaymentSource.Savings, PaymentSource.Goal("g-1"), PaymentSource.Account("a-1"))) {
+            assertEquals(s, PaymentSource.parse(s.stored))
+        }
+        assertEquals("goal:g-1", PaymentSource.Goal("g-1").stored)
+        assertEquals("account:a-1", PaymentSource.Account("a-1").stored)
+        assertFailsWith<IllegalArgumentException> { PaymentSource.parse("wallet:1") }
+    }
+}

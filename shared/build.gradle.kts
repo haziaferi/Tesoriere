@@ -36,6 +36,9 @@ kotlin {
             api(libs.kotlinx.coroutines.core)
             api(libs.kotlinx.datetime)
             implementation(libs.kotlinx.serialization.json)
+            // The entities carry Room's annotations now, so the stored shape is the engine's
+            // shape; the database itself and its compiler come with storage (phase 1, Task 21).
+            api(libs.androidx.room.runtime)
         }
         // The engine's tests run on the desktop JVM (SPEC R43): it is pure Kotlin.
         getByName("desktopTest").dependencies {
