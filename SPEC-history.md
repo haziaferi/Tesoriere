@@ -103,3 +103,13 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-24 · R84 · added · a salaried payday offered for logging by hand · builder
 - 2026-11-24 · R71 · changed · automatic deposit switched back on counts from that day · builder
 - 2026-11-24 · R69 · changed · the payday reminder's date · builder
+- 2026-11-25 · R85 · added · Credit and Loan accounts: off on a fresh Profile, what moves a balance · builder
+- 2026-11-25 · R86 · added · creating and editing an Account: opening row, corrections, following needs a rate · builder
+- 2026-11-25 · R87 · added · an Account and its linked payment: linked both ways, deleted together · builder
+- 2026-11-25 · R88 · added · payments charged to a deleted Account stay and keep counting · builder
+- 2026-11-25 · R89 · added · quick-add on an Account: payment or Loan increase, the paired Savings row; no charge (R22) · builder
+- 2026-11-25 · R90 · added · the loan calculator's figures by rate type · builder
+- 2026-11-25 · R91 · added · taking the loan or saving for it · builder
+- 2026-11-25 · R92 · added · the card payoff outlook, walked in whole cents · builder
+- 2026-11-25 · R93 · added · committing a card's fixed payment as a linked recurring expense · builder
+- 2026-11-25 · R94 · added · changing an Account's type clears the type it leaves · builder

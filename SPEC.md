@@ -70,25 +70,35 @@ Kinds: O owner rule · D decided · I inherited · A assumed · Q open.
 | D-R72 | End of a term | 9. The month cycle |
 | D-R73 | A Loan that follows its payment | 9. The month cycle |
 | D-R74 | Catch-up summary | 9. The month cycle |
-| D-R26 | Statement import | 10. Statement import |
-| D-R27 | The receipt contract | 11. Chatelaine receipts |
-| D-R28 | Receipt folder | 11. Chatelaine receipts |
-| D-R29 | Picking up receipts | 11. Chatelaine receipts |
-| D-R30 | Receipt files Tesoriere cannot take | 11. Chatelaine receipts |
-| D-R31 | Receipt review | 11. Chatelaine receipts |
-| D-R32 | Category links | 11. Chatelaine receipts |
-| D-R33 | Closing a review | 11. Chatelaine receipts |
-| D-R34 | Changing a link | 11. Chatelaine receipts |
-| D-R35 | A receipt's source | 11. Chatelaine receipts |
-| D-R36 | Store links | 12. One payment, two sources |
-| D-R37 | Pairing rule | 12. One payment, two sources |
-| D-R38 | Whichever arrives first | 12. One payment, two sources |
-| D-R39 | Difference part | 12. One payment, two sources |
-| D-R40 | Pairing by hand | 12. One payment, two sources |
-| D-R41 | Deleting a receipt payment | 13. Edge cases |
-| D-R42 | Deleting a linked category | 13. Edge cases |
-| D-R43 | Test plan | 14. Test plan |
-| D-R44 | Rollout phases | 15. Rollout |
+| D-R85 | Accounts | 10. Credit and Loan accounts |
+| D-R86 | Creating and editing an Account | 10. Credit and Loan accounts |
+| D-R87 | An Account and its linked payment | 10. Credit and Loan accounts |
+| D-R88 | Deleting an Account with payments charged to it | 10. Credit and Loan accounts |
+| D-R89 | Quick-add on an Account | 10. Credit and Loan accounts |
+| D-R90 | Loan calculator | 10. Credit and Loan accounts |
+| D-R91 | Taking the loan or saving for it | 10. Credit and Loan accounts |
+| D-R92 | Card payoff outlook | 10. Credit and Loan accounts |
+| D-R93 | Committing a card's fixed payment | 10. Credit and Loan accounts |
+| D-R94 | Changing an Account's type | 10. Credit and Loan accounts |
+| D-R26 | Statement import | 11. Statement import |
+| D-R27 | The receipt contract | 12. Chatelaine receipts |
+| D-R28 | Receipt folder | 12. Chatelaine receipts |
+| D-R29 | Picking up receipts | 12. Chatelaine receipts |
+| D-R30 | Receipt files Tesoriere cannot take | 12. Chatelaine receipts |
+| D-R31 | Receipt review | 12. Chatelaine receipts |
+| D-R32 | Category links | 12. Chatelaine receipts |
+| D-R33 | Closing a review | 12. Chatelaine receipts |
+| D-R34 | Changing a link | 12. Chatelaine receipts |
+| D-R35 | A receipt's source | 12. Chatelaine receipts |
+| D-R36 | Store links | 13. One payment, two sources |
+| D-R37 | Pairing rule | 13. One payment, two sources |
+| D-R38 | Whichever arrives first | 13. One payment, two sources |
+| D-R39 | Difference part | 13. One payment, two sources |
+| D-R40 | Pairing by hand | 13. One payment, two sources |
+| D-R41 | Deleting a receipt payment | 14. Edge cases |
+| D-R42 | Deleting a linked category | 14. Edge cases |
+| D-R43 | Test plan | 15. Test plan |
+| D-R44 | Rollout phases | 16. Rollout |
 | D-R45 | Price comparison | Out of scope |
 | D-R46 | Households in v1 | Out of scope |
 | D-R47 | Currency conversion in v1 | Out of scope |
@@ -111,6 +121,7 @@ Kinds: O owner rule · D decided · I inherited · A assumed · Q open.
 | Recurring expense | A cost known in advance and the same each time, such as rent, set aside from Savings by sweeps (R60). |
 | Sweep | A `rec:` ledger row that sets a recurring expense's money aside, filed under its category (R63, R67). |
 | Payday | A day income is paid, following its cadence from the payday the user chose (R76). |
+| Account | A credit card or a Loan the user tracks as money owed, by its balance (R85). |
 | Shift | Hours worked on one day at a rate per hour, logged for hourly income; it moves no money until a payday pays it (R80, R81). |
 | Pair | A receipt and a bank row recorded as the same payment. |
 | Category link | A remembered match from a Chatelaine category id to a Tesoriere category. |
@@ -1020,7 +1031,164 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · builder · own words
 
-## 10. Statement import
+## 10. Credit and Loan accounts
+
+### D-R85 · Accounts
+
+**Rule:** An Account is money owed, of one of the two types below, tracked by its balance. Accounts are off on a fresh Profile (R18) and switched on in the settings; switching them off hides them and changes nothing stored. A balance moves only by the Account's own `acct:` rows (R51) and the payments charged to it (R54); an Account moves Savings only through a paired payment off it (R89) and its linked payment's sweeps (R87).
+
+**Values:**
+
+| Type | Holds besides its name and balance |
+|---|---|
+| credit | a yearly rate, and at most one linked recurring expense: a fixed payment (R93) |
+| loan | the principal, a yearly rate, a term in months, a rate type (fixed, variable or interest-only), the day it started, whether it follows its payment (R73), and at most one linked recurring expense: its payment |
+
+**Evidence:** Sci-Fin's spec, sections 7.1 and 7.2, and `engine/Accounts.kt` at `2892110`.
+
+**Acceptance:** A fresh Profile has Accounts off. A card at 100.00 with a 40.00 payment charged to it reads 140.00, and Savings is unchanged.
+
+**Not:** A checking or cash Account: a second pool of money held would count the same euro as Savings does.
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R86 · Creating and editing an Account
+
+**Rule:** An Account needs a name, and a new one starts as a card. Created with a balance other than zero, it logs an opening `acct:` row of that balance with the note `Opening balance`; a later change of the balance in the editor logs the change with the note `Correction` (R52). A Loan's start day is the day it is saved unless the user gives one, and it follows its payment (R73) only with its yearly rate filled in: saved without one, the setting is saved off.
+
+**Evidence:** Sci-Fin's spec, section 7.2, and `engine/AccountEditing.kt` at `2892110`.
+
+**Acceptance:** A card created at 640.00 on 14 September 2026 logs one `acct:` row of +640.00 noted `Opening balance` and leaves Savings at 1,000.00; edited to 600.00, it logs a -40.00 row noted `Correction`. A Loan saved to follow its payment with no rate is saved not following, with 14 September 2026 as its start day. An Account with a blank name is not saved.
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R87 · An Account and its linked payment
+
+**Rule:** An Account and a recurring expense can be linked, both ways and one link at a time: linking an Account to an expense releases the expense it linked before and any other Account linked to that expense; a Loan is finished when its linked payment is (R72). Deleting either side deletes the other after a prompt that cannot be skipped, with no way to keep one half; deleting from the Account's side offers the expense's return on deletion (R66) in the same step. An Account leaves with a closing `acct:` row of minus its balance, noted `Account closed`.
+
+**Why:** One half left alone would keep sweeping a payment for a debt that is gone, or track a debt with nothing paying it.
+
+**Evidence:** Sci-Fin's spec, sections 7.2, 9.1 and 9.2, and `engine/Accounts.kt` and `engine/AccountEditing.kt` at `2892110`.
+
+**Acceptance:** A Loan linked to a 200.00 payment and linked again to a 250.00 one leaves the 200.00 payment linked to nothing, and deleting it keeps the Loan. A Loan of 4,000.00 whose 260.00 payment, due the 20th, swept on creation on 10 September 2026 from Savings of 5,000.00, deleted with the return accepted, leaves no Account, no expense and Savings at 5,000.00. A Loan of 9,800.00 deleted removes its payment too and logs a -9,800.00 row noted `Account closed`.
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R88 · Deleting an Account with payments charged to it
+
+**Rule:** Payments charged to an Account stay when it is deleted, with the Account as their recorded source: their parts keep counting in their categories' spent (R25) and Savings does not move. The closing row is minus the balance, which includes those payments, so the Account's rows and the payments charged to it add up to zero.
+
+**Why:** The money was spent on what the parts say whether or not the card is still tracked; removing the payments would take that spending out of past months.
+
+**Acceptance:** A card opened at 100.00 with a 40.00 payment charged to it under Groceries in September 2026, deleted, logs a -140.00 closing row; the payment stays, Groceries' spent for September is 40.00, and Savings is unchanged.
+
+**Not:** Sci-Fin's model: a charge there was an `acct:` row with no category, so deleting an Account had no payment to keep.
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R89 · Quick-add on an Account
+
+**Rule:** A quick-add on an Account is a payment off it or, on a Loan only, an increase, as below; a charge to a card is a payment from the card (R22), never a quick-add. Each logs one `acct:` row, noted with the user's note, else `Paid off` or `Increased`. A payment off an Account can lower Savings by the same amount in the same step, with a `savings` row noted with the user's note, else `Payment to` and the Account's name; this is on by default unless the Account is linked to a recurring expense, whose sweep already moved Savings, and the user can change it for each payment.
+
+**Values:**
+
+| Direction | Accounts | Balance | Savings |
+|---|---|---|---|
+| payment | credit and loan | lowered by the amount | lowered by the amount when paired, else unchanged |
+| increase | loan only | raised by the amount | unchanged |
+
+**Evidence:** Sci-Fin's spec, sections 3.6 and 7.2, and `engine/Accounts.kt` at `2892110`.
+
+**Acceptance:** A card at 100.00 paid 60.00 with the pair on, from Savings of 1,000.00, reads 40.00 with Savings at 940.00 and a `savings` row of -60.00 noted `Payment to Card`; with the pair off, Savings stays 1,000.00. A Loan of 4,000.00 increased by 500.00 reads 4,500.00 with Savings unchanged. An increase on a card is refused. The pair is on by default for an Account linked to nothing and off for a linked one.
+
+**Not:** A charge as a quick-add: it would raise the card with no category, which R22 rules out.
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R90 · Loan calculator
+
+**Rule:** The loan calculator takes a principal, a yearly rate, a term in months and a rate type, and gives the monthly payment, the total repaid, the total interest and the principal left at the end of the term, as below, with i the yearly rate divided by 12 and n the term. The monthly payment is rounded to the cent once; the other figures follow from it in whole cents (R20). A term below 1 counts as 1, and a negative principal or rate as 0.
+
+**Values:**
+
+| Rate type | Monthly payment | Total repaid | Total interest | Principal left |
+|---|---|---|---|---|
+| fixed or variable | principal × i ÷ (1 − (1 + i) to the power −n); at a rate of 0, principal ÷ n rounded up to the cent | monthly × n | total repaid − principal | 0 |
+| interest-only | principal × i | monthly × n | total repaid | the principal |
+
+**Evidence:** Sci-Fin's spec, section 9.1, and `engine/Accounts.kt` at `2892110`.
+
+**Acceptance:** 12,000.00 at 6.5 % over 48 months, fixed: 284.58 a month, 13,659.84 repaid, 1,659.84 of interest, nothing left. Interest-only: 65.00 a month, 3,120.00 repaid, 12,000.00 left. At 0 %: 250.00 a month.
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R91 · Taking the loan or saving for it
+
+**Rule:** From the calculator the user either takes the loan or saves for it, creating what the table gives in one step; Savings does not move. Taking it, the user names the Loan and its payment, picks the payment's category (R67) and chooses whether the Loan follows its payment (R73). The payment is linked both ways (R87) and, as its first due date is next month, nothing sweeps this month (R64).
+
+**Values:**
+
+| Choice | Creates |
+|---|---|
+| take the loan | a Loan named `Loan` by default, holding the calculator's inputs and today as its start day, at a balance of the principal with its opening row (R86) |
+| take the loan | its payment, named `Loan payment` by default: a monthly fixed-date recurring expense of the calculator's monthly payment, first due one month after today on today's day of the month, ending on the term's last payment |
+| save for it | only a Goal planned by date (R55) for the principal, due a term from today, named `Savings goal` by default |
+
+**Evidence:** Sci-Fin's spec, section 9.1, and `engine/Accounts.kt` at `2892110`.
+
+**Acceptance:** 9,800.00 at 5.9 % over 48 months, taken on 14 September 2026 from Savings of 1,000.00, creates a Loan of 9,800.00 with one +9,800.00 `Opening balance` row and a payment of 229.70 first due 14 October 2026, ending 14 September 2030, marked swept for September 2026; Savings stays 1,000.00. With no category, or one that does not exist, nothing is created. Saving for 12,000.00 over 48 months on 14 September 2026 creates a goal of 12,000.00 by 14 September 2030 named `Savings goal`.
+
+**Not:** Taking the loan without its payment: a decision this size is never left without a trace in the plan.
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R92 · Card payoff outlook
+
+**Rule:** For a card, the engine works out the months to clear the balance and the interest paid on the way, at the Account's yearly rate divided by 12, for a fixed monthly payment and for the minimum payment, 2 % of the balance each month rounded to the cent and at least 25.00; paying in full clears it at once with no interest. Each month adds that month's interest on the balance, rounded to the cent, then takes the payment, the last one only what is left. The cases below give their own figures, none where the balance is never cleared; how the months read is the design pass's (R16).
+
+**Values:**
+
+| Case | Months | Interest |
+|---|---|---|
+| a balance of 0 or less | 0 | 0 |
+| a fixed payment of 0 or less | none | none |
+| a rate of 0 | the balance divided by the payment, rounded up | 0 |
+| a fixed payment at or below the first month's interest | none | none |
+| a minimum payment at or below a month's interest | none | none |
+| still owed after 1,200 months | none | none |
+| otherwise | counted month by month | the sum of the months' interest |
+
+**Evidence:** Sci-Fin's spec, section 9.2, and `engine/Accounts.kt` at `2892110`.
+
+**Acceptance:** 640.00 at 21.9 % paid 50.00 a month clears in 15 months with 95.63 of interest; at 11.00 a month it is never cleared; at 0 % it clears in 13 months; a balance of 0.00 clears in 0 months. The minimum on 640.00 at 21.9 % starts at 25.00 and clears in 35 months with 230.40 of interest; on 3,000.00 at 0 % it starts at 60.00; 1,000.00 at 5 % a month is never cleared.
+
+**Not:** A running balance held with fractions of a cent (R20).
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R93 · Committing a card's fixed payment
+
+**Rule:** A fixed monthly payment chosen for a card can be committed as a monthly fixed-date recurring expense of that amount, named after the card followed by `payment` unless the user names it, in a category the user picks (R67), linked both ways to the card (R87), first due one month after today on today's day of the month, with no end date, so nothing sweeps this month (R64). A card never follows its payment: only a Loan does (R73). The minimum payment is never committed: it moves with the balance, which a recurring expense cannot (R60).
+
+**Evidence:** Sci-Fin's spec, section 9.2, and `engine/Accounts.kt` at `2892110`.
+
+**Acceptance:** Committing 50.00 on 14 September 2026 for a card named Credit Card creates `Credit Card payment` of 50.00, first due 14 October 2026, with no end date, linked both ways; the card does not follow it. A card that linked an earlier expense releases it.
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R94 · Changing an Account's type
+
+**Rule:** Changing a Loan to a card clears what belongs to a Loan: following its payment, the principal, the yearly rate, the term, the rate type and the start day; its linked payment is deleted, after a prompt that cannot be skipped and offers its return on deletion (R66), and the card stays, linked to nothing. Changing a card to a Loan clears its yearly rate, so it cannot follow a payment until a rate is filled in (R86).
+
+**Why:** A card cannot keep a Loan's tracked balance honest, which is what following a payment is for.
+
+**Evidence:** Sci-Fin's spec, section 7.2, and `engine/Accounts.kt` at `2892110`.
+
+**Acceptance:** A Loan at 5 % following its payment, changed to a card, has no rate, principal, term, rate type or start day and does not follow. A card at 20 % changed to a Loan has no rate and cannot follow. A Loan of 4,000.00 whose 260.00 payment, due the 20th, swept on creation on 10 September 2026 from Savings of 5,000.00, changed to a card with the return accepted, stays as a card linked to nothing, its payment is gone, and Savings is 5,000.00.
+
+**Since:** 2026-11-25 · builder · own words
+
+## 11. Statement import
 
 ### D-R26 · Statement import
 
@@ -1030,7 +1198,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
-## 11. Chatelaine receipts
+## 12. Chatelaine receipts
 
 ### D-R27 · The receipt contract
 
@@ -1156,7 +1324,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
-## 12. One payment, two sources
+## 13. One payment, two sources
 
 ### D-R36 · Store links
 
@@ -1226,7 +1394,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
-## 13. Edge cases
+## 14. Edge cases
 
 ### D-R41 · Deleting a receipt payment
 
@@ -1246,7 +1414,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · builder · own words
 
-## 14. Test plan
+## 15. Test plan
 
 ### D-R43 · Test plan
 
@@ -1267,7 +1435,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · builder · own words
 
-## 15. Rollout
+## 16. Rollout
 
 ### D-R44 · Rollout phases
 
@@ -1345,6 +1513,16 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R72 · End of a term: A 260.00 payment due the 15th, ending 15 August 2026 and linked to a fixed-rate Loan of 120.00, finishes on 1 September 2026 when opened that day: the Loan is 0.00 after one -120.00 `acct:` row, and the code is `loanPaidOff`. On an interest-only Loan of 5,000.00 the same payment leaves 5,000.00 with no closing row and the code `interestOnlyEnded`. A 40.00 gym fee due the 15th, swept for August and ending 15 October 2026, opened on 20 November, writes rows dated 15 September and 15 October, leaves Savings 80.00 lower and ends with `ended`. A payment ending 15 October 2026 is not finished when opened on 20 October; opened on 2 November, it finishes on 1 November.
 - R73 · A Loan that follows its payment: A Loan of 6,000.00 at 6 % with a 260.00 payment due the 15th, opened on 1 September 2026, falls to 5,770.00 after 30.00 of interest, with a -230.00 row dated 15 September; Savings falls by the 260.00 sweep only. A Loan of 200.00 at 0 % falls to 0.00 and its payment finishes though it ends in 2030. A variable-rate Loan of 100.00 cleared by its final 260.00 payment ends with `loanPaidOff`.
 - R74 · Catch-up summary: A 950.00 rent swept for August, opened on 14 November 2026, keeps a summary of 3 months and 2,850.00 swept; opened again that day it still reads 3 months; dismissed, there is none. Opened on 14 October 2026 it reads 2 months; opened again on 3 November, still 2; then on 3 January 2027, 4. Opened on 1 September 2026 alone, it keeps none.
+- R85 · Accounts: A fresh Profile has Accounts off. A card at 100.00 with a 40.00 payment charged to it reads 140.00, and Savings is unchanged.
+- R86 · Creating and editing an Account: A card created at 640.00 on 14 September 2026 logs one `acct:` row of +640.00 noted `Opening balance` and leaves Savings at 1,000.00; edited to 600.00, it logs a -40.00 row noted `Correction`. A Loan saved to follow its payment with no rate is saved not following, with 14 September 2026 as its start day. An Account with a blank name is not saved.
+- R87 · An Account and its linked payment: A Loan linked to a 200.00 payment and linked again to a 250.00 one leaves the 200.00 payment linked to nothing, and deleting it keeps the Loan. A Loan of 4,000.00 whose 260.00 payment, due the 20th, swept on creation on 10 September 2026 from Savings of 5,000.00, deleted with the return accepted, leaves no Account, no expense and Savings at 5,000.00. A Loan of 9,800.00 deleted removes its payment too and logs a -9,800.00 row noted `Account closed`.
+- R88 · Deleting an Account with payments charged to it: A card opened at 100.00 with a 40.00 payment charged to it under Groceries in September 2026, deleted, logs a -140.00 closing row; the payment stays, Groceries' spent for September is 40.00, and Savings is unchanged.
+- R89 · Quick-add on an Account: A card at 100.00 paid 60.00 with the pair on, from Savings of 1,000.00, reads 40.00 with Savings at 940.00 and a `savings` row of -60.00 noted `Payment to Card`; with the pair off, Savings stays 1,000.00. A Loan of 4,000.00 increased by 500.00 reads 4,500.00 with Savings unchanged. An increase on a card is refused. The pair is on by default for an Account linked to nothing and off for a linked one.
+- R90 · Loan calculator: 12,000.00 at 6.5 % over 48 months, fixed: 284.58 a month, 13,659.84 repaid, 1,659.84 of interest, nothing left. Interest-only: 65.00 a month, 3,120.00 repaid, 12,000.00 left. At 0 %: 250.00 a month.
+- R91 · Taking the loan or saving for it: 9,800.00 at 5.9 % over 48 months, taken on 14 September 2026 from Savings of 1,000.00, creates a Loan of 9,800.00 with one +9,800.00 `Opening balance` row and a payment of 229.70 first due 14 October 2026, ending 14 September 2030, marked swept for September 2026; Savings stays 1,000.00. With no category, or one that does not exist, nothing is created. Saving for 12,000.00 over 48 months on 14 September 2026 creates a goal of 12,000.00 by 14 September 2030 named `Savings goal`.
+- R92 · Card payoff outlook: 640.00 at 21.9 % paid 50.00 a month clears in 15 months with 95.63 of interest; at 11.00 a month it is never cleared; at 0 % it clears in 13 months; a balance of 0.00 clears in 0 months. The minimum on 640.00 at 21.9 % starts at 25.00 and clears in 35 months with 230.40 of interest; on 3,000.00 at 0 % it starts at 60.00; 1,000.00 at 5 % a month is never cleared.
+- R93 · Committing a card's fixed payment: Committing 50.00 on 14 September 2026 for a card named Credit Card creates `Credit Card payment` of 50.00, first due 14 October 2026, with no end date, linked both ways; the card does not follow it. A card that linked an earlier expense releases it.
+- R94 · Changing an Account's type: A Loan at 5 % following its payment, changed to a card, has no rate, principal, term, rate type or start day and does not follow. A card at 20 % changed to a Loan has no rate and cannot follow. A Loan of 4,000.00 whose 260.00 payment, due the 20th, swept on creation on 10 September 2026 from Savings of 5,000.00, changed to a card with the return accepted, stays as a card linked to nothing, its payment is gone, and Savings is 5,000.00.
 - R26 · Statement import: Importing the same OFX statement twice records nothing the second time; importing a CSV export of the same period also records nothing; a payee filed under a category once is pre-filled on the next statement.
 - R27 · The receipt contract: The receipt parser's tests cite Chatelaine's rule 123 field by field; no Tesoriere code opens the receipt folder for writing.
 - R28 · Receipt folder: With the folder set in Profile A, receipts are reviewed and recorded only in Profile A; Profile B offers no receipt folder while A has one.
