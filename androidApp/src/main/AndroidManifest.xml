@@ -6,11 +6,15 @@
   INTERNET is absent on purpose (SPEC R08) and :androidApp's verifyNoNetworkPermission task fails
   the build if the merged manifest ever declares it.
 
-  allowBackup=false: backups are the user's own files, made on purpose (SPEC R18); a cloud copy
-  taken by the platform would be a network feature R08's table does not list.
+  No platform copy of the data: backups are the user's own files, made on purpose (SPEC R18), and
+  a cloud copy taken by the platform would be a network feature R08's table does not list.
+  allowBackup=false covers Android 11; from Android 12 it stops only the cloud copy, so
+  dataExtractionRules also excludes every domain from device-to-device transfer.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <application android:allowBackup="false" />
+    <application
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules" />
 
 </manifest>
