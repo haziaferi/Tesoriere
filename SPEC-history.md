@@ -50,3 +50,12 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-24 · R46 · added · households in v1 · owner
 - 2026-11-24 · R47 · added · currency conversion in v1 · owner
 - 2026-11-24 · R48 · added · splitting a receipt by payment · owner
+- 2026-11-24 · R09 · kind · Q → D · owner
+- 2026-11-24 · R33 · kind · Q → D · owner
+- 2026-11-24 · R33 · changed · links kept on Confirm only; closing with changes warns first · owner
+- 2026-11-24 · R35 · kind · Q → D · owner
+- 2026-11-24 · R40 · kind · Q → D · owner
+- 2026-11-24 · R44 · kind · Q → D · owner
+- 2026-11-24 · R44 · changed · gate by events, no minimum time; one month dropped · owner
+- 2026-11-24 · R15 · retired · folded into R16: the design pass decides accessibility, no prior values · owner · 931ee7f
+- 2026-11-24 · R16 · changed · no rule set before the design pass; accessibility row added · owner

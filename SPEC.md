@@ -18,13 +18,12 @@ Kinds: O owner rule · D decided · I inherited · A assumed · Q open.
 | D-R06 | Platforms | 2. The project |
 | D-R07 | Languages | 2. The project |
 | D-R08 | Offline first | 2. The project |
-| Q-R09 | Minimum Android version | 2. The project |
+| D-R09 | Minimum Android version | 2. The project |
 | O-R10 | No valence colour | 3. Owner rules and visible design |
 | O-R11 | No grading, no streaks | 3. Owner rules and visible design |
 | O-R12 | Inform, never block | 3. Owner rules and visible design |
 | O-R13 | Visible decisions are the owner's | 3. Owner rules and visible design |
 | O-R14 | No stock look | 3. Owner rules and visible design |
-| Q-R15 | Accessibility values | 3. Owner rules and visible design |
 | Q-R16 | Visible design | 3. Owner rules and visible design |
 | D-R17 | Port source | 4. The port from Sci-Fin |
 | D-R18 | Ported pieces | 4. The port from Sci-Fin |
@@ -42,18 +41,18 @@ Kinds: O owner rule · D decided · I inherited · A assumed · Q open.
 | D-R30 | Receipt files Tesoriere cannot take | 7. Chatelaine receipts |
 | D-R31 | Receipt review | 7. Chatelaine receipts |
 | D-R32 | Category links | 7. Chatelaine receipts |
-| Q-R33 | A link from a closed review | 7. Chatelaine receipts |
+| D-R33 | Closing a review | 7. Chatelaine receipts |
 | D-R34 | Changing a link | 7. Chatelaine receipts |
-| Q-R35 | A receipt's source | 7. Chatelaine receipts |
+| D-R35 | A receipt's source | 7. Chatelaine receipts |
 | D-R36 | Store links | 8. One payment, two sources |
 | D-R37 | Pairing rule | 8. One payment, two sources |
 | D-R38 | Whichever arrives first | 8. One payment, two sources |
 | D-R39 | Difference part | 8. One payment, two sources |
-| Q-R40 | Pairing by hand | 8. One payment, two sources |
+| D-R40 | Pairing by hand | 8. One payment, two sources |
 | D-R41 | Deleting a receipt payment | 9. Edge cases |
 | D-R42 | Deleting a linked category | 9. Edge cases |
 | D-R43 | Test plan | 10. Test plan |
-| Q-R44 | Rollout phases | 11. Rollout |
+| D-R44 | Rollout phases | 11. Rollout |
 | D-R45 | Price comparison | Out of scope |
 | D-R46 | Households in v1 | Out of scope |
 | D-R47 | Currency conversion in v1 | Out of scope |
@@ -177,15 +176,13 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · own words
 
-### Q-R09 · Minimum Android version
+### D-R09 · Minimum Android version
 
-**Rule:** Which Android version is the oldest Tesoriere runs on?
+**Rule:** Tesoriere runs on Android 11 (API 30) and later, Sci-Fin's `minSdk`, so ported code that relies on it keeps working, Sci-Fin's API 30 workarounds included (no `DROP COLUMN` in SQLite).
 
-**Default:** API 30 (Android 11), Sci-Fin's `minSdk`, so ported code that relies on it keeps working. Changes: which phones can install it, and whether Sci-Fin's API 30 workarounds (no `DROP COLUMN` in SQLite) still apply.
+**Acceptance:** `minSdk = 30` in the Android and shared build files.
 
-**Why:** A lower version reaches older phones; a higher one drops workarounds.
-
-**Since:** 2026-11-24 · builder · own words
+**Since:** 2026-11-24 · owner · agreed rewording
 
 ## 3. Owner rules and visible design
 
@@ -243,21 +240,11 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
-### Q-R15 · Accessibility values
-
-**Rule:** Which accessibility values does Tesoriere's new interface hold? The owner will reexamine Sci-Fin's values with the new UI.
-
-**Default:** Sci-Fin's values stand until the design pass: touch targets of 48 dp on Android and 40 px on Windows, the operating system's text size, reduce motion, and a low-distraction mode. Changes: target sizes, the type scale and which settings exist.
-
-**Why:** Sci-Fin's values were set for Sci-Fin's screens; Tesoriere's screens are new.
-
-**Since:** 2026-11-24 · owner · agreed rewording
-
 ### Q-R16 · Visible design
 
 **Rule:** How do Tesoriere's screens look and work? Each row below is decided with the owner in a design pass before any screen is built (R13).
 
-**Default:** none proposed: every row is a visible decision the owner makes (R13); the design pass starts from the jobs and their frequency (R01).
+**Default:** none proposed: the design pass decides every row with the owner and the dedicated design skills, from the jobs and their frequency (R01), with no rule set beforehand beyond the owner rules R10 to R14. Sci-Fin's values, accessibility included, are not carried over as a starting point.
 
 **Why:** No Sci-Fin UI is inherited (R04), so every screen is open.
 
@@ -267,11 +254,12 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 |---|---|
 | Navigation and what opens first | R01 |
 | Screen for each job | R01 |
-| Receipt review layout | R31, R32 |
+| Receipt review layout and its closing warning | R31, R32, R33 |
 | Pairing in the statement review | R37, R38 |
 | Split editor | R24 |
 | Palette and themes | R10, R14 |
-| Type and spacing | R14, R15 |
+| Type and spacing | R14 |
+| Accessibility values: touch targets, text size, motion, low distraction | R10, R14 |
 | First run, including the Sci-Fin import offer | R19 |
 | App icon | R03 |
 | Wording of every visible string | R07 |
@@ -519,15 +507,15 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
-### Q-R33 · A link from a closed review
+### D-R33 · Closing a review
 
-**Rule:** When a review that added or linked a category is closed without Confirm, is the link kept?
+**Rule:** Category links, and categories added in a review, are kept only when the review is confirmed. Closing a review that holds changes first shows a prompt warning that they will be lost; the user can dismiss it and stay in the review, or close and lose them.
 
-**Default:** No: links are kept on Confirm only, so every link has a recorded receipt behind it. Changes: a category added in a closed review is not created either.
+**Acceptance:** Adding a category in a review and closing it shows the warning; dismissing it returns to the review with the change intact; closing anyway leaves no new category and no new link.
 
-**Why:** Keeping it saves asking again; dropping it keeps the link list to what receipts used.
+**Not:** Keeping links from a closed review: a link would exist with no recorded receipt behind it.
 
-**Since:** 2026-11-24 · builder · own words
+**Since:** 2026-11-24 · owner · agreed rewording
 
 ### D-R34 · Changing a link
 
@@ -539,15 +527,17 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
-### Q-R35 · A receipt's source
+### D-R35 · A receipt's source
 
-**Rule:** Where does a receipt's money come from? The receipt file does not say how it was paid (Chatelaine's spec, rule 123).
+**Rule:** A receipt's source is Savings unless the user changes it in the review, and the source last confirmed for a store is pre-filled on that store's next receipt. Pairing with a bank row keeps the receipt's source.
 
-**Default:** Savings, changeable in the review; the source chosen for a store is pre-filled on its next receipt. Changes: a card-paid receipt is set to the card once per store; pairing with a bank row keeps the receipt's source.
+**Why:** The receipt file does not say how it was paid (Chatelaine's spec, rule 123), and a store is usually paid the same way.
 
-**Why:** Asking every time is one more choice per receipt; never asking files card payments as Savings until the user corrects them.
+**Acceptance:** The first receipt from a store shows Savings; after it is confirmed with a card as source, the next receipt from that store shows the card.
 
-**Since:** 2026-11-24 · builder · own words
+**Not:** Asking for the source on every receipt: one more choice per receipt.
+
+**Since:** 2026-11-24 · owner · agreed rewording
 
 ## 8. One payment, two sources
 
@@ -609,15 +599,15 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
-### Q-R40 · Pairing by hand
+### D-R40 · Pairing by hand
 
-**Rule:** Can the user pair a receipt and a bank row that the pairing rule does not suggest, such as totals more than EUR 0.50 apart?
+**Rule:** The user can pair a receipt and a bank row by hand, from either side, also when the pairing rule (R37) does not suggest them. The bank row's amount is the total, and any difference is a part filed as in R39.
 
-**Default:** Yes: by hand, from either side, with the difference filed as in R39. Changes: a missed pair can be fixed instead of the payment being counted twice.
+**Why:** A pair the rule misses would otherwise count the payment twice.
 
-**Why:** Pairing by hand catches what the rule misses; refusing it keeps every pair inside the rule.
+**Acceptance:** A EUR 40.00 receipt and a EUR 41.20 bank row, not suggested, can be paired by hand into one EUR 41.20 payment with a EUR 1.20 part the user files.
 
-**Since:** 2026-11-24 · builder · own words
+**Since:** 2026-11-24 · owner · agreed rewording
 
 ## 9. Edge cases
 
@@ -662,15 +652,23 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ## 11. Rollout
 
-### Q-R44 · Rollout phases
+### D-R44 · Rollout phases
 
-**Rule:** In what phases does Tesoriere replace Sci-Fin on the owner's devices?
+**Rule:** Tesoriere replaces Sci-Fin on the owner's devices in the phases below. A phase moves on as soon as its gate holds, with no minimum time, and goes back when its rollback trigger fires.
 
-**Default:** Phase 1: the engine port with receipts and pairs, tested on the JVM only; gate, every level of R43 green. Phase 2: the app on the owner's phone and PC beside Sci-Fin, data imported from a Sci-Fin backup (R19); gate, one month of receipts and one statement recorded with no double count; rollback, keep using Sci-Fin. Phase 3: Sci-Fin retired. Changes: how long both apps run side by side.
+**Values:**
 
-**Why:** Running both for a month catches a wrong pair before Sci-Fin's data stops being the record; retiring at once saves the double entry.
+| Phase | What | Gate to the next phase | Rollback trigger |
+|---|---|---|---|
+| 1 | the engine port with receipts and pairs, tested on the JVM only | every level of R43 green | none |
+| 2 | the app on the owner's phone and PC beside Sci-Fin, with Sci-Fin's data imported (R19) | a few receipts recorded and one bank statement covering them imported, every pair right and nothing counted twice | a wrong pair or a double count: Sci-Fin stays the record until it is fixed and phase 2's gate holds |
+| 3 | Sci-Fin retired | none | none |
 
-**Since:** 2026-11-24 · builder · own words
+**Acceptance:** Phase 2's gate is recorded in `SPEC-history.md` or the release notes before Sci-Fin is retired.
+
+**Not:** A month side by side: longer than the owner wants the switch to take. Retiring Sci-Fin at once: a wrong pair would go unnoticed with no record to compare against.
+
+**Since:** 2026-11-24 · owner · agreed rewording
 
 ## Acceptance list
 
@@ -680,6 +678,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R06 · Platforms: One Gradle build produces the Android app and the Windows desktop app from the shared module.
 - R07 · Languages: Switching the language changes every interface string and the app's own ledger labels, and leaves user-typed names unchanged.
 - R08 · Offline first: While the table lists no feature, the Android manifest omits `android.permission.INTERNET` and the Windows build makes no network call; a feature added to the table has a setting that is off on a fresh install.
+- R09 · Minimum Android version: `minSdk = 30` in the Android and shared build files.
 - R10 · No valence colour: No theme defines a positive or warning colour pair; a category over its plan and one under it draw their bars in the same colour.
 - R11 · No grading, no streaks: No screen or notification shows a score, badge, streak count, or a pass or fail word.
 - R12 · Inform, never block: Every feasibility note sits beside an action that stays available; no such check disables a save.
@@ -700,14 +699,18 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R30 · Receipt files Tesoriere cannot take: One file per row, put in the receipt folder, is listed with its reason (or, for a recorded id, not at all) and changes no figure.
 - R31 · Receipt review: A receipt of five lines in two categories records one payment of the receipt's total with two parts; moving one line to a third category gives three parts and changes no category link; closing the review leaves no payment.
 - R32 · Category links: A receipt with category Pulizia links to Tesoriere's pulizia; a later receipt with the same id named Pulizie stays linked and shows the names-differ note; a new category with no equal name keeps Confirm off until it is added or linked.
+- R33 · Closing a review: Adding a category in a review and closing it shows the warning; dismissing it returns to the review with the change intact; closing anyway leaves no new category and no new link.
 - R34 · Changing a link: After relinking Snack from Eating out to Groceries, last month's Eating out spent figure is unchanged and the next receipt's Snack lines go to Groceries.
+- R35 · A receipt's source: The first receipt from a store shows Savings; after it is confirmed with a card as source, the next receipt from that store shows the card.
 - R36 · Store links: After pairing an Esselunga receipt with POS ESSELUNGA MI 0423, the next Esselunga receipt is suggested only with bank rows whose payee matches that link, when one exists.
 - R37 · Pairing rule: Each row of the table, as a receipt and a bank row, gives the suggestion its row says; no pair is recorded without the user's confirm.
 - R38 · Whichever arrives first: Recording a EUR 42.30 receipt and then importing its bank row leaves one payment of EUR 42.30; importing the bank row first under Groceries and then its receipt with Groceries 30.00 and Household 12.30 leaves one payment with those two parts.
 - R39 · Difference part: A EUR 42.10 receipt paired with a EUR 42.30 bank row records a EUR 42.30 payment with a EUR 0.20 part in the category the user chose, and the pair's confirm is off until it is chosen.
+- R40 · Pairing by hand: A EUR 40.00 receipt and a EUR 41.20 bank row, not suggested, can be paired by hand into one EUR 41.20 payment with a EUR 1.20 part the user files.
 - R41 · Deleting a receipt payment: Deleting a receipt payment and reopening the app does not offer the receipt file again; restoring it brings back its parts.
 - R42 · Deleting a linked category: After deleting Pulizia, the next receipt with Chatelaine's Pulizia keeps Confirm off until its line is linked or added.
 - R43 · Test plan: CI runs the first five levels on every pull request; a release records its device walk.
+- R44 · Rollout phases: Phase 2's gate is recorded in `SPEC-history.md` or the release notes before Sci-Fin is retired.
 
 ## Out of scope
 
