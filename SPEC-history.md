@@ -113,3 +113,10 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R92 · added · the card payoff outlook, walked in whole cents · builder
 - 2026-11-25 · R93 · added · committing a card's fixed payment as a linked recurring expense · builder
 - 2026-11-25 · R94 · added · changing an Account's type clears the type it leaves · builder
+- 2026-11-25 · R95 · added · what a report reads as movements of Savings: ledger rows and payments from Savings · builder
+- 2026-11-25 · R96 · added · Age of Money, oldest money first, with the shortfall carried · builder
+- 2026-11-25 · R97 · added · Age of Money over the months, as of each month's last day · builder
+- 2026-11-25 · R98 · added · coverage over the last three complete months, in whole cents · builder
+- 2026-11-25 · R99 · added · Spending from payment parts, adjustments and sweeps by category · builder
+- 2026-11-25 · R100 · added · Savings vs Owed and its trend, with payments charged to Accounts · builder
+- 2026-11-25 · R101 · added · Income vs Expenses, every payment an expense · builder

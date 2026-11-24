@@ -80,25 +80,32 @@ Kinds: O owner rule · D decided · I inherited · A assumed · Q open.
 | D-R92 | Card payoff outlook | 10. Credit and Loan accounts |
 | D-R93 | Committing a card's fixed payment | 10. Credit and Loan accounts |
 | D-R94 | Changing an Account's type | 10. Credit and Loan accounts |
-| D-R26 | Statement import | 11. Statement import |
-| D-R27 | The receipt contract | 12. Chatelaine receipts |
-| D-R28 | Receipt folder | 12. Chatelaine receipts |
-| D-R29 | Picking up receipts | 12. Chatelaine receipts |
-| D-R30 | Receipt files Tesoriere cannot take | 12. Chatelaine receipts |
-| D-R31 | Receipt review | 12. Chatelaine receipts |
-| D-R32 | Category links | 12. Chatelaine receipts |
-| D-R33 | Closing a review | 12. Chatelaine receipts |
-| D-R34 | Changing a link | 12. Chatelaine receipts |
-| D-R35 | A receipt's source | 12. Chatelaine receipts |
-| D-R36 | Store links | 13. One payment, two sources |
-| D-R37 | Pairing rule | 13. One payment, two sources |
-| D-R38 | Whichever arrives first | 13. One payment, two sources |
-| D-R39 | Difference part | 13. One payment, two sources |
-| D-R40 | Pairing by hand | 13. One payment, two sources |
-| D-R41 | Deleting a receipt payment | 14. Edge cases |
-| D-R42 | Deleting a linked category | 14. Edge cases |
-| D-R43 | Test plan | 15. Test plan |
-| D-R44 | Rollout phases | 16. Rollout |
+| D-R95 | Savings movements in a report | 11. Reports |
+| D-R96 | Age of Money | 11. Reports |
+| D-R97 | Age of Money over the months | 11. Reports |
+| D-R98 | Coverage | 11. Reports |
+| D-R99 | Spending | 11. Reports |
+| D-R100 | Savings vs Owed | 11. Reports |
+| D-R101 | Income vs Expenses | 11. Reports |
+| D-R26 | Statement import | 12. Statement import |
+| D-R27 | The receipt contract | 13. Chatelaine receipts |
+| D-R28 | Receipt folder | 13. Chatelaine receipts |
+| D-R29 | Picking up receipts | 13. Chatelaine receipts |
+| D-R30 | Receipt files Tesoriere cannot take | 13. Chatelaine receipts |
+| D-R31 | Receipt review | 13. Chatelaine receipts |
+| D-R32 | Category links | 13. Chatelaine receipts |
+| D-R33 | Closing a review | 13. Chatelaine receipts |
+| D-R34 | Changing a link | 13. Chatelaine receipts |
+| D-R35 | A receipt's source | 13. Chatelaine receipts |
+| D-R36 | Store links | 14. One payment, two sources |
+| D-R37 | Pairing rule | 14. One payment, two sources |
+| D-R38 | Whichever arrives first | 14. One payment, two sources |
+| D-R39 | Difference part | 14. One payment, two sources |
+| D-R40 | Pairing by hand | 14. One payment, two sources |
+| D-R41 | Deleting a receipt payment | 15. Edge cases |
+| D-R42 | Deleting a linked category | 15. Edge cases |
+| D-R43 | Test plan | 16. Test plan |
+| D-R44 | Rollout phases | 17. Rollout |
 | D-R45 | Price comparison | Out of scope |
 | D-R46 | Households in v1 | Out of scope |
 | D-R47 | Currency conversion in v1 | Out of scope |
@@ -1188,7 +1195,125 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-25 · builder · own words
 
-## 11. Statement import
+## 11. Reports
+
+### D-R95 · Savings movements in a report
+
+**Rule:** Every report reads the movements of Savings the same way: each ledger row by how it moves Savings (R51), and each payment with a Savings source as money out of Savings by its total, on its date (R54). A payment from a Goal or charged to an Account moves no Savings and is no movement of it. Rows and payments of the same date are taken in the order they were logged.
+
+**Evidence:** Sci-Fin's spec, section 5.1, and `engine/Reports.kt` at `2892110`, read with the payment model of R21 and R54.
+
+**Acceptance:** In a month with a 100.00 sweep, a 42.30 payment from Savings, a 30.00 payment from a Goal and a 40.00 payment charged to a card, 142.30 went out of Savings.
+
+**Not:** Reading the ledger alone: a payment writes no ledger row (R54), so every expense would be missing.
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R96 · Age of Money
+
+**Rule:** Age of Money is the number of days since the oldest money still in Savings came in, found by replaying the movements of Savings (R95) up to the day asked, oldest first: each movement in opens a parcel dated to its day, and each movement out empties the oldest parcels first. Money out beyond every parcel is a shortfall that the next movements in fill before they open a parcel, so the parcels always add up to the replayed Savings. While no parcel holds money, or a shortfall is left, the figure is 0.
+
+**Why:** The figure says how long money sits before it is spent, and works the same with Income on or off.
+
+**Evidence:** Sci-Fin's spec, section 5.1, and `engine/Reports.kt` at `2892110`.
+
+**Acceptance:** Read on 14 September 2026: 100.00 in on 1 June, 100.00 in on 1 August and 50.00 out on 10 August reads 105 days; with 60.00 more out on 1 September it reads 44. 100.00 in on 1 June and 350.00 out on 10 June reads 0; with 1,000.00 in on 1 July and 400.00 out on 1 August it reads 75, the July parcel holding 350.00; with 351.00 more out on 1 September it reads 0. A 100.00 payment from Savings on 10 August in place of the 50.00 empties the June parcel and reads 44; the same payment from a Goal empties nothing and reads 105. An `acct:` row opens no parcel.
+
+**Not:** Dropping the shortfall: the parcels would hold money Savings does not have.
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R97 · Age of Money over the months
+
+**Rule:** The trend of Age of Money has one point per month for the trend length in the settings, 6 on a fresh Profile, each read on that month's last day, except the current month's, read on the day asked. A month that ended before the first movement into Savings has no point; a month read as 0 after it keeps its point.
+
+**Evidence:** Sci-Fin's spec, section 5.1, and `engine/Reports.kt` at `2892110`.
+
+**Acceptance:** With 100.00 in on 20 August 2026, a two-month trend read on 14 September is 11 days for August and 25 for September. With 300.00 in on 10 July, 400.00 out on 5 August and 200.00 in on 1 September, a six-month trend read on 14 September has points for July, August and September only, and August's is 0.
+
+**Not:** Points of 0 for the months before any money came in: they would read as money spent at once.
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R98 · Coverage
+
+**Rule:** Coverage is how many days Savings would last at the recent daily outflow: Savings divided by the money out of Savings (R95) in the last three complete calendar months, over the days in them, rounded to the nearest day with a half to the even day. It is worked out in whole cents, and the cases below give no figure or 0.
+
+**Values:**
+
+| Case | Coverage |
+|---|---|
+| Savings unset (R49) | none |
+| the earliest ledger row or payment is dated after the first of the three months | none |
+| nothing went out of Savings in the three months | none |
+| Savings 0 or less | 0 |
+| otherwise | as the rule says |
+
+**Evidence:** Sci-Fin's spec, section 5.1, and `engine/Reports.kt` at `2892110`.
+
+**Acceptance:** Read on 14 September 2026, the months are 1 June to 31 August, 92 days. Savings of 920.00 with 920.00 out on 1 July and a first row on 1 May covers 92 days; at -5.00 it covers 0; with the first row on 1 July there is no figure. A 920.00 payment from Savings in place of the row gives 92; charged to a card, there is no figure. Savings of 25.00 against 920.00 out covers 2 days and 35.00 covers 4.
+
+**Not:** A trailing 30 days: a window that straddles the first of the month, when sweeps fall, would halve the figure overnight.
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R99 · Spending
+
+**Rule:** Spending breaks the current calendar month into the slices below, from the ledger rows and payments dated in it. Slices that come to 0 are left out, the rest are ordered largest first, and their sum is the month's total; when a slice is below 0 or the total is 0 or less, the month is given as a plain list of figures rather than as shares.
+
+**Why:** A split shopping trip is groceries and household goods at once, and one paid by card is still spending (R22).
+
+**Values:**
+
+| Slice | Holds |
+|---|---|
+| each category | its spent figure for the month (R25): its parts of payments from any source, its adjustments, and the sweeps filed under it (R67) |
+| Goals, one for all | `goal:` rows: money put into Goals less money taken back out |
+| Uncategorised | parts with no category (R21), sweep rows with no category (R19), and `savings` rows that lowered Savings |
+| no slice | `savings` rows that raised Savings, income among them, and `acct:` and `spend:` rows |
+
+**Evidence:** Sci-Fin's spec, section 5.2, and `engine/Reports.kt` at `2892110`, with the slices of payments and sweeps from R22, R25 and R67.
+
+**Acceptance:** A 42.30 payment split 30.00 Groceries and 12.30 Household counts 30.00 in Groceries and 12.30 in Household. In a month with 100.00 and 50.00 into two Goals, a 30.00 adjustment on Food, 1,450.00 of income, a -20.00 `savings` row and a 99.00 `acct:` row, the slices are Goals 150.00, Food 30.00 and Uncategorised 20.00, totalling 200.00. A 60.00 sweep filed under Phone counts in Phone. Food at 30.00 and -50.00 in one month is a plain list.
+
+**Not:** Sci-Fin's slice per recurring expense, and Sci-Fin's Spending without card charges: a sweep counts in its category, and a card-paid trip in its categories.
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R100 · Savings vs Owed
+
+**Rule:** Savings vs Owed is Savings less the balances of all Accounts (R85); money held in Goals is not counted. Its trend has one point per month for the trend length in the settings, each read on the month's last day, replaying from zero both the movements of Savings (R95) and what is owed: the `acct:` rows and the payments charged to an Account. It starts off (R18), and switching it on shows the months already recorded.
+
+**Evidence:** Sci-Fin's spec, section 5.3, and `engine/Reports.kt` at `2892110`.
+
+**Acceptance:** Read on 14 September 2026, with 1,000.00 into Savings on 10 July, a card opened at 640.00 on 1 September and a 40.00 payment charged to it on 5 September, it reads 320.00; a three-month trend reads 1,000.00 for July and August and 320.00 for September.
+
+**Not:** Counting Goal money against what is owed: money set aside for a purpose is not there to pay a debt.
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R101 · Income vs Expenses
+
+**Rule:** For each month of the trend length, income is the sum of the income rows dated in it (R77), and expenses as below. It is shown only while Income is on (R18).
+
+**Values:**
+
+| Dated in the month | Counts in expenses |
+|---|---|
+| a payment, from any source | its total |
+| a sweep, an adjustment or a `savings` row that lowered Savings | what it took from Savings |
+| a `goal:` row | nothing: money kept, counted when a payment spends it |
+| a row that raised Savings, an `acct:` row, a `spend:` row | nothing |
+
+**Evidence:** Sci-Fin's spec, section 5.4, and `engine/Reports.kt` at `2892110`, with every expense a payment (R21).
+
+**Acceptance:** With Income on, 1,450.00 of income, 200.00 into a Goal and a 30.00 payment from Savings in September 2026 read 1,450.00 in and 30.00 out; an 80.00 payment from the Goal makes 110.00 out; a 40.00 payment charged to a card makes 150.00.
+
+**Not:** Counting money put into a Goal as spent: it would count again when spent.
+
+**Since:** 2026-11-25 · builder · own words
+
+## 12. Statement import
 
 ### D-R26 · Statement import
 
@@ -1198,7 +1323,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
-## 12. Chatelaine receipts
+## 13. Chatelaine receipts
 
 ### D-R27 · The receipt contract
 
@@ -1324,7 +1449,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
-## 13. One payment, two sources
+## 14. One payment, two sources
 
 ### D-R36 · Store links
 
@@ -1394,7 +1519,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
-## 14. Edge cases
+## 15. Edge cases
 
 ### D-R41 · Deleting a receipt payment
 
@@ -1414,7 +1539,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · builder · own words
 
-## 15. Test plan
+## 16. Test plan
 
 ### D-R43 · Test plan
 
@@ -1435,7 +1560,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · builder · own words
 
-## 16. Rollout
+## 17. Rollout
 
 ### D-R44 · Rollout phases
 
@@ -1523,6 +1648,13 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R92 · Card payoff outlook: 640.00 at 21.9 % paid 50.00 a month clears in 15 months with 95.63 of interest; at 11.00 a month it is never cleared; at 0 % it clears in 13 months; a balance of 0.00 clears in 0 months. The minimum on 640.00 at 21.9 % starts at 25.00 and clears in 35 months with 230.40 of interest; on 3,000.00 at 0 % it starts at 60.00; 1,000.00 at 5 % a month is never cleared.
 - R93 · Committing a card's fixed payment: Committing 50.00 on 14 September 2026 for a card named Credit Card creates `Credit Card payment` of 50.00, first due 14 October 2026, with no end date, linked both ways; the card does not follow it. A card that linked an earlier expense releases it.
 - R94 · Changing an Account's type: A Loan at 5 % following its payment, changed to a card, has no rate, principal, term, rate type or start day and does not follow. A card at 20 % changed to a Loan has no rate and cannot follow. A Loan of 4,000.00 whose 260.00 payment, due the 20th, swept on creation on 10 September 2026 from Savings of 5,000.00, changed to a card with the return accepted, stays as a card linked to nothing, its payment is gone, and Savings is 5,000.00.
+- R95 · Savings movements in a report: In a month with a 100.00 sweep, a 42.30 payment from Savings, a 30.00 payment from a Goal and a 40.00 payment charged to a card, 142.30 went out of Savings.
+- R96 · Age of Money: Read on 14 September 2026: 100.00 in on 1 June, 100.00 in on 1 August and 50.00 out on 10 August reads 105 days; with 60.00 more out on 1 September it reads 44. 100.00 in on 1 June and 350.00 out on 10 June reads 0; with 1,000.00 in on 1 July and 400.00 out on 1 August it reads 75, the July parcel holding 350.00; with 351.00 more out on 1 September it reads 0. A 100.00 payment from Savings on 10 August in place of the 50.00 empties the June parcel and reads 44; the same payment from a Goal empties nothing and reads 105. An `acct:` row opens no parcel.
+- R97 · Age of Money over the months: With 100.00 in on 20 August 2026, a two-month trend read on 14 September is 11 days for August and 25 for September. With 300.00 in on 10 July, 400.00 out on 5 August and 200.00 in on 1 September, a six-month trend read on 14 September has points for July, August and September only, and August's is 0.
+- R98 · Coverage: Read on 14 September 2026, the months are 1 June to 31 August, 92 days. Savings of 920.00 with 920.00 out on 1 July and a first row on 1 May covers 92 days; at -5.00 it covers 0; with the first row on 1 July there is no figure. A 920.00 payment from Savings in place of the row gives 92; charged to a card, there is no figure. Savings of 25.00 against 920.00 out covers 2 days and 35.00 covers 4.
+- R99 · Spending: A 42.30 payment split 30.00 Groceries and 12.30 Household counts 30.00 in Groceries and 12.30 in Household. In a month with 100.00 and 50.00 into two Goals, a 30.00 adjustment on Food, 1,450.00 of income, a -20.00 `savings` row and a 99.00 `acct:` row, the slices are Goals 150.00, Food 30.00 and Uncategorised 20.00, totalling 200.00. A 60.00 sweep filed under Phone counts in Phone. Food at 30.00 and -50.00 in one month is a plain list.
+- R100 · Savings vs Owed: Read on 14 September 2026, with 1,000.00 into Savings on 10 July, a card opened at 640.00 on 1 September and a 40.00 payment charged to it on 5 September, it reads 320.00; a three-month trend reads 1,000.00 for July and August and 320.00 for September.
+- R101 · Income vs Expenses: With Income on, 1,450.00 of income, 200.00 into a Goal and a 30.00 payment from Savings in September 2026 read 1,450.00 in and 30.00 out; an 80.00 payment from the Goal makes 110.00 out; a 40.00 payment charged to a card makes 150.00.
 - R26 · Statement import: Importing the same OFX statement twice records nothing the second time; importing a CSV export of the same period also records nothing; a payee filed under a category once is pre-filled on the next statement.
 - R27 · The receipt contract: The receipt parser's tests cite Chatelaine's rule 123 field by field; no Tesoriere code opens the receipt folder for writing.
 - R28 · Receipt folder: With the folder set in Profile A, receipts are reviewed and recorded only in Profile A; Profile B offers no receipt folder while A has one.
