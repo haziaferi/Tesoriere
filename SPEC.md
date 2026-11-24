@@ -89,6 +89,12 @@ Kinds: O owner rule · D decided · I inherited · A assumed · Q open.
 | D-R101 | Income vs Expenses | 11. Reports |
 | D-R102 | Overtime calculator | 12. Overtime calculator |
 | D-R26 | Statement import | 13. Statement import |
+| D-R103 | Statement formats | 13. Statement import |
+| D-R104 | Statement amounts | 13. Statement import |
+| D-R105 | CSV columns by header | 13. Statement import |
+| D-R106 | Statement dates | 13. Statement import |
+| D-R107 | The import review | 13. Statement import |
+| D-R108 | Payee rules | 13. Statement import |
 | D-R27 | The receipt contract | 14. Chatelaine receipts |
 | D-R28 | Receipt folder | 14. Chatelaine receipts |
 | D-R29 | Picking up receipts | 14. Chatelaine receipts |
@@ -1346,11 +1352,143 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R26 · Statement import
 
-**Rule:** A bank statement in CSV or OFX is read on the device, and every bank row lands in a review as a suggestion; nothing is recorded until one Confirm, which names the total. Each recorded bank row keeps two keys, the OFX FITID where there is one and a key over date, amount and description, and both are checked, so a row already recorded arrives unticked with the reason shown. A payee once filed by the user pre-fills its category, as in Sci-Fin's spec, section 4.3.
+**Rule:** A bank statement in CSV or OFX is read on the device, and every bank row lands in a review as a suggestion (R107); nothing is recorded until one Confirm, which names the total. Each recorded bank row keeps the two keys below, and a row with a key that matches one kept from an earlier import, or one in any payment's bank keys, arrives unticked as already recorded. A payee once filed by the user under one category pre-fills that category (R108).
 
-**Acceptance:** Importing the same OFX statement twice records nothing the second time; importing a CSV export of the same period also records nothing; a payee filed under a category once is pre-filled on the next statement.
+**Values:**
 
-**Since:** 2026-11-24 · owner · agreed rewording
+| Key | Built from |
+|---|---|
+| FITID key | `fit:` and the OFX FITID; only for a row that has one |
+| synthetic key | `syn:`, then the day as `YYYY-MM-DD`, the signed amount with two decimals and a point, and the first 40 characters of the description in lower case, separated by vertical bars |
+
+**Evidence:** Sci-Fin's spec, section 4.3, and `engine/Import.kt` at `2892110`.
+
+**Acceptance:** Importing the same OFX statement twice records nothing the second time; importing a CSV export of the same period also records nothing; a payee filed under a category once is pre-filled on the next statement. A row of -12.40 on 2026-03-03 described `POS MERCATO VERDE 0412` has the synthetic key `syn:2026-03-03|-12.40|pos mercato verde 0412`.
+
+**Not:** Checking the FITID only: a CSV export of a period already imported as OFX carries no FITID and would be recorded twice.
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R103 · Statement formats
+
+**Rule:** An OFX statement gives one bank row per transaction block: the day from the first eight digits of its posted date, its amount, its name (else its memo, else `Statement entry`) and its FITID. A CSV statement gives one bank row per record after its header (R105); a line break inside quotes stays in its field and reads as a space, and the records are split on semicolons when the header has more semicolons than commas, else on commas. A row with no readable day (R106) or amount (R104), or an amount of zero, is dropped.
+
+**Evidence:** Sci-Fin's spec, section 4.3, and `engine/Import.kt` at `2892110`.
+
+**Acceptance:** An OFX block posted `20260303120000` of `-12.40` reads as 2026-03-03 and -12.40; a block with a memo and no name takes the memo; a block of `0.00` gives no row. A semicolon CSV with the quoted description `POS BAR` and `LA PIAZZETTA` on two lines gives one row described `POS BAR LA PIAZZETTA`.
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R104 · Statement amounts
+
+**Rule:** A statement amount is read into whole cents with whole-number arithmetic only (R20). Characters other than digits, `.`, `,`, `-`, `+` and brackets are ignored; brackets, a leading minus or a trailing minus make it negative. When both `.` and `,` appear, the last one is the decimal point; when one appears, exactly three digits after its last occurrence mark a thousands separator, and any other count a decimal point, with a third decimal rounding the cent half up.
+
+**Values:**
+
+| Text | Cents |
+|---|---|
+| `1.234,56` | 123456 |
+| `1,234.56` | 123456 |
+| `-1.234,56` | -123456 |
+| `(12,40)` | -1240 |
+| `12,40-` | -1240 |
+| `0,5` | 50 |
+| `12` | 1200 |
+| `1,450` | 145000 |
+| `€ 9.5` | 950 |
+| `12,345.678` | 1234568 |
+| empty, `abc` | no amount |
+
+**Evidence:** Sci-Fin's spec, section 4.3, and `engine/Import.kt` at `2892110`, whose amounts went through a floating-point number.
+
+**Acceptance:** Each text in the table reads as its figure in cents; the parser holds no floating-point value.
+
+**Not:** Sci-Fin's floating-point parser: a cent can be lost on the way to a whole number.
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R105 · CSV columns by header
+
+**Rule:** A CSV statement's columns are found from the words of its header, never by position: the fields in the order below, each trying its keywords in order and never taking a column another field took. A keyword matches a header that is the keyword, the keyword plus one more word, or a single word containing it, and a header equal to the keyword wins over those. Each row takes the signed amount when it reads, else its debit as money out, else its credit as money in; a statement with no date column, or with no amount, debit or credit column, gives no rows.
+
+**Values:**
+
+| Field | Keywords, in the order tried |
+|---|---|
+| date | date, data, datum, booking date, transaction date, value date, fecha |
+| description | description, descrizione, payee, merchant, details, beschreibung, verwendungszweck, concepto, narrative, reference |
+| debit | debit, uscite, soll, withdrawal, paid out |
+| credit | credit, entrate, haben, deposit, paid in |
+| amount | amount, importo, betrag, value, importe, bedrag |
+
+**Evidence:** Sci-Fin's spec, section 4.3, and `engine/Import.kt` at `2892110`.
+
+**Acceptance:** Headers `Booking date,Value date,Description,Amount` with `01/09/2026,02/09/2026,POS CAFFE DEL MOLO,-3.50` give one row of -3.50 on 2026-09-01. Headers `Date,Credit card number,Description,Debit,Credit` with a debit of `800.00` and a credit of `12.00` give -800.00 and 12.00. Headers `Buchungsdatum;Verwendungszweck;Umsatzbetrag` with `01.09.2026;MIETE WOHNUNG;-800,00` give one row of -800.00. Headers `a;b;c` give no rows.
+
+**Not:** Reading columns by position: banks order them differently, and a wrong column would file a day as an amount.
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R106 · Statement dates
+
+**Rule:** A statement day starting with four digits is read year, month, day; any other is read day first, so `03/04/2026` is 3 April. Dashes, slashes and dots all separate, and a two-digit year is in the 2000s. A day that does not exist, such as 31 February, is not read.
+
+**Why:** Statements in euros write the day first; the review shows each day before anything is recorded (R107).
+
+**Values:**
+
+| Text | Day |
+|---|---|
+| `03/04/2026` | 2026-04-03 |
+| `2026-04-03` | 2026-04-03 |
+| `03.04.26` | 2026-04-03 |
+| `31/02/2026` | none |
+| `yesterday` | none |
+
+**Evidence:** Sci-Fin's spec, sections 4.3 and 12, and `engine/Import.kt` at `2892110`.
+
+**Acceptance:** Each text in the table reads as its day; `05/03/2026` in a CSV statement is 5 March.
+
+**Not:** Month first: 05/03/2026 would land in May.
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R107 · The import review
+
+**Rule:** Each bank row arrives in the review with a status, ticked or not, as below, newest first. A ticked outflow is recorded as a payment of its amount on its day, from Savings unless the user picks a Goal or an Account, with parts that add up (R23, R24, R54) and its keys (R26), or as a payment off an Account that lowers Savings too (R89); a ticked row of money in is added to Savings and not counted as income. Confirm stays off while a ticked outflow is neither, its parts do not add up, or a Goal it is paid from holds less than it after the ticked rows before it, and Confirm names the total: the ticked rows' sum, money in positive and money out negative.
+
+**Why:** A recurring expense's sweep already moved Savings (R63); recording its bank row too would count it twice.
+
+**Values:**
+
+| Status | When, checked in this order | Ticked |
+|---|---|---|
+| `DUPLICATE` | one of its keys matches (R26) | no |
+| `INCOMING` | its amount is positive | yes |
+| `RECURRING` | an outflow whose payee's words hold a recurring expense's name's words, or are held in them | no |
+| `READY` | any other outflow | yes |
+
+**Evidence:** Sci-Fin's spec, section 4.3, and `engine/Import.kt` at `2892110`.
+
+**Acceptance:** With Savings at 1,000.00, a recurring expense named Rent and the March OFX statement: `AFFITTO CASA RENT` -950.00 arrives `RECURRING` and unticked, `STIPENDIO MARZO` 1,450.00 `INCOMING`; filing -12.40 under Groceries, splitting -42.30 into Pharmacy 30.00 and Household 12.30, and paying off a card at 300.00 with -60.00 names a total of 1,335.30 and leaves Savings at 2,335.30 and the card at 240.00. Rows of -100.00 and -14.00 both from a Goal holding 110.00 keep Confirm off; with only the first it is on and leaves the Goal at 10.00.
+
+**Not:** An outflow recorded with nowhere filed: Savings would drop with nothing to show where the money went.
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R108 · Payee rules
+
+**Rule:** A row's payee is its description in lower case, with every character other than letters, digits and spaces read as a space and runs of spaces made one. Confirming a ticked outflow filed under one category, from any source, teaches its payee that category; a row split across two or more categories teaches nothing and leaves an earlier rule as it was. A payee with a rule whose category still exists arrives as a draft from Savings with one part in that category, and no category is guessed otherwise.
+
+**Why:** A split row has no one category that stands for its payee.
+
+**Evidence:** Sci-Fin's spec, section 4.3, and `engine/Import.kt` at `2892110`; the split row: the phase 1 plan's provisional choices, 2026-11-24.
+
+**Acceptance:** `POS MERCATO VERDE 0412` filed under Groceries in March arrives in April's review with one part of 18.75 in Groceries, from Savings; `FARMACIA SAN LORENZO` split into Pharmacy and Household teaches no rule; the payee of `POS*MERCATO-VERDE  0412` is `pos mercato verde 0412`.
+
+**Not:** Guessing a category from a payee's words: a wrong guess files spending where the user never put it.
+
+**Since:** 2026-11-25 · builder · own words
 
 ## 14. Chatelaine receipts
 
@@ -1685,7 +1823,13 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R100 · Savings vs Owed: Read on 14 September 2026, with 1,000.00 into Savings on 10 July, a card opened at 640.00 on 1 September and a 40.00 payment charged to it on 5 September, it reads 320.00; a three-month trend reads 1,000.00 for July and August and 320.00 for September.
 - R101 · Income vs Expenses: With Income on, 1,450.00 of income, 200.00 into a Goal and a 30.00 payment from Savings in September 2026 read 1,450.00 in and 30.00 out; an 80.00 payment from the Goal makes 110.00 out; a 40.00 payment charged to a card makes 150.00.
 - R102 · Overtime calculator: 22.00 an hour for 10 hours is 220.00 a month and 2,640.00 a year; for 0.5 hours, 11.00 and 132.00; for -3 hours, 0.00 and 0.00. A month's pay is 3,200.00 from 3,200.00 paid monthly or 1,600.00 paid twice a month, and 2,600.00 from 1,200.00 every two weeks or 600.00 weekly. Salaried at 3,200.00 a month over 160 hours pre-fills 20.00; over 0 hours, nothing; with Income off or a pay of 0.00, nothing. Hourly at 20.00 pre-fills 20.00 and has no month's pay.
-- R26 · Statement import: Importing the same OFX statement twice records nothing the second time; importing a CSV export of the same period also records nothing; a payee filed under a category once is pre-filled on the next statement.
+- R26 · Statement import: Importing the same OFX statement twice records nothing the second time; importing a CSV export of the same period also records nothing; a payee filed under a category once is pre-filled on the next statement. A row of -12.40 on 2026-03-03 described `POS MERCATO VERDE 0412` has the synthetic key `syn:2026-03-03|-12.40|pos mercato verde 0412`.
+- R103 · Statement formats: An OFX block posted `20260303120000` of `-12.40` reads as 2026-03-03 and -12.40; a block with a memo and no name takes the memo; a block of `0.00` gives no row. A semicolon CSV with the quoted description `POS BAR` and `LA PIAZZETTA` on two lines gives one row described `POS BAR LA PIAZZETTA`.
+- R104 · Statement amounts: Each text in the table reads as its figure in cents; the parser holds no floating-point value.
+- R105 · CSV columns by header: Headers `Booking date,Value date,Description,Amount` with `01/09/2026,02/09/2026,POS CAFFE DEL MOLO,-3.50` give one row of -3.50 on 2026-09-01. Headers `Date,Credit card number,Description,Debit,Credit` with a debit of `800.00` and a credit of `12.00` give -800.00 and 12.00. Headers `Buchungsdatum;Verwendungszweck;Umsatzbetrag` with `01.09.2026;MIETE WOHNUNG;-800,00` give one row of -800.00. Headers `a;b;c` give no rows.
+- R106 · Statement dates: Each text in the table reads as its day; `05/03/2026` in a CSV statement is 5 March.
+- R107 · The import review: With Savings at 1,000.00, a recurring expense named Rent and the March OFX statement: `AFFITTO CASA RENT` -950.00 arrives `RECURRING` and unticked, `STIPENDIO MARZO` 1,450.00 `INCOMING`; filing -12.40 under Groceries, splitting -42.30 into Pharmacy 30.00 and Household 12.30, and paying off a card at 300.00 with -60.00 names a total of 1,335.30 and leaves Savings at 2,335.30 and the card at 240.00. Rows of -100.00 and -14.00 both from a Goal holding 110.00 keep Confirm off; with only the first it is on and leaves the Goal at 10.00.
+- R108 · Payee rules: `POS MERCATO VERDE 0412` filed under Groceries in March arrives in April's review with one part of 18.75 in Groceries, from Savings; `FARMACIA SAN LORENZO` split into Pharmacy and Household teaches no rule; the payee of `POS*MERCATO-VERDE  0412` is `pos mercato verde 0412`.
 - R27 · The receipt contract: The receipt parser's tests cite Chatelaine's rule 123 field by field; no Tesoriere code opens the receipt folder for writing.
 - R28 · Receipt folder: With the folder set in Profile A, receipts are reviewed and recorded only in Profile A; Profile B offers no receipt folder while A has one.
 - R29 · Picking up receipts: With the default, opening the app with three new files offers three receipts and runs no background work; with the daily check on, three new files give one notification that day; no receipt is recorded before its Confirm.

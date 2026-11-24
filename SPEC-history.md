@@ -121,3 +121,10 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R100 · added · Savings vs Owed and its trend, with payments charged to Accounts · builder
 - 2026-11-25 · R101 · added · Income vs Expenses, every payment an expense · builder
 - 2026-11-25 · R102 · added · the overtime calculator, its pre-filled rate and a month's pay by cadence · builder
+- 2026-11-25 · R26 · changed · the two keys spelled out, checked against payments' bank keys too; payee rules in R108 · builder
+- 2026-11-25 · R103 · added · statement formats: OFX blocks and CSV records, rows with no day or amount or of zero dropped · builder
+- 2026-11-25 · R104 · added · statement amounts read into cents with whole-number arithmetic · builder
+- 2026-11-25 · R105 · added · CSV columns found by header keywords, never by position · builder
+- 2026-11-25 · R106 · added · statement dates, year first or day first · builder
+- 2026-11-25 · R107 · added · the import review: statuses, what a ticked row becomes, when Confirm is on, the total · builder
+- 2026-11-25 · R108 · added · payee rules learned from one-category rows only · builder
