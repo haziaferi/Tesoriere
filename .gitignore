@@ -1,0 +1,51 @@
+# Build output
+build/
+.gradle/
+.kotlin/
+captures/
+*.apk
+*.aab
+*.hprof
+__pycache__/
+
+# IDE and OS state (can hold local paths)
+.idea/
+*.iml
+.DS_Store
+desktop.ini
+.claude/settings.local.json
+
+# Machine-specific config: local.properties holds the SDK path, which contains the home folder
+local.properties
+
+# Signing and secrets
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+google-services.json
+.env
+*.env
+
+# Real money data never enters the repository. Test fixtures are synthetic and live
+# under each module's test resources, which these patterns do not reach.
+/private/
+/statements/
+/receipts/
+/backups/
+sci-fin-copy-*.json
+tesoriere-copy-*.json
+*.db
+*.db-wal
+*.db-shm
+
+# Device runs: screenshots, logs and per-phone state stay local
+walk/
+device-logs/
+screenshots/
+*.logcat
+logcat*.txt
+
+# Session scratch folders (<project>/_<task>-<date>/) and review caches
+/_*/
+.fresh-eyes-cache/

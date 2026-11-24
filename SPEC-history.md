@@ -57,5 +57,5 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-24 · R40 · kind · Q → D · owner
 - 2026-11-24 · R44 · kind · Q → D · owner
 - 2026-11-24 · R44 · changed · gate by events, no minimum time; one month dropped · owner
-- 2026-11-24 · R15 · retired · folded into R16: the design pass decides accessibility, no prior values · owner · 931ee7f
+- 2026-11-24 · R15 · retired · folded into R16: the design pass decides accessibility, no prior values · owner · 0ba319f
 - 2026-11-24 · R16 · changed · no rule set before the design pass; accessibility row added · owner
