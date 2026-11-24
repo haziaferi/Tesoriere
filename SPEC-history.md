@@ -120,3 +120,4 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R99 · added · Spending from payment parts, adjustments and sweeps by category · builder
 - 2026-11-25 · R100 · added · Savings vs Owed and its trend, with payments charged to Accounts · builder
 - 2026-11-25 · R101 · added · Income vs Expenses, every payment an expense · builder
+- 2026-11-25 · R102 · added · the overtime calculator, its pre-filled rate and a month's pay by cadence · builder

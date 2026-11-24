@@ -87,25 +87,26 @@ Kinds: O owner rule · D decided · I inherited · A assumed · Q open.
 | D-R99 | Spending | 11. Reports |
 | D-R100 | Savings vs Owed | 11. Reports |
 | D-R101 | Income vs Expenses | 11. Reports |
-| D-R26 | Statement import | 12. Statement import |
-| D-R27 | The receipt contract | 13. Chatelaine receipts |
-| D-R28 | Receipt folder | 13. Chatelaine receipts |
-| D-R29 | Picking up receipts | 13. Chatelaine receipts |
-| D-R30 | Receipt files Tesoriere cannot take | 13. Chatelaine receipts |
-| D-R31 | Receipt review | 13. Chatelaine receipts |
-| D-R32 | Category links | 13. Chatelaine receipts |
-| D-R33 | Closing a review | 13. Chatelaine receipts |
-| D-R34 | Changing a link | 13. Chatelaine receipts |
-| D-R35 | A receipt's source | 13. Chatelaine receipts |
-| D-R36 | Store links | 14. One payment, two sources |
-| D-R37 | Pairing rule | 14. One payment, two sources |
-| D-R38 | Whichever arrives first | 14. One payment, two sources |
-| D-R39 | Difference part | 14. One payment, two sources |
-| D-R40 | Pairing by hand | 14. One payment, two sources |
-| D-R41 | Deleting a receipt payment | 15. Edge cases |
-| D-R42 | Deleting a linked category | 15. Edge cases |
-| D-R43 | Test plan | 16. Test plan |
-| D-R44 | Rollout phases | 17. Rollout |
+| D-R102 | Overtime calculator | 12. Overtime calculator |
+| D-R26 | Statement import | 13. Statement import |
+| D-R27 | The receipt contract | 14. Chatelaine receipts |
+| D-R28 | Receipt folder | 14. Chatelaine receipts |
+| D-R29 | Picking up receipts | 14. Chatelaine receipts |
+| D-R30 | Receipt files Tesoriere cannot take | 14. Chatelaine receipts |
+| D-R31 | Receipt review | 14. Chatelaine receipts |
+| D-R32 | Category links | 14. Chatelaine receipts |
+| D-R33 | Closing a review | 14. Chatelaine receipts |
+| D-R34 | Changing a link | 14. Chatelaine receipts |
+| D-R35 | A receipt's source | 14. Chatelaine receipts |
+| D-R36 | Store links | 15. One payment, two sources |
+| D-R37 | Pairing rule | 15. One payment, two sources |
+| D-R38 | Whichever arrives first | 15. One payment, two sources |
+| D-R39 | Difference part | 15. One payment, two sources |
+| D-R40 | Pairing by hand | 15. One payment, two sources |
+| D-R41 | Deleting a receipt payment | 16. Edge cases |
+| D-R42 | Deleting a linked category | 16. Edge cases |
+| D-R43 | Test plan | 17. Test plan |
+| D-R44 | Rollout phases | 18. Rollout |
 | D-R45 | Price comparison | Out of scope |
 | D-R46 | Households in v1 | Out of scope |
 | D-R47 | Currency conversion in v1 | Out of scope |
@@ -1313,7 +1314,35 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-25 · builder · own words
 
-## 12. Statement import
+## 12. Overtime calculator
+
+### D-R102 · Overtime calculator
+
+**Rule:** The overtime calculator works out what extra hours in a month come to at a rate per hour: the rate times the hours, rounded to the cent with a half cent rounded up, and twelve times that for a year; hours below 0 count as 0. The rate can always be typed in, is pre-filled as below, and the calculator records nothing. It starts off (R18).
+
+**Why:** It shows what unclaimed hours are worth in the user's own figures, with Income on or off.
+
+**Values:**
+
+| Case | Figure |
+|---|---|
+| Income off | no pre-filled rate |
+| hourly income (R79) | the hourly rate pre-filled; none at 0 |
+| salaried income | a month's pay divided by the hours expected in a month, 160 unless the user gives another, rounded to the cent; none with no pay or no hours |
+| a month's pay, paid weekly | the pay times 52, divided by 12, rounded to the cent with a half cent rounded up |
+| a month's pay, paid every two weeks | the pay times 26, divided by 12, rounded the same way |
+| a month's pay, paid twice a month | the pay times 2 |
+| a month's pay, paid monthly | the pay |
+
+**Evidence:** Sci-Fin's spec, section 10.2, and `engine/TimeWorth.kt` at `2892110`.
+
+**Acceptance:** 22.00 an hour for 10 hours is 220.00 a month and 2,640.00 a year; for 0.5 hours, 11.00 and 132.00; for -3 hours, 0.00 and 0.00. A month's pay is 3,200.00 from 3,200.00 paid monthly or 1,600.00 paid twice a month, and 2,600.00 from 1,200.00 every two weeks or 600.00 weekly. Salaried at 3,200.00 a month over 160 hours pre-fills 20.00; over 0 hours, nothing; with Income off or a pay of 0.00, nothing. Hourly at 20.00 pre-fills 20.00 and has no month's pay.
+
+**Not:** Logging the figure as income or a Goal: the calculator explores and writes nothing.
+
+**Since:** 2026-11-25 · builder · own words
+
+## 13. Statement import
 
 ### D-R26 · Statement import
 
@@ -1323,7 +1352,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
-## 13. Chatelaine receipts
+## 14. Chatelaine receipts
 
 ### D-R27 · The receipt contract
 
@@ -1449,7 +1478,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
-## 14. One payment, two sources
+## 15. One payment, two sources
 
 ### D-R36 · Store links
 
@@ -1519,7 +1548,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
-## 15. Edge cases
+## 16. Edge cases
 
 ### D-R41 · Deleting a receipt payment
 
@@ -1539,7 +1568,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · builder · own words
 
-## 16. Test plan
+## 17. Test plan
 
 ### D-R43 · Test plan
 
@@ -1560,7 +1589,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · builder · own words
 
-## 17. Rollout
+## 18. Rollout
 
 ### D-R44 · Rollout phases
 
@@ -1655,6 +1684,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R99 · Spending: A 42.30 payment split 30.00 Groceries and 12.30 Household counts 30.00 in Groceries and 12.30 in Household. In a month with 100.00 and 50.00 into two Goals, a 30.00 adjustment on Food, 1,450.00 of income, a -20.00 `savings` row and a 99.00 `acct:` row, the slices are Goals 150.00, Food 30.00 and Uncategorised 20.00, totalling 200.00. A 60.00 sweep filed under Phone counts in Phone. Food at 30.00 and -50.00 in one month is a plain list.
 - R100 · Savings vs Owed: Read on 14 September 2026, with 1,000.00 into Savings on 10 July, a card opened at 640.00 on 1 September and a 40.00 payment charged to it on 5 September, it reads 320.00; a three-month trend reads 1,000.00 for July and August and 320.00 for September.
 - R101 · Income vs Expenses: With Income on, 1,450.00 of income, 200.00 into a Goal and a 30.00 payment from Savings in September 2026 read 1,450.00 in and 30.00 out; an 80.00 payment from the Goal makes 110.00 out; a 40.00 payment charged to a card makes 150.00.
+- R102 · Overtime calculator: 22.00 an hour for 10 hours is 220.00 a month and 2,640.00 a year; for 0.5 hours, 11.00 and 132.00; for -3 hours, 0.00 and 0.00. A month's pay is 3,200.00 from 3,200.00 paid monthly or 1,600.00 paid twice a month, and 2,600.00 from 1,200.00 every two weeks or 600.00 weekly. Salaried at 3,200.00 a month over 160 hours pre-fills 20.00; over 0 hours, nothing; with Income off or a pay of 0.00, nothing. Hourly at 20.00 pre-fills 20.00 and has no month's pay.
 - R26 · Statement import: Importing the same OFX statement twice records nothing the second time; importing a CSV export of the same period also records nothing; a payee filed under a category once is pre-filled on the next statement.
 - R27 · The receipt contract: The receipt parser's tests cite Chatelaine's rule 123 field by field; no Tesoriere code opens the receipt folder for writing.
 - R28 · Receipt folder: With the folder set in Profile A, receipts are reviewed and recorded only in Profile A; Profile B offers no receipt folder while A has one.
