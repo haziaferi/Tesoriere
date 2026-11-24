@@ -128,3 +128,5 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R106 · added · statement dates, year first or day first · builder
 - 2026-11-25 · R107 · added · the import review: statuses, what a ticked row becomes, when Confirm is on, the total · builder
 - 2026-11-25 · R108 · added · payee rules learned from one-category rows only · builder
+- 2026-11-25 · R99 · changed · Spending counts what was spent; money into Goals and paid off Accounts left out · owner
+- 2026-11-25 · R101 · changed · expenses are what was spent, the Spending total; transfers left out · owner

@@ -1266,26 +1266,25 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R99 · Spending
 
-**Rule:** Spending breaks the current calendar month into the slices below, from the ledger rows and payments dated in it. Slices that come to 0 are left out, the rest are ordered largest first, and their sum is the month's total; when a slice is below 0 or the total is 0 or less, the month is given as a plain list of figures rather than as shares.
+**Rule:** Spending breaks the current calendar month into the slices below: what was spent in it, from the parts of the payments, the `cat:` adjustments and the sweep rows dated in it. Money moved between Savings, Goals and Accounts is a transfer and in no slice, so nothing counts twice. Slices that come to 0 are left out, the rest are ordered largest first, and their sum is the month's total; when a slice is below 0 or the total is 0 or less, the month is given as a plain list of figures rather than as shares.
 
-**Why:** A split shopping trip is groceries and household goods at once, and one paid by card is still spending (R22).
+**Why:** A split shopping trip is groceries and household goods at once, and one paid by card or from a Goal is still spending (R22). Money put into a Goal or paying off an Account is not yet spent: counted there, it would count again when a payment spends it.
 
 **Values:**
 
 | Slice | Holds |
 |---|---|
-| each category | its spent figure for the month (R25): its parts of payments from any source, its adjustments, and the sweeps filed under it (R67) |
-| Goals, one for all | `goal:` rows: money put into Goals less money taken back out |
-| Uncategorised | parts with no category (R21), sweep rows with no category (R19), and `savings` rows that lowered Savings |
-| no slice | `savings` rows that raised Savings, income among them, and `acct:` and `spend:` rows |
+| each category | its spent figure for the month (R25): its parts of payments from any source (Savings, a Goal or an Account), its `cat:` adjustments, and the sweep rows filed under it (R67) |
+| Uncategorised | parts with no category (R21) and sweep rows with no category (R19) |
+| no slice | `goal:` rows, `savings` rows of either sign (income, corrections, a payment off an Account, R89), `acct:` rows and `spend:` rows |
 
-**Evidence:** Sci-Fin's spec, section 5.2, and `engine/Reports.kt` at `2892110`, with the slices of payments and sweeps from R22, R25 and R67.
+**Evidence:** Sci-Fin's spec, section 5.2, and `engine/Reports.kt` at `2892110`, with the slices of payments and sweeps from R22, R25 and R67; the transfers left out: owner, 2026-11-25.
 
-**Acceptance:** A 42.30 payment split 30.00 Groceries and 12.30 Household counts 30.00 in Groceries and 12.30 in Household. In a month with 100.00 and 50.00 into two Goals, a 30.00 adjustment on Food, 1,450.00 of income, a -20.00 `savings` row and a 99.00 `acct:` row, the slices are Goals 150.00, Food 30.00 and Uncategorised 20.00, totalling 200.00. A 60.00 sweep filed under Phone counts in Phone. Food at 30.00 and -50.00 in one month is a plain list.
+**Acceptance:** A 42.30 payment split 30.00 Groceries and 12.30 Household counts 30.00 in Groceries and 12.30 in Household. In a month with 100.00 and 50.00 into two Goals, a 30.00 adjustment on Food, 1,450.00 of income, a -20.00 `savings` row, 60.00 paid off a card from Savings and a 99.00 `acct:` row, the one slice is Food 30.00, totalling 30.00. A 60.00 sweep filed under Phone counts in Phone; a 40.00 payment by card and a 25.00 one from a Goal, both under Food, count 65.00 in Food. Food at 30.00 and -50.00 in one month is a plain list.
 
-**Not:** Sci-Fin's slice per recurring expense, and Sci-Fin's Spending without card charges: a sweep counts in its category, and a card-paid trip in its categories.
+**Not:** Sci-Fin's Goals slice, its slice per recurring expense, and its Spending without card charges: Goal money counts when a payment spends it, a sweep in its category, and a card-paid trip in its categories.
 
-**Since:** 2026-11-25 · builder · own words
+**Since:** 2026-11-25 · owner · agreed rewording
 
 ### D-R100 · Savings vs Owed
 
@@ -1301,24 +1300,25 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R101 · Income vs Expenses
 
-**Rule:** For each month of the trend length, income is the sum of the income rows dated in it (R77), and expenses as below. It is shown only while Income is on (R18).
+**Rule:** For each month of the trend length, income is the sum of the income rows dated in it (R77), and expenses are what was spent in it, the month's Spending total (R99): the parts of every payment from any source, the `cat:` adjustments and the sweep rows. Money moved between Savings, Goals and Accounts is a transfer and no expense, so nothing counts twice. It is shown only while Income is on (R18).
 
 **Values:**
 
 | Dated in the month | Counts in expenses |
 |---|---|
-| a payment, from any source | its total |
-| a sweep, an adjustment or a `savings` row that lowered Savings | what it took from Savings |
-| a `goal:` row | nothing: money kept, counted when a payment spends it |
-| a row that raised Savings, an `acct:` row, a `spend:` row | nothing |
+| a payment, from Savings, a Goal or an Account | its parts, which add up to its total (R23) |
+| a sweep row or a `cat:` adjustment | its amount |
+| a `goal:` row | nothing: a transfer, counted when a payment spends the Goal's money |
+| a `savings` row, a payment off an Account among them (R89) | nothing: a transfer, an income or a correction |
+| an `acct:` row, a `spend:` row | nothing |
 
-**Evidence:** Sci-Fin's spec, section 5.4, and `engine/Reports.kt` at `2892110`, with every expense a payment (R21).
+**Evidence:** Sci-Fin's spec, section 5.4, and `engine/Reports.kt` at `2892110`, with every expense a payment (R21); the transfers left out: owner, 2026-11-25.
 
-**Acceptance:** With Income on, 1,450.00 of income, 200.00 into a Goal and a 30.00 payment from Savings in September 2026 read 1,450.00 in and 30.00 out; an 80.00 payment from the Goal makes 110.00 out; a 40.00 payment charged to a card makes 150.00.
+**Acceptance:** With Income on, 1,450.00 of income, 200.00 into a Goal and a 30.00 payment from Savings in September 2026 read 1,450.00 in and 30.00 out; an 80.00 payment from the Goal makes 110.00 out; a 40.00 payment charged to a card makes 150.00; paying 60.00 off the card from Savings leaves 150.00. A month with a 100.00 sweep and nothing else reads 100.00 out.
 
-**Not:** Counting money put into a Goal as spent: it would count again when spent.
+**Not:** Counting money put into a Goal, or paid off an Account, as spent: it would count again when spent.
 
-**Since:** 2026-11-25 · builder · own words
+**Since:** 2026-11-25 · owner · agreed rewording
 
 ## 12. Overtime calculator
 
@@ -1819,9 +1819,9 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R96 · Age of Money: Read on 14 September 2026: 100.00 in on 1 June, 100.00 in on 1 August and 50.00 out on 10 August reads 105 days; with 60.00 more out on 1 September it reads 44. 100.00 in on 1 June and 350.00 out on 10 June reads 0; with 1,000.00 in on 1 July and 400.00 out on 1 August it reads 75, the July parcel holding 350.00; with 351.00 more out on 1 September it reads 0. A 100.00 payment from Savings on 10 August in place of the 50.00 empties the June parcel and reads 44; the same payment from a Goal empties nothing and reads 105. An `acct:` row opens no parcel.
 - R97 · Age of Money over the months: With 100.00 in on 20 August 2026, a two-month trend read on 14 September is 11 days for August and 25 for September. With 300.00 in on 10 July, 400.00 out on 5 August and 200.00 in on 1 September, a six-month trend read on 14 September has points for July, August and September only, and August's is 0.
 - R98 · Coverage: Read on 14 September 2026, the months are 1 June to 31 August, 92 days. Savings of 920.00 with 920.00 out on 1 July and a first row on 1 May covers 92 days; at -5.00 it covers 0; with the first row on 1 July there is no figure. A 920.00 payment from Savings in place of the row gives 92; charged to a card, there is no figure. Savings of 25.00 against 920.00 out covers 2 days and 35.00 covers 4.
-- R99 · Spending: A 42.30 payment split 30.00 Groceries and 12.30 Household counts 30.00 in Groceries and 12.30 in Household. In a month with 100.00 and 50.00 into two Goals, a 30.00 adjustment on Food, 1,450.00 of income, a -20.00 `savings` row and a 99.00 `acct:` row, the slices are Goals 150.00, Food 30.00 and Uncategorised 20.00, totalling 200.00. A 60.00 sweep filed under Phone counts in Phone. Food at 30.00 and -50.00 in one month is a plain list.
+- R99 · Spending: A 42.30 payment split 30.00 Groceries and 12.30 Household counts 30.00 in Groceries and 12.30 in Household. In a month with 100.00 and 50.00 into two Goals, a 30.00 adjustment on Food, 1,450.00 of income, a -20.00 `savings` row, 60.00 paid off a card from Savings and a 99.00 `acct:` row, the one slice is Food 30.00, totalling 30.00. A 60.00 sweep filed under Phone counts in Phone; a 40.00 payment by card and a 25.00 one from a Goal, both under Food, count 65.00 in Food. Food at 30.00 and -50.00 in one month is a plain list.
 - R100 · Savings vs Owed: Read on 14 September 2026, with 1,000.00 into Savings on 10 July, a card opened at 640.00 on 1 September and a 40.00 payment charged to it on 5 September, it reads 320.00; a three-month trend reads 1,000.00 for July and August and 320.00 for September.
-- R101 · Income vs Expenses: With Income on, 1,450.00 of income, 200.00 into a Goal and a 30.00 payment from Savings in September 2026 read 1,450.00 in and 30.00 out; an 80.00 payment from the Goal makes 110.00 out; a 40.00 payment charged to a card makes 150.00.
+- R101 · Income vs Expenses: With Income on, 1,450.00 of income, 200.00 into a Goal and a 30.00 payment from Savings in September 2026 read 1,450.00 in and 30.00 out; an 80.00 payment from the Goal makes 110.00 out; a 40.00 payment charged to a card makes 150.00; paying 60.00 off the card from Savings leaves 150.00. A month with a 100.00 sweep and nothing else reads 100.00 out.
 - R102 · Overtime calculator: 22.00 an hour for 10 hours is 220.00 a month and 2,640.00 a year; for 0.5 hours, 11.00 and 132.00; for -3 hours, 0.00 and 0.00. A month's pay is 3,200.00 from 3,200.00 paid monthly or 1,600.00 paid twice a month, and 2,600.00 from 1,200.00 every two weeks or 600.00 weekly. Salaried at 3,200.00 a month over 160 hours pre-fills 20.00; over 0 hours, nothing; with Income off or a pay of 0.00, nothing. Hourly at 20.00 pre-fills 20.00 and has no month's pay.
 - R26 · Statement import: Importing the same OFX statement twice records nothing the second time; importing a CSV export of the same period also records nothing; a payee filed under a category once is pre-filled on the next statement. A row of -12.40 on 2026-03-03 described `POS MERCATO VERDE 0412` has the synthetic key `syn:2026-03-03|-12.40|pos mercato verde 0412`.
 - R103 · Statement formats: An OFX block posted `20260303120000` of `-12.40` reads as 2026-03-03 and -12.40; a block with a memo and no name takes the memo; a block of `0.00` gives no row. A semicolon CSV with the quoted description `POS BAR` and `LA PIAZZETTA` on two lines gives one row described `POS BAR LA PIAZZETTA`.
