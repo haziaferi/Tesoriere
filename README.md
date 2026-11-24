@@ -2,7 +2,15 @@
 
 A personal savings and budgeting app for Android and Windows, offline first. It carries the money logic of the earlier Sci-Fin app into a new codebase and records the shopping receipts that [Chatelaine](https://github.com/haziaferi/Chatelaine) exports, splitting each payment across its categories and pairing it with its bank-statement row so nothing is counted twice.
 
-`SPEC.md` is the authority on what the app does; `SPEC-history.md` records each change to it. The repository holds the spec only until the port begins.
+`SPEC.md` is the authority on what the app does; `SPEC-history.md` records each change to it.
+
+## Build and test
+
+A Kotlin Multiplatform build with JDK 21: `shared/` holds the engine, `androidApp/` and `desktopApp/` the two hosts, which have no screens until the design pass (SPEC R16). The engine's tests run on the JVM:
+
+    ./gradlew :shared:desktopTest
+
+CI (`.github/workflows/tests.yml`) runs them on every push and pull request, with the build of both apps and the check that the Android app declares no network permission (SPEC R08).
 
 ## How changes land
 

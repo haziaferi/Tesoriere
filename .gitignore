@@ -46,6 +46,9 @@ screenshots/
 *.logcat
 logcat*.txt
 
+# Local build and run logs
+build-logs/
+
 # Session scratch folders (<project>/_<task>-<date>/) and review caches
 /_*/
 .fresh-eyes-cache/
