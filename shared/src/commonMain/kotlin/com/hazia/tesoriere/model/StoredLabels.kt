@@ -42,6 +42,8 @@ object StoredLabels {
     const val SAVINGS_GOAL = "Savings goal"
     /** The note of the row that clears a Loan whose payment reached the end of its term (SPEC R72). */
     const val LOAN_FINISHED = "Loan finished"
+    /** The description of a statement row that carries none (SPEC R103). */
+    const val STATEMENT_ENTRY = "Statement entry"
 
     /** Templates with a name inside: `{0}` is the name, kept as the user typed it. */
     const val TOWARD = "Toward {0}"
