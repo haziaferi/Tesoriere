@@ -18,6 +18,14 @@ object StoredLabels {
     const val SAVINGS = "Savings"
     /** The note of the row that returns a deleted Goal's money to Savings (SPEC R58). */
     const val GOAL_DELETED_RETURNED = "Goal deleted — returned to Savings"
+    /** The note of a recurring expense's sweep row (SPEC R63). */
+    const val RECURRING_SWEEP = "Recurring sweep"
+    /** The note of the row that returns a deleted recurring expense's sweeps (SPEC R66). */
+    const val DELETION_REVERSAL = "Deletion reversal"
+    /** The note of an accepted difference after editing a recurring expense (SPEC R65). */
+    const val EDIT_RECONCILIATION = "Edit reconciliation"
+    /** The note of the closing row of an Account that is deleted. */
+    const val ACCOUNT_CLOSED = "Account closed"
 
     /** Templates with a name inside: `{0}` is the name, kept as the user typed it. */
     const val TOWARD = "Toward {0}"
