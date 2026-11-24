@@ -26,6 +26,8 @@ object StoredLabels {
     const val EDIT_RECONCILIATION = "Edit reconciliation"
     /** The note of the closing row of an Account that is deleted. */
     const val ACCOUNT_CLOSED = "Account closed"
+    /** The note of the row that clears a Loan whose payment reached the end of its term (SPEC R72). */
+    const val LOAN_FINISHED = "Loan finished"
 
     /** Templates with a name inside: `{0}` is the name, kept as the user typed it. */
     const val TOWARD = "Toward {0}"

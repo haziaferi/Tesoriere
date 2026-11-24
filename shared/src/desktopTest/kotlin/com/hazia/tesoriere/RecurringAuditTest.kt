@@ -3,29 +3,36 @@ package com.hazia.tesoriere
 import com.hazia.tesoriere.Fixture.category
 import com.hazia.tesoriere.Fixture.profile
 import com.hazia.tesoriere.Fixture.recurring
+import com.hazia.tesoriere.engine.EndedKind
+import com.hazia.tesoriere.engine.NewMonth
 import com.hazia.tesoriere.engine.Recurring
+import com.hazia.tesoriere.engine.savingsAmount
 import com.hazia.tesoriere.model.Account
 import com.hazia.tesoriere.model.AccountType
 import com.hazia.tesoriere.model.Cadence
 import com.hazia.tesoriere.model.DateMode
 import com.hazia.tesoriere.model.RateType
 import com.hazia.tesoriere.model.RecurringExpense
+import com.hazia.tesoriere.model.StoredLabels
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 /**
  * Ported from Sci-Fin native/shared/src/desktopTest/kotlin/app/scifin/RecurringAuditTest.kt at
- * 2892110. Not ported here: the tests that run the New Month catch-up (`NewMonth.runCatchUp`,
- * Task 8) and the ones that edit, delete or re-type an Account from its own side
+ * 2892110. Not ported here: the ones that edit, delete or re-type an Account from its own side
  * (`AccountEditing.save`, `Accounts.deleteCascade`, `Accounts.retypeToCreditCascade`, Task 10);
- * each comes with its piece.
+ * they come with that piece. The end-of-term tests run the month cycle (SPEC R70, R72) and give
+ * codes where Sci-Fin gave sentences.
  */
 class RecurringAuditTest {
 
-    private fun monthly(id: String, amount: String, day: Int, due: LocalDate, first: LocalDate = LocalDate(2026, 1, day), linked: String? = null, swept: String? = null) =
-        recurring(id, amount, Cadence.MONTHLY, first, dueDate = due, linkedAccountId = linked, lastSweptMonth = swept)
+    private fun monthly(
+        id: String, amount: String, day: Int, due: LocalDate, first: LocalDate = LocalDate(2026, 1, day),
+        linked: String? = null, endDate: LocalDate? = null, swept: String? = null,
+    ) = recurring(id, amount, Cadence.MONTHLY, first, dueDate = due, endDate = endDate, linkedAccountId = linked, lastSweptMonth = swept)
 
     private fun world(vararg e: RecurringExpense, accounts: List<Account> = emptyList()) =
         profile(savings = "5,000.00", categories = listOf(category("c1"))).copy(recurringExpenses = e.toList(), accounts = accounts)
@@ -93,6 +100,43 @@ class RecurringAuditTest {
         val (d, _) = Recurring.edit(world(e), e.copy(dueDate2 = LocalDate(2026, 9, 28)), today)
         assertEquals(LocalDate(2026, 1, 15), d.recurringExpenses.single().firstDueDate)
         assertEquals(listOf(LocalDate(2026, 10, 15), LocalDate(2026, 10, 28)), Recurring.occurrenceDatesInMonth(d.recurringExpenses.single(), 2026, 10))
+    }
+
+    // ---- the end of a term -------------------------------------------------------------------
+
+    // SPEC:R72
+    @Test fun `R72 a payment ending 15 October 2026 is not finished on 20 October and finishes on 1 November with its closing row`() {
+        val ids = Ids()
+        val e = monthly("pay", "260.00", 15, due = LocalDate(2026, 10, 15), linked = "loan", endDate = LocalDate(2026, 10, 15), swept = "2026-10")
+        val w = world(e, accounts = listOf(loan("loan", "120.00", "pay", RateType.FIXED)))
+        val (mid, none) = NewMonth.runCatchUp(w, TestClock(LocalDate(2026, 10, 20))) { ids.next() }
+        assertNull(none); assertNull(mid.recurringExpenses.single().finishedAt)
+        val (d, s) = NewMonth.runCatchUp(mid, TestClock(LocalDate(2026, 11, 2))) { ids.next() }
+        assertEquals(1, s!!.endedNow.size)
+        assertEquals(LocalDate(2026, 11, 1), d.recurringExpenses.single().finishedAt)
+        assertEquals(1, d.transactions.count { it.payee == StoredLabels.LOAN_FINISHED })
+    }
+
+    // SPEC:R72 SPEC:R70
+    @Test fun `R72 a 40_00 gym fee ending 15 October 2026, opened on 20 November, sweeps 15 September and 15 October and leaves 4,920_00`() {
+        val ids = Ids()
+        val e = monthly("gym", "40.00", 15, due = LocalDate(2026, 9, 15), endDate = LocalDate(2026, 10, 15), swept = "2026-08")
+        val (d, s) = NewMonth.runCatchUp(world(e), TestClock(LocalDate(2026, 11, 20))) { ids.next() }
+        assertEquals(listOf(LocalDate(2026, 9, 15), LocalDate(2026, 10, 15)), d.transactions.filter { it.key == "rec:gym" }.map { it.date })
+        assertEquals(cents("4,920.00"), d.savingsAmount)
+        assertEquals(EndedKind.ENDED, s!!.endedNow.single().kind)
+        assertNotNull(d.recurringExpenses.single().finishedAt)
+    }
+
+    // SPEC:R72
+    @Test fun `R72 an interest-only Loan of 5,000_00 keeps its balance at the end of its term, with interestOnlyEnded and no closing row`() {
+        val ids = Ids()
+        val e = monthly("pay", "260.00", 15, due = LocalDate(2026, 8, 15), linked = "loan", endDate = LocalDate(2026, 8, 15), swept = "2026-08")
+        val w = world(e, accounts = listOf(loan("loan", "5,000.00", "pay", RateType.INTEREST_ONLY)))
+        val (d, s) = NewMonth.runCatchUp(w, TestClock(LocalDate(2026, 9, 1))) { ids.next() }
+        assertEquals(EndedKind.INTEREST_ONLY_ENDED, s!!.endedNow.single().kind)
+        assertEquals(cents("5,000.00"), d.accounts.single().balance)
+        assertEquals(0, d.transactions.count { it.payee == StoredLabels.LOAN_FINISHED })
     }
 
     // ---- a confirmed difference on a Loan moves the tracked debt too ---------------------------
