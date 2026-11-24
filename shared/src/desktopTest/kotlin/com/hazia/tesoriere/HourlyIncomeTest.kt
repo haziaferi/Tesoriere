@@ -4,6 +4,7 @@ import com.hazia.tesoriere.Fixture.profile
 import com.hazia.tesoriere.engine.Hourly
 import com.hazia.tesoriere.engine.Income
 import com.hazia.tesoriere.engine.Reminders
+import com.hazia.tesoriere.engine.TimeWorth
 import com.hazia.tesoriere.engine.Writes
 import com.hazia.tesoriere.engine.plusDays
 import com.hazia.tesoriere.engine.savingsAmount
@@ -26,8 +27,8 @@ import kotlin.test.assertTrue
  * Ported from Sci-Fin native/shared/src/desktopTest/kotlin/app/scifin/HourlyIncomeTest.kt at
  * 2892110. Changed: figures are cents, the arrived amounts written out rather than computed from a
  * Double share; the payday notification test checks the reminder's date only, not its body (SPEC
- * R16). Not ported: the backup round trip (the backup piece, Task 19) and the time calculator's
- * rate (the Overtime piece, Task 12).
+ * R16). Not ported: the backup round trip (the backup piece, Task 19). The time calculator's
+ * rate case came with the Overtime piece (SPEC R102).
  */
 class HourlyIncomeTest {
     private val clock = TestClock(LocalDate(2026, 11, 2))
@@ -238,5 +239,14 @@ class HourlyIncomeTest {
         assertNull(Reminders.nextPaydayFire(manual.copy(settings = manual.settings.copy(incomeAutoDeposit = true)), now))
         assertNull(Reminders.nextPaydayFire(hourly().let { it.copy(settings = it.settings.copy(paydayNotificationEnabled = false)) }, now))
         assertNull(Reminders.nextPaydayFire(profile(), now))
+    }
+
+    // ---- the overtime calculator (SPEC R102) ----
+
+    // SPEC:R102 SPEC:R79
+    @Test fun `R102 hourly at 20_00 pre-fills the overtime calculator's rate with 20_00 and has no month's pay`() {
+        assertEquals(rate, TimeWorth.prefillRate(hourly().settings, TimeWorth.DEFAULT_EXPECTED_HOURS))
+        assertNull(TimeWorth.monthlyEquivalent(hourly().settings), "no expected-hours figure on hourly")
+        assertNull(TimeWorth.prefillRate(hourly().let { it.settings.copy(hourlyRate = 0) }, 160.0))
     }
 }
