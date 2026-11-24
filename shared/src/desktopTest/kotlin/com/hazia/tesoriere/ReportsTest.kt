@@ -6,6 +6,7 @@ import com.hazia.tesoriere.Fixture.category
 import com.hazia.tesoriere.Fixture.goal
 import com.hazia.tesoriere.Fixture.profile
 import com.hazia.tesoriere.engine.AccountEditing
+import com.hazia.tesoriere.engine.Accounts
 import com.hazia.tesoriere.engine.Reports
 import com.hazia.tesoriere.engine.Slice
 import com.hazia.tesoriere.engine.SliceKind
@@ -195,18 +196,20 @@ class ReportsTest {
     }
 
     // SPEC:R99
-    @Test fun `R99 100_00 and 50_00 into two Goals, a 30_00 adjustment on Food, income and a -20_00 savings row give Goals 150_00, Food 30_00, Uncategorised 20_00`() {
+    @Test fun `R99 100_00 and 50_00 into two Goals, a 30_00 adjustment on Food, income, a -20_00 savings row and 60_00 paid off a card give one slice, Food 30_00`() {
         val d = profile(goals = listOf(goal("g1", "A"), goal("g2", "B")), categories = listOf(category("c", "Food"))).with(
             tx("1", "goal:g1", "100.00", today), tx("2", "goal:g2", "50.00", today), tx("3", "cat:c", "30.00", today),
             tx("4", "savings", "1,450.00", today, income = true), tx("5", "savings", "-20.00", today), tx("6", "acct:x", "99.00", today),
             tx("7", "cat:c", "5.00", LocalDate(2026, 8, 30)),      // last month: left out
         )
-        val s = Reports.spendingComposition(d, today)
-        assertEquals(
-            listOf(Triple(SliceKind.GOALS, null, cents("150.00")), Triple(SliceKind.CATEGORY, "c", cents("30.00")), Triple(SliceKind.UNCATEGORISED, null, cents("20.00"))),
-            keyed(s.slices),
-        )
-        assertEquals(cents("200.00"), s.net); assertFalse(s.plainList)
+        val ids = Ids("pay")
+        val cardPaidOff = Accounts.quickAdd(
+            d.copy(accounts = listOf(Account("cc", Fixture.PROFILE, "Card", type = AccountType.CREDIT, balance = cents("100.00")))),
+            "cc", cents("60.00"), Accounts.Direction.PAYMENT, null, pairSavings = true, clock = TestClock(today),
+        ) { ids.next() }
+        val s = Reports.spendingComposition(cardPaidOff, today)
+        assertEquals(listOf(Triple(SliceKind.CATEGORY, "c", cents("30.00"))), keyed(s.slices))
+        assertEquals(cents("30.00"), s.net); assertFalse(s.plainList)
     }
 
     // SPEC:R99 SPEC:R67 SPEC:R22
@@ -268,7 +271,7 @@ class ReportsTest {
     // ---- Income vs Expenses ----------------------------------------------------------------
 
     // SPEC:R101 SPEC:R54
-    @Test fun `R101 1,450_00 in, 200_00 into a Goal and 30_00 paid from Savings read 30_00 out, 110_00 after 80_00 from the Goal, 150_00 after 40_00 by card`() {
+    @Test fun `R101 1,450_00 in, 200_00 into a Goal and 30_00 paid from Savings read 30_00 out, 110_00 after 80_00 from the Goal, 150_00 after 40_00 by card and after 60_00 paid off it`() {
         val clock = TestClock(today); val ids = Ids()
         var d = profile(goals = listOf(goal("g", "G")), categories = listOf(category("c", "Food")))
         d = d.copy(settings = d.settings.copy(incomeEnabled = true), accounts = listOf(Account("cc", Fixture.PROFILE, "Card", type = AccountType.CREDIT)))
@@ -283,6 +286,9 @@ class ReportsTest {
         assertEquals(cents("110.00"), Reports.incomeVsExpenses(d, today).last().expenses)   // the contribution still is not
         d = d.paid("40.00", PaymentSource.Account("cc"))
         assertEquals(cents("150.00"), Reports.incomeVsExpenses(d, today).last().expenses)
+        d = Accounts.quickAdd(d, "cc", cents("60.00"), Accounts.Direction.PAYMENT, null, pairSavings = true, clock = clock) { ids.next() }
+        assertEquals(cents("150.00"), Reports.incomeVsExpenses(d, today).last().expenses)   // paying the card off is a transfer
+        assertEquals(Reports.spendingComposition(d, today).net, Reports.incomeVsExpenses(d, today).last().expenses)
     }
 
     // SPEC:R101 SPEC:R18

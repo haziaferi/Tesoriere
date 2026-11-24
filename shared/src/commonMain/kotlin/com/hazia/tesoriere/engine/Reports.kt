@@ -19,18 +19,21 @@ import kotlin.time.Instant
  * - Every expense is a payment, which writes no ledger row (SPEC R54). The movements of Savings
  *   are the ledger rows by their Savings effect plus the payments from Savings, each out by its
  *   total (SPEC R95, [savingsMovements]); a payment from a Goal or charged to an Account is none.
- * - Spending is composed by category from Spent.of (SPEC R25): the parts of payments from any
- *   source, so a split payment counts in each of its categories, the `cat:` adjustments, and the
- *   sweep rows filed under the category (SPEC R67). Sci-Fin's slice per recurring expense is gone.
- *   Parts with no category and sweep rows with no category (both only from a Sci-Fin backup) join
- *   Uncategorised with the `savings` rows that lowered Savings (SPEC R99).
+ * - Spending counts what was spent, composed by category from Spent.of (SPEC R25): the parts of
+ *   payments from any source, so a split payment counts in each of its categories, the `cat:`
+ *   adjustments, and the sweep rows filed under the category (SPEC R67). Sci-Fin's slice per
+ *   recurring expense and its Goals slice are gone, and `savings` rows count in no slice: money
+ *   into a Goal or paid off an Account is a transfer, counted when a payment spends it (owner,
+ *   2026-11-25). Parts and sweep rows with no category (both only from a Sci-Fin backup) are
+ *   Uncategorised (SPEC R99).
  * - A slice is a code and an id, not a label and an icon: names are the caller's to look up and
  *   how they read is the design pass's (SPEC R16).
  * - Savings vs Owed's trend adds the payments charged to an Account to what is owed and the
  *   payments from Savings to the Savings side (SPEC R100).
- * - Income vs Expenses counts every payment's total, from any source, as an expense; Sci-Fin's
- *   `spend:` rows are not counted, since a Sci-Fin goal spend arrives as a payment (SPEC R19,
- *   R101). It returns its figures whatever the Income switch says: showing the report only while
+ * - Income vs Expenses' expenses are the month's Spending total: every payment's parts, from any
+ *   source, the `cat:` adjustments and the sweep rows; transfers into Goals and off Accounts and
+ *   Sci-Fin's `spend:` rows are not counted, since a Sci-Fin goal spend arrives as a payment
+ *   (SPEC R19, R101). It returns its figures whatever the Income switch says: showing the report only while
  *   Income is on (SPEC R18) is the caller's, so the return type is no longer nullable.
  * - Coverage divides in whole cents with a half rounded to the even day, the result Sci-Fin's
  *   Double division and `round` give, with no floating point on money (SPEC R20, R98). No other
@@ -38,7 +41,7 @@ import kotlin.time.Instant
  */
 
 /** What a Spending slice holds (SPEC R99). */
-enum class SliceKind { CATEGORY, GOALS, UNCATEGORISED }
+enum class SliceKind { CATEGORY, UNCATEGORISED }
 
 /** One slice of the month's Spending (SPEC R99); [categoryId] is set for a [SliceKind.CATEGORY] slice only. */
 data class Slice(val kind: SliceKind, val categoryId: String?, val amount: Money)
@@ -161,33 +164,33 @@ object Reports {
     // ---- Spending (SPEC R99) -----------------------------------------------------------------
 
     /**
-     * The current month by slice: each category's spent figure (SPEC R25), Goals as one slice,
-     * Uncategorised for parts and sweeps with no category and `savings` rows that lowered Savings.
-     * Zero slices are left out; the rest go largest first, ties in the categories' order.
+     * The current month by slice: each category's spent figure (SPEC R25), and Uncategorised for
+     * parts and sweeps with no category. `goal:`, `savings`, `acct:` and `spend:` rows are in no
+     * slice: transfers, income and corrections, not spending. Zero slices are left out; the rest
+     * go largest first, ties in the categories' order.
      */
     fun spendingComposition(d: ProfileData, today: LocalDate): SpendingComposition {
-        val ym = today.ymKey()
+        val shown = spendingSlices(d, today.ymKey()).filter { it.amount != 0L }.sortedByDescending { it.amount }
+        return SpendingComposition(shown, shown.sumOf { it.amount })
+    }
+
+    /** What was spent in [ym] (`YYYY-MM`), one slice per category seen and one for Uncategorised (SPEC R99). */
+    private fun spendingSlices(d: ProfileData, ym: String): List<Slice> {
         val payments = d.payments.filter { it.date.ymKey() == ym }
         val rows = d.transactions.filter { it.date.ymKey() == ym }
 
         val categoryIds = LinkedHashSet<String>()
         d.categories.forEach { categoryIds += it.id }
         payments.forEach { p -> p.parts.forEach { part -> part.categoryId?.let { categoryIds += it } } }
-        var goals = 0L
         var uncategorised = payments.sumOf { p -> p.parts.filter { it.categoryId == null }.sumOf { it.amount } }
         for (t in rows) {
             when (val k = TransactionKey.parse(t.key)) {
                 is TransactionKey.CategoryKey -> categoryIds += k.id
                 is TransactionKey.RecurringKey -> if (t.categoryId != null) categoryIds += t.categoryId else uncategorised += t.amount
-                is TransactionKey.GoalKey -> goals += t.amount
-                TransactionKey.SavingsKey -> if (t.amount < 0) uncategorised += -t.amount
-                is TransactionKey.AccountKey, is TransactionKey.GoalSpendKey -> Unit
+                is TransactionKey.GoalKey, TransactionKey.SavingsKey, is TransactionKey.AccountKey, is TransactionKey.GoalSpendKey -> Unit
             }
         }
-        val slices = categoryIds.map { Slice(SliceKind.CATEGORY, it, Spent.of(d, it, ym)) } +
-            Slice(SliceKind.GOALS, null, goals) + Slice(SliceKind.UNCATEGORISED, null, uncategorised)
-        val shown = slices.filter { it.amount != 0L }.sortedByDescending { it.amount }
-        return SpendingComposition(shown, shown.sumOf { it.amount })
+        return categoryIds.map { Slice(SliceKind.CATEGORY, it, Spent.of(d, it, ym)) } + Slice(SliceKind.UNCATEGORISED, null, uncategorised)
     }
 
     // ---- Savings vs Owed (SPEC R100) ---------------------------------------------------------
@@ -214,19 +217,16 @@ object Reports {
     // ---- Income vs Expenses (SPEC R101) ------------------------------------------------------
 
     /**
-     * Per month: the income rows, and as expenses every payment's total, from any source, plus the
-     * ledger rows that lowered Savings other than money put into a Goal, which counts once, when
-     * a payment spends it. Shown only while Income is on (SPEC R18): that is the caller's.
+     * Per month: the income rows, and as expenses what was spent, the month's Spending total
+     * (SPEC R99): every payment's parts from any source, the `cat:` adjustments and the sweep rows.
+     * Money into a Goal or paid off an Account counts once, when a payment spends it. Shown only
+     * while Income is on (SPEC R18): that is the caller's.
      */
     fun incomeVsExpenses(d: ProfileData, today: LocalDate, months: Int = 6): List<IncomeExpensePoint> =
         (months - 1 downTo 0).map { i ->
             val p = today.plusMonthsClamped(-i, 1)
             val ym = p.ymKey()
-            val rows = d.transactions.filter { it.date.ymKey() == ym }
-            val income = rows.filter { it.isIncome }.sumOf { it.amount }
-            val out = rows.filter { TransactionKey.parse(it.key) !is TransactionKey.GoalKey }
-                .sumOf { t -> Ledger.savingsEffect(t).let { if (it < 0) -it else 0 } }
-            val paid = d.payments.filter { it.date.ymKey() == ym }.sumOf { it.total }
-            IncomeExpensePoint(p, income, out + paid)
+            val income = d.transactions.filter { it.date.ymKey() == ym && it.isIncome }.sumOf { it.amount }
+            IncomeExpensePoint(p, income, spendingSlices(d, ym).sumOf { it.amount })
         }
 }
