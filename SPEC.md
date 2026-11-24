@@ -55,25 +55,30 @@ Kinds: O owner rule · D decided · I inherited · A assumed · Q open.
 | O-R67 | Every recurring expense has a category | 7. Recurring expenses |
 | D-R68 | Recurring threshold note | 7. Recurring expenses |
 | D-R69 | Reminder dates | 7. Recurring expenses |
-| D-R26 | Statement import | 8. Statement import |
-| D-R27 | The receipt contract | 9. Chatelaine receipts |
-| D-R28 | Receipt folder | 9. Chatelaine receipts |
-| D-R29 | Picking up receipts | 9. Chatelaine receipts |
-| D-R30 | Receipt files Tesoriere cannot take | 9. Chatelaine receipts |
-| D-R31 | Receipt review | 9. Chatelaine receipts |
-| D-R32 | Category links | 9. Chatelaine receipts |
-| D-R33 | Closing a review | 9. Chatelaine receipts |
-| D-R34 | Changing a link | 9. Chatelaine receipts |
-| D-R35 | A receipt's source | 9. Chatelaine receipts |
-| D-R36 | Store links | 10. One payment, two sources |
-| D-R37 | Pairing rule | 10. One payment, two sources |
-| D-R38 | Whichever arrives first | 10. One payment, two sources |
-| D-R39 | Difference part | 10. One payment, two sources |
-| D-R40 | Pairing by hand | 10. One payment, two sources |
-| D-R41 | Deleting a receipt payment | 11. Edge cases |
-| D-R42 | Deleting a linked category | 11. Edge cases |
-| D-R43 | Test plan | 12. Test plan |
-| D-R44 | Rollout phases | 13. Rollout |
+| D-R70 | The month cycle | 8. The month cycle |
+| D-R71 | Automatic deposits on the same open | 8. The month cycle |
+| D-R72 | End of a term | 8. The month cycle |
+| D-R73 | A Loan that follows its payment | 8. The month cycle |
+| D-R74 | Catch-up summary | 8. The month cycle |
+| D-R26 | Statement import | 9. Statement import |
+| D-R27 | The receipt contract | 10. Chatelaine receipts |
+| D-R28 | Receipt folder | 10. Chatelaine receipts |
+| D-R29 | Picking up receipts | 10. Chatelaine receipts |
+| D-R30 | Receipt files Tesoriere cannot take | 10. Chatelaine receipts |
+| D-R31 | Receipt review | 10. Chatelaine receipts |
+| D-R32 | Category links | 10. Chatelaine receipts |
+| D-R33 | Closing a review | 10. Chatelaine receipts |
+| D-R34 | Changing a link | 10. Chatelaine receipts |
+| D-R35 | A receipt's source | 10. Chatelaine receipts |
+| D-R36 | Store links | 11. One payment, two sources |
+| D-R37 | Pairing rule | 11. One payment, two sources |
+| D-R38 | Whichever arrives first | 11. One payment, two sources |
+| D-R39 | Difference part | 11. One payment, two sources |
+| D-R40 | Pairing by hand | 11. One payment, two sources |
+| D-R41 | Deleting a receipt payment | 12. Edge cases |
+| D-R42 | Deleting a linked category | 12. Edge cases |
+| D-R43 | Test plan | 13. Test plan |
+| D-R44 | Rollout phases | 14. Rollout |
 | D-R45 | Price comparison | Out of scope |
 | D-R46 | Households in v1 | Out of scope |
 | D-R47 | Currency conversion in v1 | Out of scope |
@@ -776,7 +781,79 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · builder · own words
 
-## 8. Statement import
+## 8. The month cycle
+
+### D-R70 · The month cycle
+
+**Rule:** Each time a Profile is opened, its due dates move on (R61), then each month after the oldest month its recurring expenses have swept, up to the current month, is processed in order with its real dates: each expense not yet swept for that month sweeps it (R63) and is marked swept, so no month sweeps twice. A new month writes nothing for categories: spent is worked out per month (R25), so it reads 0 with no row and no change to any category. A Profile with no recurring expense has no month to process.
+
+**Why:** A month skipped in silence would leave Savings showing money already spoken for.
+
+**Evidence:** Sci-Fin's spec, section 3.9, and `engine/NewMonth.kt` at `2892110`.
+
+**Acceptance:** Opened on 1 September 2026 with Savings at 5,000.00, a 950.00 rent due the 1st and a 45.00 phone bill due the 10th, both swept for August, leave 4,005.00 and two rows, dated 1 and 10 September; opened again that day, nothing changes. Opened on 14 November 2026 instead, the rent writes rows dated 1 September, 1 October and 1 November and is next due 1 December. A category with 120.00 spent in August reads 0.00 for September after the open, and the categories are unchanged.
+
+**Not:** Sci-Fin's reset of each category's stored spent, which also marked the month processed: Tesoriere stores neither on a category (R25).
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R71 · Automatic deposits on the same open
+
+**Rule:** On the same open, salaried income with automatic deposit on deposits each payday passed since the last automatic deposit, or since the chosen payday when there has been none, as its own income row dated to that payday. Hourly income, and income switched off, deposits nothing by itself. The deposits and the month cycle (R70) do not depend on each other, so their order does not change the result.
+
+**Evidence:** Sci-Fin's spec, sections 3.3 and 3.9, and `engine/Income.kt` and `engine/NewMonth.kt` at `2892110`.
+
+**Acceptance:** Opened on 2 October 2026 with Savings at 5,000.00, a 950.00 rent swept for September, and a 1,450.00 biweekly income first paid 11 September 2026 with automatic deposit on: one month is processed, two deposits are dated 11 and 25 September, and Savings is 6,950.00.
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R72 · End of a term
+
+**Rule:** An expense whose end date is on or before the 1st of a month being processed sweeps that month's due dates up to its end date, then finishes on that 1st. A Loan linked to it with a balance left is paid off by a closing `acct:` row dated that 1st, unless its rate is interest-only or variable, which keep their balance. Each expense that finishes gives a notice holding its id and a code from the table; how it reads is the design pass's (R16).
+
+**Values:**
+
+| The finished expense | Code |
+|---|---|
+| linked to no Loan | `ended` |
+| linked to a Loan whose update from payments (R73) took the balance to 0 | `loanPaidOff` |
+| linked to an interest-only Loan otherwise | `interestOnlyEnded`: the principal is still owed |
+| linked to a variable-rate Loan otherwise | `variableTermEnded`: the balance is for the user to check with the lender |
+| linked to any other Loan | `loanPaidOff` |
+
+**Evidence:** Sci-Fin's spec, sections 3.11 and 9.1, and `engine/NewMonth.kt` at `2892110`.
+
+**Acceptance:** A 260.00 payment due the 15th, ending 15 August 2026 and linked to a fixed-rate Loan of 120.00, finishes on 1 September 2026 when opened that day: the Loan is 0.00 after one -120.00 `acct:` row, and the code is `loanPaidOff`. On an interest-only Loan of 5,000.00 the same payment leaves 5,000.00 with no closing row and the code `interestOnlyEnded`. A 40.00 gym fee due the 15th, swept for August and ending 15 October 2026, opened on 20 November, writes rows dated 15 September and 15 October, leaves Savings 80.00 lower and ends with `ended`. A payment ending 15 October 2026 is not finished when opened on 20 October; opened on 2 November, it finishes on 1 November.
+
+**Not:** Stating every Loan paid off at the end of its term: interest-only and variable-rate Loans can still be owed.
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R73 · A Loan that follows its payment
+
+**Rule:** A Loan set to update from its payment falls, in each month its linked expense sweeps during the cycle (R70), by the payment less one month's interest, the balance times the yearly rate divided by 12 and rounded to the cent, and never below 0. The fall is an `acct:` row dated to the payment's first due date in the month, or the 1st for a share, with the expense's name as payee; it does not move Savings (R51). When the balance reaches 0 the expense finishes on that 1st, whatever its end date.
+
+**Evidence:** Sci-Fin's spec, sections 3.9 and 7.2, and `engine/NewMonth.kt` at `2892110`.
+
+**Acceptance:** A Loan of 6,000.00 at 6 % with a 260.00 payment due the 15th, opened on 1 September 2026, falls to 5,770.00 after 30.00 of interest, with a -230.00 row dated 15 September; Savings falls by the 260.00 sweep only. A Loan of 200.00 at 0 % falls to 0.00 and its payment finishes though it ends in 2030. A variable-rate Loan of 100.00 cleared by its final 260.00 payment ends with `loanPaidOff`.
+
+**Since:** 2026-11-24 · builder · own words
+
+### D-R74 · Catch-up summary
+
+**Rule:** After an open that processed two or more months, or finished an expense, the engine keeps a summary until the user dismisses it: the months processed, the total swept, the count and total of automatic deposits (R71), and each finished expense's id with its code (R72). A later open of that kind adds to a summary not yet dismissed, an open that crosses one month and finishes nothing leaves it as it is, and dismissing clears every figure; the kept notices are codes, never sentences.
+
+**Why:** The summary is where a long absence's movements are told; lost on a restart, the user would not learn what left Savings while they were away.
+
+**Evidence:** Sci-Fin's spec, section 3.9, and `engine/NewMonth.kt` at `2892110`.
+
+**Acceptance:** A 950.00 rent swept for August, opened on 14 November 2026, keeps a summary of 3 months and 2,850.00 swept; opened again that day it still reads 3 months; dismissed, there is none. Opened on 14 October 2026 it reads 2 months; opened again on 3 November, still 2; then on 3 January 2027, 4. Opened on 1 September 2026 alone, it keeps none.
+
+**Not:** A summary after every ordinary month crossing: each user would meet one on every 1st.
+
+**Since:** 2026-11-24 · builder · own words
+
+## 9. Statement import
 
 ### D-R26 · Statement import
 
@@ -786,7 +863,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
-## 9. Chatelaine receipts
+## 10. Chatelaine receipts
 
 ### D-R27 · The receipt contract
 
@@ -912,7 +989,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
-## 10. One payment, two sources
+## 11. One payment, two sources
 
 ### D-R36 · Store links
 
@@ -982,7 +1059,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
-## 11. Edge cases
+## 12. Edge cases
 
 ### D-R41 · Deleting a receipt payment
 
@@ -1002,7 +1079,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · builder · own words
 
-## 12. Test plan
+## 13. Test plan
 
 ### D-R43 · Test plan
 
@@ -1023,7 +1100,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · builder · own words
 
-## 13. Rollout
+## 14. Rollout
 
 ### D-R44 · Rollout phases
 
@@ -1086,6 +1163,11 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R67 · Every recurring expense has a category: An expense with no category, or naming a category that does not exist, cannot be saved. A 60.00 monthly expense under Phone adds 60.00 to Phone's spent in each month it sweeps; a yearly 600.00 expense sweeps a 50.00 share into its category each month; a return of 300.00 on 20 September 2026 lowers its category's spent for September by 300.00. After an expense moves from Phone to Internet, Phone's spent for the past months is unchanged and the next sweep counts under Internet.
 - R68 · Recurring threshold note: With Income off and Savings at 12,000.00, a scheduled 900.00 shows no note and 1,100.00 shows one holding 1,100.00 and 12,000.00; with Savings at -5.00 the note is marked as having no base; with Savings unset, or nothing scheduled, there is none. With Income on and nothing received, 900.00 shows a note with no base; after 1,450.00 received it holds a base of 1,450.00; after 2,900.00 there is none.
 - R69 · Reminder dates: A rent on the 31st with a 3-day lead reminds on 25 February 2026 and then on 28 March 2026. With the import reminder on day 1, read on 14 September 2026, it falls on 1 October. The New Month reminder read at 08:30 on 1 October 2026 is 1 October at 09:00; read at 09:00 that day, 1 November at 09:00; read at 23:00 on 31 December 2026, 1 January 2027 at 09:00.
+- R70 · The month cycle: Opened on 1 September 2026 with Savings at 5,000.00, a 950.00 rent due the 1st and a 45.00 phone bill due the 10th, both swept for August, leave 4,005.00 and two rows, dated 1 and 10 September; opened again that day, nothing changes. Opened on 14 November 2026 instead, the rent writes rows dated 1 September, 1 October and 1 November and is next due 1 December. A category with 120.00 spent in August reads 0.00 for September after the open, and the categories are unchanged.
+- R71 · Automatic deposits on the same open: Opened on 2 October 2026 with Savings at 5,000.00, a 950.00 rent swept for September, and a 1,450.00 biweekly income first paid 11 September 2026 with automatic deposit on: one month is processed, two deposits are dated 11 and 25 September, and Savings is 6,950.00.
+- R72 · End of a term: A 260.00 payment due the 15th, ending 15 August 2026 and linked to a fixed-rate Loan of 120.00, finishes on 1 September 2026 when opened that day: the Loan is 0.00 after one -120.00 `acct:` row, and the code is `loanPaidOff`. On an interest-only Loan of 5,000.00 the same payment leaves 5,000.00 with no closing row and the code `interestOnlyEnded`. A 40.00 gym fee due the 15th, swept for August and ending 15 October 2026, opened on 20 November, writes rows dated 15 September and 15 October, leaves Savings 80.00 lower and ends with `ended`. A payment ending 15 October 2026 is not finished when opened on 20 October; opened on 2 November, it finishes on 1 November.
+- R73 · A Loan that follows its payment: A Loan of 6,000.00 at 6 % with a 260.00 payment due the 15th, opened on 1 September 2026, falls to 5,770.00 after 30.00 of interest, with a -230.00 row dated 15 September; Savings falls by the 260.00 sweep only. A Loan of 200.00 at 0 % falls to 0.00 and its payment finishes though it ends in 2030. A variable-rate Loan of 100.00 cleared by its final 260.00 payment ends with `loanPaidOff`.
+- R74 · Catch-up summary: A 950.00 rent swept for August, opened on 14 November 2026, keeps a summary of 3 months and 2,850.00 swept; opened again that day it still reads 3 months; dismissed, there is none. Opened on 14 October 2026 it reads 2 months; opened again on 3 November, still 2; then on 3 January 2027, 4. Opened on 1 September 2026 alone, it keeps none.
 - R26 · Statement import: Importing the same OFX statement twice records nothing the second time; importing a CSV export of the same period also records nothing; a payee filed under a category once is pre-filled on the next statement.
 - R27 · The receipt contract: The receipt parser's tests cite Chatelaine's rule 123 field by field; no Tesoriere code opens the receipt folder for writing.
 - R28 · Receipt folder: With the folder set in Profile A, receipts are reviewed and recorded only in Profile A; Profile B offers no receipt folder while A has one.

@@ -86,3 +86,8 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-24 · R69 · added · reminder dates · builder
 - 2026-11-24 · R21 · changed · a recurring expense's sweeps are ledger rows, not payments · owner
 - 2026-11-24 · R25 · changed · spent counts the recurring expense rows filed under the category · owner
+- 2026-11-24 · R70 · added · the month cycle: each missed month replayed, no write for categories · builder
+- 2026-11-24 · R71 · added · automatic deposits caught up on the same open · builder
+- 2026-11-24 · R72 · added · end of a term: finishing, the closing Loan row, the notice codes · builder
+- 2026-11-24 · R73 · added · a Loan that follows its payment · builder
+- 2026-11-24 · R74 · added · catch-up summary kept until dismissed · builder
