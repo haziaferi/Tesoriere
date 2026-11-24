@@ -26,8 +26,20 @@ object StoredLabels {
     const val DELETION_REVERSAL = "Deletion reversal"
     /** The note of an accepted difference after editing a recurring expense (SPEC R65). */
     const val EDIT_RECONCILIATION = "Edit reconciliation"
-    /** The note of the closing row of an Account that is deleted. */
+    /** The note of the closing row of an Account that is deleted (SPEC R87). */
     const val ACCOUNT_CLOSED = "Account closed"
+    /** The note of the first row of an Account created with a balance (SPEC R86). */
+    const val OPENING_BALANCE = "Opening balance"
+    /** The note of a quick-add payment off an Account the user wrote no note for (SPEC R89). */
+    const val PAID_OFF = "Paid off"
+    /** The note of a quick-add increase on a Loan the user wrote no note for (SPEC R89). */
+    const val INCREASED = "Increased"
+    /** The name of a Loan taken from the calculator the user did not name (SPEC R91). */
+    const val LOAN = "Loan"
+    /** The name of a Loan's payment the user did not name (SPEC R91). */
+    const val LOAN_PAYMENT = "Loan payment"
+    /** The name of a goal made by saving for a loan instead, the user did not name (SPEC R91). */
+    const val SAVINGS_GOAL = "Savings goal"
     /** The note of the row that clears a Loan whose payment reached the end of its term (SPEC R72). */
     const val LOAN_FINISHED = "Loan finished"
 
