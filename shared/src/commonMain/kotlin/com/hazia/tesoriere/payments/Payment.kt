@@ -94,6 +94,15 @@ data class Payment(
     val bankKeys: BankKeys? = null,
 )
 
+/**
+ * What the engine flags about a recorded payment, for a warning the user can dismiss (SPEC R54).
+ * A code, not wording: how it reads is the design pass's (SPEC R16).
+ */
+enum class PaymentNotice {
+    /** Its source Goal was deleted: undoing, editing or removing it moves Savings in the Goal's place. */
+    SOURCE_GOAL_DELETED,
+}
+
 /** What the payment editor holds before it is saved. */
 data class PaymentDraft(
     val date: LocalDate,

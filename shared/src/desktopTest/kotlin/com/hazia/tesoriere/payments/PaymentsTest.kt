@@ -6,6 +6,8 @@ import com.hazia.tesoriere.Fixture.goal
 import com.hazia.tesoriere.Fixture.profile
 import com.hazia.tesoriere.TestClock
 import com.hazia.tesoriere.cents
+import com.hazia.tesoriere.engine.GoalEditing
+import com.hazia.tesoriere.engine.Writes
 import com.hazia.tesoriere.model.Account
 import com.hazia.tesoriere.model.AccountType
 import com.hazia.tesoriere.model.ProfileData
@@ -14,6 +16,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PaymentsTest {
@@ -116,6 +119,43 @@ class PaymentsTest {
         val d1 = Payments.record(d0, draft("40.00", PaymentSource.Account("card"), "groc" to "40.00"), clock, "pay-1")
         val d2 = Payments.remove(d1, "pay-1")
         assertEquals(d0, d2)
+    }
+
+    /** Savings 1,000.00; 100.00 into Trip; a 30.00 payment from Trip; Trip deleted with its 70.00 returned. */
+    private fun paidFromDeletedGoal(): ProfileData {
+        var d = profile(savings = "1,000.00", goals = listOf(goal("trip", "Trip")), categories = listOf(category("fun", "Fun"), category("groc", "Groceries")))
+        d = Writes.goalQuickAdd(d, "trip", cents("100.00"), null, clock, "t1")
+        d = Payments.record(d, draft("30.00", PaymentSource.Goal("trip"), "fun" to "30.00"), clock, "pay-1")
+        d = GoalEditing.delete(d, "trip", returnSaved = true, clock) { "t2" }
+        assertEquals(cents("970.00"), d.savings.amount)
+        return d
+    }
+
+    // SPEC:R54 SPEC:R58
+    @Test fun `R54 removing a payment from a deleted Goal returns its 30_00 to Savings`() {
+        val d = Payments.remove(paidFromDeletedGoal(), "pay-1")
+        assertEquals(cents("1,000.00"), d.savings.amount)
+        assertTrue(d.payments.isEmpty())
+    }
+
+    // SPEC:R54 SPEC:R25
+    @Test fun `R54 re-filing a deleted Goal's payment keeps its source and leaves Savings at 970_00`() {
+        val d0 = paidFromDeletedGoal()
+        val refiled = draft("30.00", PaymentSource.Goal("trip"), "fun" to "10.00", "groc" to "20.00")
+        assertTrue(Payments.canSave(d0, refiled, editing = "pay-1"))
+        val d1 = Payments.edit(d0, "pay-1", refiled)
+        assertEquals(cents("970.00"), d1.savings.amount)
+        assertEquals(PaymentSource.Goal("trip"), d1.payments.single().source)
+        assertEquals(cents("20.00"), Spent.of(d1, "groc", "2026-03"))
+    }
+
+    // SPEC:R54
+    @Test fun `R54 a deleted Goal's payment carries a warning code, and a new payment from it cannot be saved`() {
+        val d = paidFromDeletedGoal()
+        assertEquals(PaymentNotice.SOURCE_GOAL_DELETED, Payments.notice(d, "pay-1"))
+        assertFalse(Payments.canSave(d, draft("5.00", PaymentSource.Goal("trip"), "fun" to "5.00")))
+        val live = Payments.record(world(), draft("5.00", PaymentSource.Goal("trip"), "fun" to "5.00"), clock, "pay-2")
+        assertNull(Payments.notice(live, "pay-2"))
     }
 
     // SPEC:R21

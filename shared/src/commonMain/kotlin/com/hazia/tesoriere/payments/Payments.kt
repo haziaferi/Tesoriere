@@ -23,12 +23,20 @@ object Payments {
         if (draft.total <= 0 || draft.parts.isEmpty() || remainder(draft) != 0L) return false
         val categories = d.categories.mapTo(HashSet()) { it.id }
         if (draft.parts.any { it.amount == 0L || it.categoryId == null || it.categoryId !in categories }) return false
-        val base = editing?.let { id -> d.payments.firstOrNull { it.id == id }?.let { undo(d, it) } } ?: d
+        val old = editing?.let { id -> d.payments.firstOrNull { it.id == id } }
+        val base = old?.let { undo(d, it) } ?: d
         return when (val s = draft.source) {
             PaymentSource.Savings -> true
-            is PaymentSource.Goal -> base.goals.firstOrNull { it.id == s.id }?.let { draft.total <= it.saved } ?: false
+            // a Goal deleted since stays this payment's source; it moves Savings instead (SPEC R54)
+            is PaymentSource.Goal -> base.goals.firstOrNull { it.id == s.id }?.let { draft.total <= it.saved } ?: (old?.source == s)
             is PaymentSource.Account -> base.accounts.any { it.id == s.id }
         }
+    }
+
+    /** The warning code for a recorded payment, or null when there is none (SPEC R54). */
+    fun notice(d: ProfileData, paymentId: String): PaymentNotice? {
+        val source = d.payments.firstOrNull { it.id == paymentId }?.source as? PaymentSource.Goal ?: return null
+        return if (d.goals.none { it.id == source.id }) PaymentNotice.SOURCE_GOAL_DELETED else null
     }
 
     /** Records [draft] as a new payment and applies its source (SPEC R54). */
@@ -59,12 +67,17 @@ object Payments {
         return undo(d, p).copy(payments = d.payments.filter { it.id != paymentId })
     }
 
-    /** SPEC R54's table: Savings and a Goal go down by the total, an Account's balance goes up. */
-    private fun move(d: ProfileData, source: PaymentSource, total: Money): ProfileData = when (source) {
+    /**
+     * SPEC R54's table: Savings and a Goal go down by the total, an Account's balance goes up. A
+     * Goal deleted since moves Savings in its place.
+     */
+    private fun move(d: ProfileData, source: PaymentSource, total: Money): ProfileData = when {
         // touching Savings ends its unset state, counting from zero (SPEC R49)
-        PaymentSource.Savings -> d.copy(savings = d.savings.copy(amount = (d.savings.amount ?: 0) - total))
-        is PaymentSource.Goal -> d.copy(goals = d.goals.map { if (it.id == source.id) it.copy(saved = it.saved - total) else it })
-        is PaymentSource.Account -> d.copy(accounts = d.accounts.map { if (it.id == source.id) it.copy(balance = it.balance + total) else it })
+        source == PaymentSource.Savings || (source is PaymentSource.Goal && d.goals.none { it.id == source.id }) ->
+            d.copy(savings = d.savings.copy(amount = (d.savings.amount ?: 0) - total))
+        source is PaymentSource.Goal -> d.copy(goals = d.goals.map { if (it.id == source.id) it.copy(saved = it.saved - total) else it })
+        source is PaymentSource.Account -> d.copy(accounts = d.accounts.map { if (it.id == source.id) it.copy(balance = it.balance + total) else it })
+        else -> error("unknown payment source: $source")
     }
 
     private fun apply(d: ProfileData, p: Payment) = move(d, p.source, p.total)
