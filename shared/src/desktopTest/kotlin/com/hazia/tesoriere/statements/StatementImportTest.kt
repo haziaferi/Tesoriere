@@ -369,6 +369,26 @@ class StatementImportTest {
         assertEquals(listOf(true, false, true, false, false), review.map { it.include })
     }
 
+    // SPEC:R107 SPEC:R61 SPEC:R64
+    @Test fun `R107 with Telefono first due 10 March 2026, TELEFONO -12_00 on 6 March and TIM -29_90 on 10 February arrive READY, on 7 March RECURRING`() {
+        val d = world().let { w ->
+            w.copy(
+                recurringExpenses = w.recurringExpenses + Fixture.recurring(
+                    "tel", "29.90", Cadence.MONTHLY, firstDue = LocalDate(2026, 3, 10), categoryId = "home", name = "Telefono", lastSweptMonth = "2026-03",
+                ),
+            )
+        }
+        val rows = listOf(
+            BankRow(LocalDate(2026, 3, 6), -1200, "TELEFONO ABBONAMENTO", null),     // 4 days before the first due date
+            BankRow(LocalDate(2026, 2, 10), -2990, "TIM S.P.A.", null),              // the amount on a day before the chain starts
+        )
+        val review = StatementImport.review(d, rows, clock.today)
+        assertEquals(listOf(RowStatus.READY, RowStatus.READY), review.map { it.status })
+        assertTrue(review.all { it.include })
+        val near = StatementImport.review(d, listOf(BankRow(LocalDate(2026, 3, 7), -1200, "TELEFONO ABBONAMENTO", null)), clock.today)
+        assertEquals(RowStatus.RECURRING, near.single().status)
+    }
+
     // SPEC:R107 SPEC:R65
     @Test fun `R107 -29_90 on 10 March arrives RECURRING after the swept Telefono was edited to 34_90 with the difference declined`() {
         val c = TestClock(LocalDate(2026, 3, 1))

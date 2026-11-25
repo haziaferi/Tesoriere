@@ -59,7 +59,8 @@ import kotlin.math.abs
  * - An outflow is RECURRING also when its amount is a recurring expense's amount, or what its rows
  *   dated on that due date hold, within [RECURRING_DAYS] of one of its due dates (SPEC R107);
  *   Sci-Fin matched the expense's name only. A card's payment is left out of both matches, the
- *   name match included, which Sci-Fin applied to every expense.
+ *   name match included, which Sci-Fin applied to every expense. Neither match finds a row more
+ *   than [RECURRING_DAYS] before the expense's first due date: Sci-Fin's name match had no date.
  * - No wording: Sci-Fin's review notes are dropped (the status is the code, SPEC R16), and its
  *   target lists with their labels (`inflowTargets`, `outflowTargets`) are the design pass's.
  * - Names: ImportRow is BankRow, ImportStatus is RowStatus (with PAIR, set by pairing, SPEC R37),
@@ -358,10 +359,23 @@ object StatementImport {
         for (p in d.payments) p.bankKeys?.let { seen.addAll(keyStrings(it)) }
         // a card's payment is left out of both matches: its bank row is the payoff that lowers the card (SPEC R89, R93, R107)
         val byAmount = d.recurringExpenses.filter { !Recurring.paysCard(d, it) }
-        val recurring = byAmount.map { words(normalisePayee(it.name)) }.filter { it.isNotEmpty() }
-        /** Whether an outflow [r] is a recurring expense's bill by its amount and day (SPEC R107). */
+        val recurring = byAmount.map { it to words(normalisePayee(it.name)) }.filter { it.second.isNotEmpty() }
+        /**
+         * Whether an outflow [r] with payee words [pw] names a recurring expense (SPEC R107): whole
+         * words either way round, "Rent" is in "Affitto casa rent", not in "Parent teacher assoc";
+         * never for a row more than 3 days before the expense's first due date (SPEC R61).
+         */
+        fun named(r: BankRow, pw: List<String>): Boolean = pw.isNotEmpty() && recurring.any { (e, nw) ->
+            r.date >= e.firstDueDate.minusDays(RECURRING_DAYS) &&
+                (pw.windowed(nw.size).any { it == nw } || nw.windowed(pw.size).any { it == pw })
+        }
+        /**
+         * Whether an outflow [r] is a recurring expense's bill by its amount and day (SPEC R107):
+         * only due dates on the chain count, none before the first due date (SPEC R61).
+         */
         fun billOf(r: BankRow): Boolean = byAmount.any { e ->
             Recurring.dueDatesBetween(e, r.date.minusDays(RECURRING_DAYS), r.date.plusDays(RECURRING_DAYS)).any { due ->
+                if (due < e.firstDueDate) return@any false
                 // what its rows dated on that due date hold: an edit with the difference declined leaves the old amount there
                 val swept = d.transactions.filter { it.key == TransactionKey.RecurringKey(e.id).stored && it.date == due }.sumOf { it.amount }
                 -r.amount == e.amount || (swept > 0 && -r.amount == swept)
@@ -374,9 +388,7 @@ object StatementImport {
             val status = when {
                 keyStrings(keys).any { it in seen } -> RowStatus.DUPLICATE
                 r.amount > 0 -> RowStatus.INCOMING
-                // whole words either way round: "Rent" is in "Affitto casa rent", not in "Parent teacher assoc"
-                pw.isNotEmpty() && recurring.any { nw -> pw.windowed(nw.size).any { it == nw } || nw.windowed(pw.size).any { it == pw } } ->
-                    RowStatus.RECURRING
+                named(r, pw) -> RowStatus.RECURRING
                 // a bank seldom writes the expense's name: its amount within 3 days of a due date finds it too
                 billOf(r) -> RowStatus.RECURRING
                 else -> RowStatus.READY
