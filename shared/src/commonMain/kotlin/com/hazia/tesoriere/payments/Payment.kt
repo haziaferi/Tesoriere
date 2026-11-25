@@ -69,12 +69,13 @@ data class BankKeys(val fitid: String?, val synKey: String)
  * One line of a receipt, kept so each part can be traced to the lines it came from (SPEC R21).
  * The first six fields mirror a line of the receipt file (Chatelaine's spec, rule 123): [pack] is
  * absent when the line has none, [quantity] is a whole number of packs, [pricePaid] is in cents.
- * [categoryId] is the Tesoriere category the line was filed under.
+ * [categoryId] is the Tesoriere category the line was filed under. A line stored with no `pack`
+ * key reads as one with no pack.
  */
 @Serializable
 data class ReceiptLine(
     val name: String,
-    val pack: String?,
+    val pack: String? = null,
     val quantity: Int,
     val pricePaid: Money,
     val chatelaineCategoryId: String,

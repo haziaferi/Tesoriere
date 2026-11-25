@@ -310,19 +310,37 @@ class PaymentsTest {
     }
 
     // SPEC:R23 SPEC:R39
-    @Test fun `R23 a 42_10 payment with item parts of 30_00 and 12_30 and a -0_20 difference part saves, the -0_20 as an item part or two difference parts do not`() {
+    @Test fun `R23 a 42_10 pair with item parts of 30_00 and 12_30 and a -0_20 difference part saves, the -0_20 as an item part, two difference parts or one by hand do not`() {
         val d = world()
         fun pay(vararg parts: Part) = PaymentDraft(day, cents("42.10"), PaymentSource.Savings, "Corner shop", parts.toList())
         val items = arrayOf(Part("groc", cents("30.00")), Part("home", cents("12.30")))
-        assertTrue(Payments.canSave(d, pay(*items, Part("fun", cents("-0.20"), difference = true))))
-        assertFalse(Payments.canSave(d, pay(*items, Part("fun", cents("-0.20")))))
-        assertFalse(Payments.canSave(d, pay(*items, Part("fun", cents("-0.10"), difference = true), Part("fun", cents("-0.10"), difference = true))))
+        val diff = Part("fun", cents("-0.20"), difference = true)
+        assertTrue(Payments.canSave(d, pay(*items, diff), null, pairing = true))
+        assertFalse(Payments.canSave(d, pay(*items, diff)), "only pairing writes a difference part")
+        assertFailsWith<IllegalArgumentException> { Payments.record(d, pay(*items, diff), clock, "pay-1") }
+        assertFalse(Payments.canSave(d, pay(*items, Part("fun", cents("-0.20"))), null, pairing = true))
+        assertFalse(Payments.canSave(d, pay(*items, Part("fun", cents("-0.10"), difference = true), Part("fun", cents("-0.10"), difference = true)), null, pairing = true))
         // a refund's difference part may be positive; its item parts stay negative
         val refund = PaymentDraft(day, cents("-14.80"), PaymentSource.Savings, null, listOf(Part("fun", cents("-15.00")), Part("fun", cents("0.20"), difference = true)))
-        assertTrue(Payments.canSave(d, refund))
-        val p = Payments.record(d, pay(*items, Part("fun", cents("-0.20"), difference = true)), clock, "pay-1").payments.single()
+        assertTrue(Payments.canSave(d, refund, null, pairing = true))
+        // a pair holding its difference part can be edited, its item parts moved and the difference kept
+        val p = Payment("pay-1", Fixture.PROFILE, day, clock.now(), cents("42.10"), PaymentSource.Savings, "Corner shop", listOf(*items, diff))
+        val held = d.copy(payments = listOf(p))
+        assertTrue(Payments.canSave(held, pay(Part("groc", cents("42.30")), diff), editing = "pay-1"))
+        assertFalse(Payments.canSave(held, pay(Part("groc", cents("42.30")), Part("fun", cents("-0.10"), difference = true), Part("fun", cents("-0.10"), difference = true)), editing = "pay-1"))
         assertEquals(p, Json.decodeFromString(Payment.serializer(), Json.encodeToString(Payment.serializer(), p)))
-        assertTrue(p.parts.last().difference)
+    }
+
+    // SPEC:R21
+    @Test fun `R21 a receipt line stored with no pack key reads as a line with no pack`() {
+        val text = """{"name":"pasta","quantity":1,"pricePaid":240,"chatelaineCategoryId":"ch-groc","chatelaineCategoryName":"Groceries","categoryId":"groc"}"""
+        assertNull(Json.decodeFromString(ReceiptLine.serializer(), text).pack)
+    }
+
+    // SPEC:R125
+    @Test fun `R125 putting back a payment whose id is already recorded changes nothing`() {
+        val d = Payments.record(world(), draft("42.30", PaymentSource.Savings, "groc" to "42.30"), clock, "pay-1")
+        assertEquals(d, Payments.reinstate(d, d.payments.single(), settled = false, clock, "tx-1"))
     }
 
     // SPEC:R21 SPEC:R20

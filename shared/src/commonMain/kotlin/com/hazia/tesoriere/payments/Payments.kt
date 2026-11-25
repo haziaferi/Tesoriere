@@ -35,16 +35,22 @@ object Payments {
      * (SPEC R39), adding up to the total (SPEC R23),
      * and a source that exists. A Goal short of the total is no reason to refuse: Savings pays
      * the rest, after the warning of [draftNotice] (SPEC R54). When [editing] names the payment
-     * being edited, its own effect counts as undone.
+     * being edited, its own effect counts as undone. A difference part is taken only when the
+     * payment being edited holds one already: only pairing writes one (SPEC R23).
      */
-    fun canSave(d: ProfileData, draft: PaymentDraft, editing: String? = null): Boolean {
+    fun canSave(d: ProfileData, draft: PaymentDraft, editing: String? = null): Boolean = canSave(d, draft, editing, pairing = false)
+
+    /** [canSave] for pairing (SPEC R39, R119), the one caller that may write a difference part. */
+    internal fun canSave(d: ProfileData, draft: PaymentDraft, editing: String?, pairing: Boolean): Boolean {
         if (draft.total == 0L || draft.parts.isEmpty() || remainder(draft) != 0L) return false
         val categories = d.categories.mapTo(HashSet()) { it.id }
         val refund = draft.total < 0
-        // a pair's difference part, at most one, may have the other sign (SPEC R23, R39)
-        if (draft.parts.count { it.difference } > 1) return false
-        if (draft.parts.any { it.amount == 0L || (!it.difference && (it.amount < 0) != refund) || it.categoryId == null || it.categoryId !in categories }) return false
         val old = editing?.let { id -> d.payments.firstOrNull { it.id == id } }
+        // a pair's difference part, at most one, may have the other sign (SPEC R23, R39); only pairing
+        // writes one, and an edit keeps one the payment already holds
+        if (draft.parts.count { it.difference } > 1) return false
+        if (draft.parts.any { it.difference } && !pairing && old?.parts?.any { it.difference } != true) return false
+        if (draft.parts.any { it.amount == 0L || (!it.difference && (it.amount < 0) != refund) || it.categoryId == null || it.categoryId !in categories }) return false
         val base = old?.let { undo(d, it) } ?: d
         return when (val s = draft.source) {
             PaymentSource.Savings -> true
@@ -109,9 +115,13 @@ object Payments {
      * What a Goal deleted since moves in Savings is logged as one `savings` row [txId], dated
      * today, when it is not zero.
      */
-    fun edit(d: ProfileData, paymentId: String, draft: PaymentDraft, clock: Clock, txId: String): ProfileData {
+    fun edit(d: ProfileData, paymentId: String, draft: PaymentDraft, clock: Clock, txId: String): ProfileData =
+        edit(d, paymentId, draft, clock, txId, pairing = false)
+
+    /** [edit] for pairing (SPEC R119), which may write a difference part (SPEC R23, R39). */
+    internal fun edit(d: ProfileData, paymentId: String, draft: PaymentDraft, clock: Clock, txId: String, pairing: Boolean): ProfileData {
         val old = d.payments.first { it.id == paymentId }
-        require(canSave(d, draft, editing = paymentId)) { "the payment cannot be saved" }
+        require(canSave(d, draft, paymentId, pairing)) { "the payment cannot be saved" }
         val new = old.copy(
             date = draft.date, total = draft.total, source = draft.source, payee = draft.payee?.takeIf { it.isNotBlank() }, parts = draft.parts,
             fromSavings = fromSavings(d, draft, editing = paymentId),
@@ -143,9 +153,11 @@ object Payments {
      * the rest, the payment's [Payment.fromSavings] growing by it (SPEC R54). A Goal or an Account
      * deleted since its removal moves as for any payment of a deleted source: one `savings` or
      * `acct:` row [txId], dated today. When [settled], the source was deleted before the removal,
-     * whose row the caller undoes instead, so no row is written here.
+     * whose row the caller undoes instead, so no row is written here. A payment whose id is in the
+     * Profile already is not put back a second time: [d] comes back unchanged.
      */
     fun reinstate(d: ProfileData, p: Payment, settled: Boolean, clock: Clock, txId: String): ProfileData {
+        if (d.payments.any { it.id == p.id }) return d
         val back = reinstated(d, p, settled)
         val at = d.payments.indexOfFirst { it.loggedAt > back.loggedAt }.let { if (it < 0) d.payments.size else it }
         var next = apply(d, back).copy(payments = d.payments.subList(0, at) + back + d.payments.subList(at, d.payments.size))

@@ -497,6 +497,19 @@ class PairingTest {
         assertEquals(RowStatus.READY, review[1].status)
     }
 
+    // SPEC:R119
+    @Test fun `R119 an unknown payment id gives no draft, no notice and PAYMENT_NOT_PAIRABLE, never a throw`() {
+        val d = world()
+        val rr = reviewOf(d, row("42.30", on(12))).single()
+        assertNull(Pairing.bankPairDraft(d, "nope", rr, null))
+        assertNull(Pairing.bankPairNotice(d, "nope", rr, null))
+        assertEquals(PairProblem.PAYMENT_NOT_PAIRABLE, Pairing.bankPairProblem(d, "nope", rr, null))
+        val review = Receipts.open(d, shop())
+        assertNull(Pairing.receiptPairDraft(d, "nope", review, null))
+        assertNull(Pairing.receiptPairNotice(d, "nope", review, null))
+        assertEquals(PairProblem.PAYMENT_NOT_PAIRABLE, Pairing.receiptPairProblem(d, "nope", review, null))
+    }
+
     // SPEC:R119 SPEC:R107
     @Test fun `R119 two -4_50 rows with no FITID and one 4_50 receipt under Food, the first paired and the second ticked, leave two payments and Food at 9_00`() {
         val base = world().let { it.copy(categories = it.categories + category("food", "Food")) }
