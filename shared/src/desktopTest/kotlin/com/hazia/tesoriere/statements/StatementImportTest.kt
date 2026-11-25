@@ -261,6 +261,32 @@ class StatementImportTest {
         assertEquals(clock.today, after.importState.lastImportDate)
     }
 
+    // SPEC:R107 SPEC:R89 SPEC:R93
+    @Test fun `R107 a -60_00 payoff of a card linked to its fixed payment leaves Savings 2,395_30 by default and 2,335_30 with the pair on`() {
+        val linked = world().let { w ->
+            w.copy(
+                accounts = w.accounts.map { it.copy(linkedRecurringExpenseId = "orbita-pay") },
+                recurringExpenses = w.recurringExpenses + Fixture.recurring(
+                    "orbita-pay", "60.00", Cadence.MONTHLY, firstDue = LocalDate(2026, 4, 20), categoryId = "home",
+                    name = "Orbita card payment", linkedAccountId = "orbita", lastSweptMonth = "2026-03",
+                ),
+            )
+        }
+        val filed = marchFiled(linked)
+        val byDefault = StatementImport.confirm(linked, filed, clock, ids::next)
+        assertEquals(cents("240.00"), byDefault.accounts.single().balance)
+        assertEquals(cents("2,395.30"), byDefault.savings.amount)                     // the sweep moves Savings, not the payoff
+        assertTrue(byDefault.transactions.none { it.key == "savings" && it.amount == cents("-60.00") })
+        val paired = filed.map { if (it.row.description == "PAGAMENTO CARTA ORBITA") it.copy(payoffPairSavings = true) else it }
+        val after = StatementImport.confirm(linked, paired, clock, ids::next)
+        assertEquals(cents("240.00"), after.accounts.single().balance)
+        assertEquals(cents("2,335.30"), after.savings.amount)
+        // a card linked to nothing pairs by default, and the pair can be turned off for the row
+        assertEquals(cents("2,335.30"), StatementImport.confirm(world(), marchFiled(world()), clock, ids::next).savings.amount)
+        val off = marchFiled(world()).map { if (it.row.description == "PAGAMENTO CARTA ORBITA") it.copy(payoffPairSavings = false) else it }
+        assertEquals(cents("2,395.30"), StatementImport.confirm(world(), off, clock, ids::next).savings.amount)
+    }
+
     // SPEC:R107, R50
     @Test fun `R107 the 1,450_00 salary sent on into a Goal holding 110_00 leaves it 1,560_00 and Savings 885_30`() {
         val d = world()
