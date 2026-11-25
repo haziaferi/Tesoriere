@@ -239,3 +239,4 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R107 · changed · a share row lowers no floor and matches no bill: only sweeps of a due date do · builder
 - 2026-11-25 · R109 · changed · a statement refund to a card whose charges are not logged carries the same warning as a payment · builder
 - 2026-11-25 · R111 · changed · undoing a statement payoff keeps its keys; the row returns unticked as already recorded and can be ticked · builder
+- 2026-11-25 · R111 · changed · undoing a quick-add on unset Savings leaves Savings at 0.00, not unset · builder

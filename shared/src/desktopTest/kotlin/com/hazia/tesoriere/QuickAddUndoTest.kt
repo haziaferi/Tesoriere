@@ -52,6 +52,16 @@ class QuickAddUndoTest {
         assertEquals(d0, undone)
     }
 
+    // SPEC:R111 SPEC:R49
+    @Test fun `R111 on a Profile whose Savings is unset, a card paid 60_00 from Savings and undone leaves Savings at 0_00, not unset`() {
+        val d0 = world().copy(savings = world().savings.copy(amount = null))
+        val paid = d0.paid("60.00", Accounts.PayoffFrom.Savings)
+        assertEquals(cents("-60.00"), paid.savings.amount)
+        val undone = Accounts.undoQuickAdd(paid, paid.lastGroup())
+        assertEquals(0L, undone.savings.amount)
+        assertEquals(cents("100.00"), undone.accounts.single().balance)
+    }
+
     // SPEC:R111 SPEC:R51
     @Test fun `R111 paid 60_00 from a Goal holding 80_00 and undone, the Goal holds 80_00, and a second quick-add is untouched`() {
         val d1 = world().paid("20.00", Accounts.PayoffFrom.None)
