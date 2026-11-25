@@ -162,3 +162,4 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R67 · changed · a return can leave a month's spent below zero, as intended · builder
 - 2026-11-25 · R62 · changed · the monthly share is what counts in spent and Spending each month, never the whole bill in the month the bank pays it · builder
 - 2026-11-25 · R99 · changed · a bimonthly or yearly expense counts its share each month, not its whole amount in the month the bank pays it · builder
+- 2026-11-25 · R107 · changed · the name match leaves a card's payment out too, as the amount match does · builder

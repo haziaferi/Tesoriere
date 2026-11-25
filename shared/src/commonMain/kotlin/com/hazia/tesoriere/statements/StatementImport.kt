@@ -57,8 +57,9 @@ import kotlin.math.abs
  *   confirmSummary() gives the count and the money out and in apart, the figures of Sci-Fin's
  *   `importSummary()` line, as figures with no sentence (SPEC R16, R107).
  * - An outflow is RECURRING also when its amount is a recurring expense's amount, or what its rows
- *   dated on that due date hold, within [RECURRING_DAYS] of one of its due dates, unless the
- *   expense is a card's payment (SPEC R107); Sci-Fin matched the expense's name only.
+ *   dated on that due date hold, within [RECURRING_DAYS] of one of its due dates (SPEC R107);
+ *   Sci-Fin matched the expense's name only. A card's payment is left out of both matches, the
+ *   name match included, which Sci-Fin applied to every expense.
  * - No wording: Sci-Fin's review notes are dropped (the status is the code, SPEC R16), and its
  *   target lists with their labels (`inflowTargets`, `outflowTargets`) are the design pass's.
  * - Names: ImportRow is BankRow, ImportStatus is RowStatus (with PAIR, set by pairing, SPEC R37),
@@ -355,9 +356,9 @@ object StatementImport {
     fun review(d: ProfileData, rows: List<BankRow>, today: LocalDate): List<ReviewRow> {
         val seen = d.importState.importedKeys.toHashSet()
         for (p in d.payments) p.bankKeys?.let { seen.addAll(keyStrings(it)) }
-        val recurring = d.recurringExpenses.map { words(normalisePayee(it.name)) }.filter { it.isNotEmpty() }
-        // a card's payment is left out: its bank row is the payoff that lowers the card (SPEC R89, R93, R107)
+        // a card's payment is left out of both matches: its bank row is the payoff that lowers the card (SPEC R89, R93, R107)
         val byAmount = d.recurringExpenses.filter { !Recurring.paysCard(d, it) }
+        val recurring = byAmount.map { words(normalisePayee(it.name)) }.filter { it.isNotEmpty() }
         /** Whether an outflow [r] is a recurring expense's bill by its amount and day (SPEC R107). */
         fun billOf(r: BankRow): Boolean = byAmount.any { e ->
             Recurring.dueDatesBetween(e, r.date.minusDays(RECURRING_DAYS), r.date.plusDays(RECURRING_DAYS)).any { due ->

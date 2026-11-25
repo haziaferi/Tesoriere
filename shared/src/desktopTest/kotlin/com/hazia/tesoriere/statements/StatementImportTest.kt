@@ -400,6 +400,26 @@ class StatementImportTest {
         assertTrue(review.row("PAGAMENTO CARTA ORBITA").include)
     }
 
+    // SPEC:R107 SPEC:R93
+    @Test fun `R107 ORBITA CARD PAYMENT 0412 -60_00, holding the name of the card's fixed payment, arrives READY`() {
+        val linked = world().let { w ->
+            w.copy(
+                accounts = w.accounts.map { it.copy(linkedRecurringExpenseId = "orbita-pay") },
+                recurringExpenses = w.recurringExpenses + Fixture.recurring(
+                    "orbita-pay", "60.00", Cadence.MONTHLY, firstDue = LocalDate(2026, 2, 18), categoryId = "home",
+                    name = "Orbita card payment", linkedAccountId = "orbita", lastSweptMonth = "2026-03",
+                ),
+            )
+        }
+        val row = BankRow(LocalDate(2026, 3, 25), -6000, "ORBITA CARD PAYMENT 0412", null)
+        val review = StatementImport.review(linked, listOf(row), clock.today).single()
+        assertEquals(RowStatus.READY, review.status)
+        assertTrue(review.include)
+        // the same name on an expense linked to no card still finds it
+        val unlinked = linked.copy(recurringExpenses = linked.recurringExpenses.map { it.copy(linkedAccountId = null) })
+        assertEquals(RowStatus.RECURRING, StatementImport.review(unlinked, listOf(row), clock.today).single().status)
+    }
+
     // SPEC:R107, R50
     @Test fun `R107 the 1,450_00 salary sent on into a Goal holding 110_00 leaves it 1,560_00 and Savings 885_30`() {
         val d = world()
