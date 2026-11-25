@@ -1382,7 +1382,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R104 · Statement amounts
 
-**Rule:** A statement amount is read into whole cents with whole-number arithmetic only (R20). Characters other than digits, `.`, `,`, `-`, `+` and brackets are ignored; brackets, a leading minus or a trailing minus make it negative. When both `.` and `,` appear, the last one is the decimal point; when one appears, exactly three digits after its last occurrence mark a thousands separator, and any other count a decimal point, with a third decimal rounding the cent half up.
+**Rule:** A statement amount is read into whole cents with whole-number arithmetic only (R20): a text holding `/`, `:` or a letter other than a trailing `DR` or `CR` is no amount, since a day or a time is not one, and other characters besides digits, `.`, `,`, signs and brackets are ignored. Brackets, a leading or trailing minus, written `-`, `−` or `–`, or a trailing `DR` make it negative, and a trailing `CR` makes it positive. When both `.` and `,` appear, the last one is the decimal point; when one appears, exactly three digits after its last occurrence mark a thousands separator, and any other count a decimal point, with a third decimal rounding the cent half up.
 
 **Values:**
 
@@ -1398,19 +1398,22 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 | `1,450` | 145000 |
 | `€ 9.5` | 950 |
 | `12,345.678` | 1234568 |
-| empty, `abc` | no amount |
+| `−12,40`, `–12,40` | -1240 |
+| `12,40 DR` | -1240 |
+| `12,40 CR` | 1240 |
+| empty, `abc`, `04/03/2026`, `10:30`, `EUR 12,40` | no amount |
 
-**Evidence:** Sci-Fin's spec, section 4.3, and `engine/Import.kt` at `2892110`, whose amounts went through a floating-point number.
+**Evidence:** Sci-Fin's spec, section 4.3, and `engine/Import.kt` at `2892110`, whose amounts went through a floating-point number. The minus signs, the `DR` and `CR` suffixes and the texts that are no amount: builder, 2026-11-25, after review of PR 3.
 
 **Acceptance:** Each text in the table reads as its figure in cents; the parser holds no floating-point value.
 
-**Not:** Sci-Fin's floating-point parser: a cent can be lost on the way to a whole number.
+**Not:** Sci-Fin's floating-point parser: a cent can be lost on the way to a whole number. Reading the digits of a day as an amount: `04/03/2026` would be 403,202.60.
 
 **Since:** 2026-11-25 · builder · own words
 
 ### D-R105 · CSV columns by header
 
-**Rule:** A CSV statement's columns are found from the words of its header, never by position: the fields in the order below, each trying its keywords in order and never taking a column another field took. A keyword matches a header that is the keyword, the keyword plus one more word, or a single word containing it, and a header equal to the keyword wins over those. Each row takes the signed amount when it reads, else its debit as money out, else its credit as money in; a statement with no date column, or with no amount, debit or credit column, gives no rows.
+**Rule:** A CSV statement's columns are found from the words of its header, never by position: the fields in the order below, each trying its keywords in order and never taking a column another field took. A keyword matches a header that is the keyword, the keyword plus one more word, or a single word containing it, and a header equal to the keyword wins over those; the amount keyword `value` never matches a header holding the word `date`. Each row takes the signed amount when it reads, else its debit as money out, else its credit as money in; a statement with no date column, or with no amount, debit or credit column, gives no rows.
 
 **Values:**
 
@@ -1424,7 +1427,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Evidence:** Sci-Fin's spec, section 4.3, and `engine/Import.kt` at `2892110`.
 
-**Acceptance:** Headers `Booking date,Value date,Description,Amount` with `01/09/2026,02/09/2026,POS CAFFE DEL MOLO,-3.50` give one row of -3.50 on 2026-09-01. Headers `Date,Credit card number,Description,Debit,Credit` with a debit of `800.00` and a credit of `12.00` give -800.00 and 12.00. Headers `Buchungsdatum;Verwendungszweck;Umsatzbetrag` with `01.09.2026;MIETE WOHNUNG;-800,00` give one row of -800.00. Headers `a;b;c` give no rows.
+**Acceptance:** Headers `Booking date,Value date,Description,Amount` with `01/09/2026,02/09/2026,POS CAFFE DEL MOLO,-3.50` give one row of -3.50 on 2026-09-01, and headers `Booking date,Value date,Description,Debit,Credit` with the same days, a debit of `3.50` and an empty credit give the same row. Headers `Date,Credit card number,Description,Debit,Credit` with a debit of `800.00` and a credit of `12.00` give -800.00 and 12.00. Headers `Buchungsdatum;Verwendungszweck;Umsatzbetrag` with `01.09.2026;MIETE WOHNUNG;-800,00` give one row of -800.00. Headers `a;b;c` give no rows.
 
 **Not:** Reading columns by position: banks order them differently, and a wrong column would file a day as an amount.
 
@@ -1827,7 +1830,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R26 · Statement import: Importing the same OFX statement twice records nothing the second time; importing a CSV export of the same period also records nothing; a payee filed under a category once is pre-filled on the next statement. A row of -12.40 on 2026-03-03 described `POS MERCATO VERDE 0412` has the synthetic key `syn:2026-03-03|-12.40|pos mercato verde 0412`.
 - R103 · Statement formats: An OFX block posted `20260303120000` of `-12.40` reads as 2026-03-03 and -12.40; a block with a memo and no name takes the memo; a block of `0.00` gives no row. A semicolon CSV with the quoted description `POS BAR` and `LA PIAZZETTA` on two lines gives one row described `POS BAR LA PIAZZETTA`.
 - R104 · Statement amounts: Each text in the table reads as its figure in cents; the parser holds no floating-point value.
-- R105 · CSV columns by header: Headers `Booking date,Value date,Description,Amount` with `01/09/2026,02/09/2026,POS CAFFE DEL MOLO,-3.50` give one row of -3.50 on 2026-09-01. Headers `Date,Credit card number,Description,Debit,Credit` with a debit of `800.00` and a credit of `12.00` give -800.00 and 12.00. Headers `Buchungsdatum;Verwendungszweck;Umsatzbetrag` with `01.09.2026;MIETE WOHNUNG;-800,00` give one row of -800.00. Headers `a;b;c` give no rows.
+- R105 · CSV columns by header: Headers `Booking date,Value date,Description,Amount` with `01/09/2026,02/09/2026,POS CAFFE DEL MOLO,-3.50` give one row of -3.50 on 2026-09-01, and headers `Booking date,Value date,Description,Debit,Credit` with the same days, a debit of `3.50` and an empty credit give the same row. Headers `Date,Credit card number,Description,Debit,Credit` with a debit of `800.00` and a credit of `12.00` give -800.00 and 12.00. Headers `Buchungsdatum;Verwendungszweck;Umsatzbetrag` with `01.09.2026;MIETE WOHNUNG;-800,00` give one row of -800.00. Headers `a;b;c` give no rows.
 - R106 · Statement dates: Each text in the table reads as its day; `05/03/2026` in a CSV statement is 5 March.
 - R107 · The import review: With Savings at 1,000.00, a recurring expense named Rent and the March OFX statement: `AFFITTO CASA RENT` -950.00 arrives `RECURRING` and unticked, `STIPENDIO MARZO` 1,450.00 `INCOMING`; filing -12.40 under Groceries, splitting -42.30 into Pharmacy 30.00 and Household 12.30, and paying off a card at 300.00 with -60.00 names 4 rows, 114.70 out and 1,450.00 in, and leaves Savings at 2,335.30 and the card at 240.00. The same 1,450.00 sent on into a Goal holding 110.00 leaves the Goal at 1,560.00 and Savings at 885.30, with a `savings` row of +1,450.00 and a `goal:` row of +1,450.00 dated 7 March; a Goal deleted before Confirm leaves it in Savings. Rows of -100.00 and -14.00 both from a Goal holding 110.00 keep Confirm off; with only the first it is on and leaves the Goal at 10.00.
 - R108 · Payee rules: `POS MERCATO VERDE 0412` filed under Groceries in March arrives in April's review with one part of 18.75 in Groceries, from Savings; `FARMACIA SAN LORENZO` split into Pharmacy and Household teaches no rule; the payee of `POS*MERCATO-VERDE  0412` is `pos mercato verde 0412`.

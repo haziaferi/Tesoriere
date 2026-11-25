@@ -140,3 +140,5 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R107 · changed · money in can go on into a Goal, as in Sci-Fin · builder
 - 2026-11-25 · R107 · changed · Confirm names the count, the money out and the money in apart · builder
 - 2026-11-25 · R26 · changed · Confirm names the money out and the money in apart · builder
+- 2026-11-25 · R104 · changed · a text holding a slash, a colon or a letter is no amount; Unicode minus signs and DR/CR suffixes read · builder
+- 2026-11-25 · R105 · changed · the amount keyword value never takes a Value date column · builder
