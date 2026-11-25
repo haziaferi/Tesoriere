@@ -294,7 +294,7 @@ class StatementImportTest {
 
         val filed = marchFiled(d)
         assertTrue(StatementImport.canConfirm(d, filed))
-        assertEquals(ConfirmSummary(count = 4, moneyOut = cents("114.70"), moneyIn = cents("1,450.00")), StatementImport.confirmSummary(filed))
+        assertEquals(ConfirmSummary(count = 4, moneyOut = cents("114.70"), moneyIn = cents("1,450.00")), StatementImport.confirmSummary(d, filed))
         val after = StatementImport.confirm(d, filed, clock, ids::next)
 
         assertEquals(cents("2,335.30"), after.savings.amount)
@@ -588,7 +588,7 @@ class StatementImportTest {
         val d = world()
         val filed = marchFiled(d).map { if (it.row.description == "STIPENDIO MARZO") it.copy(incomingGoalId = "cash") else it }
         assertTrue(StatementImport.canConfirm(d, filed))
-        assertEquals(ConfirmSummary(4, cents("114.70"), cents("1,450.00")), StatementImport.confirmSummary(filed))
+        assertEquals(ConfirmSummary(4, cents("114.70"), cents("1,450.00")), StatementImport.confirmSummary(d, filed))
         val after = StatementImport.confirm(d, filed, clock, ids::next)
         assertEquals(cents("1,560.00"), after.goals.single().saved)
         assertEquals(cents("885.30"), after.savings.amount)
@@ -669,7 +669,7 @@ class StatementImportTest {
         assertEquals(RowStatus.INCOMING, review.single().status)
         val refund = review.map { it.copy(draft = StatementImport.draft(it.row, listOf(Part("home", -2500)))) }
         assertTrue(StatementImport.canConfirm(d, refund))
-        assertEquals(ConfirmSummary(1, 0, cents("25.00")), StatementImport.confirmSummary(refund))
+        assertEquals(ConfirmSummary(1, 0, cents("25.00")), StatementImport.confirmSummary(d, refund))
         val after = StatementImport.confirm(d, refund, clock, ids::next)
         val p = after.payments.single()
         assertEquals(listOf(-2500L, -2500L), listOf(p.total, Spent.of(after, "home", "2026-03")))

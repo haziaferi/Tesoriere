@@ -260,7 +260,7 @@ class PairingTest {
         val imported = StatementImport.confirm(d1, ticked, clock) { "imp-1" }
         assertEquals(d1.payments, imported.payments)
         assertEquals(d1.savings, imported.savings)
-        assertEquals(0, StatementImport.confirmSummary(ticked).count)
+        assertEquals(0, StatementImport.confirmSummary(d1, ticked).count)
         // the user turns the suggestion down: the row is recorded as its own payment
         val declined = ticked.map { it.copy(pairPaymentId = null) }
         assertEquals(2, StatementImport.confirm(d1, declined, clock) { "imp-1" }.payments.size)
@@ -461,5 +461,27 @@ class PairingTest {
         assertEquals(cents("957.70"), d2.savings.amount)
         val t = d2.transactions.single { it.key == "acct:card" }
         assertEquals(cents("42.30"), t.amount)
+    }
+
+    // SPEC:R118
+    @Test fun `R118 42_30 receipts of 10 and 11 March with rows on 11 and 14 March name both pairs`() {
+        val d1 = recordReceipt(recordReceipt(world(), shop("rc-1", on(10)), id = "pay-10"), shop("rc-2", on(11)), id = "pay-11")
+        val review = reviewOf(d1, row("42.30", on(14), fitid = "F-14"), row("42.30", on(11), fitid = "F-11"))
+        assertEquals(listOf(on(14) to "pay-11", on(11) to "pay-10"), review.map { it.row.date to it.pairPaymentId })
+        assertTrue(review.all { it.status == RowStatus.PAIR && !it.include })
+    }
+
+    // SPEC:R107 SPEC:R119
+    @Test fun `R107 a ticked duplicate of an earlier import with no FITID is recorded again`() {
+        val d0 = world()
+        val coffee = BankRow(on(11), -cents("3.50"), "BAR CENTRALE", null)
+        fun filed(d: ProfileData) = reviewOf(d, coffee).map { it.copy(include = true, draft = StatementImport.draft(it.row, listOf(Part("fun", cents("3.50"))))) }
+        val d1 = StatementImport.confirm(d0, filed(d0), clock) { "pay-1" }
+        val again = filed(d1)
+        assertEquals(RowStatus.DUPLICATE, again.single().status)
+        assertEquals(1, StatementImport.confirmSummary(d1, again).count)
+        val d2 = StatementImport.confirm(d1, again, clock) { "pay-2" }
+        assertEquals(2, d2.payments.size)
+        assertEquals(cents("993.00"), d2.savings.amount)
     }
 }

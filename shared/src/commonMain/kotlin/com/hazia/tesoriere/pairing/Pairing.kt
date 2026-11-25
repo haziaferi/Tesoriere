@@ -93,11 +93,13 @@ object Pairing {
             .map { it.second.id to it.third }
 
     /**
-     * Which payment each row of [rows] names in the import review (SPEC R118): every pair of a row
-     * in [eligible] (money out, not recorded yet) and a receipt payment that [match] finds, taken
-     * across the whole statement in R118's order (the store's link, equal totals, the closest day,
-     * the earlier row, the row listed first, the payment recorded first), each row and each payment
-     * named once at most. Indices into [rows] to payment ids.
+     * Which payment each row of [rows] names in the import review (SPEC R118): as many rows in
+     * [eligible] (money out, not recorded yet) as possible each name a receipt payment that [match]
+     * finds, each row and each payment once at most, and R118's order (the store's link, equal
+     * totals, the closest day, the earlier row, the row listed first, the payment recorded first)
+     * decides among such choices. Rows are taken in the order of their best option and each tries
+     * its options in that order, displacing an earlier row's payment only along an augmenting path,
+     * which leaves that row a payment too (Kuhn's matching). Indices into [rows] to payment ids.
      */
     internal fun suggest(d: ProfileData, rows: List<BankRow>, eligible: Set<Int>): Map<Int, String> {
         class Option(val row: Int, val payment: Int, val match: Match)
@@ -110,14 +112,21 @@ object Pairing {
             { rank(d, payments[it.payment].payee ?: "", rows[it.row].description) }, { it.match.ordinal },
             { abs(payments[it.payment].date.daysTo(rows[it.row].date)) }, { rows[it.row].date }, { it.row }, { it.payment },
         ))
-        val named = HashMap<Int, String>()
-        val taken = HashSet<Int>()
-        for (o in options) {
-            if (o.row in named || o.payment in taken) continue
-            named[o.row] = payments[o.payment].id
-            taken += o.payment
+        // each row's options in R118's order; rows in the order of their best option
+        val byRow = LinkedHashMap<Int, MutableList<Int>>()
+        for (o in options) byRow.getOrPut(o.row) { mutableListOf() } += o.payment
+        val holder = HashMap<Int, Int>()          // payment index to the row naming it
+        fun augment(row: Int, seen: MutableSet<Int>): Boolean {
+            // a free payment first, in order; only then displace another row's, which must find another
+            byRow.getValue(row).firstOrNull { it !in holder && it !in seen }?.let { seen += it; holder[it] = row; return true }
+            for (p in byRow.getValue(row)) {
+                if (!seen.add(p)) continue
+                if (augment(holder.getValue(p), seen)) { holder[p] = row; return true }
+            }
+            return false
         }
-        return named
+        for (row in byRow.keys) augment(row, HashSet())
+        return holder.entries.associate { (p, row) -> row to payments[p].id }
     }
 
     /** The difference part of a pair (SPEC R39): the bank amount less the receipt's total, negative when the bank row is below it. */
