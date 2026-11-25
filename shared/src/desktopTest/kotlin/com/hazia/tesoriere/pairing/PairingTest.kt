@@ -11,7 +11,9 @@ import com.hazia.tesoriere.cents
 import com.hazia.tesoriere.model.Account
 import com.hazia.tesoriere.model.AccountType
 import com.hazia.tesoriere.model.ProfileData
+import com.hazia.tesoriere.engine.savingsAmount
 import com.hazia.tesoriere.payments.Part
+import com.hazia.tesoriere.payments.PaymentDraft
 import com.hazia.tesoriere.payments.PaymentNotice
 import com.hazia.tesoriere.payments.PaymentSource
 import com.hazia.tesoriere.payments.Payments
@@ -493,5 +495,25 @@ class PairingTest {
         )
         assertEquals(listOf(on(13) to "pay-q", on(12) to null, on(10) to "pay-p"), review.map { it.row.date to it.pairPaymentId })
         assertEquals(RowStatus.READY, review[1].status)
+    }
+
+    // SPEC:R119 SPEC:R107
+    @Test fun `R119 two -4_50 rows with no FITID and one 4_50 receipt under Food, the first paired and the second ticked, leave two payments and Food at 9_00`() {
+        val base = world().let { it.copy(categories = it.categories + category("food", "Food")) }
+        val d1 = recordReceipt(base, receipt("rc-c", "Bar Centrale", day, line("caffe", "4.50", "ch-food", "Food")))
+        val coffee = BankRow(on(11), -cents("4.50"), "BAR CENTRALE", null)
+        val review = reviewOf(d1, coffee, coffee)
+        val pairRow = review.single { it.status == RowStatus.PAIR }
+        val other = review.single { it.status != RowStatus.PAIR }
+        assertTrue(other.include)
+        val filed = other.copy(draft = PaymentDraft(coffee.date, cents("4.50"), PaymentSource.Savings, other.payee, listOf(Part("food", cents("4.50")))))
+        val paired = Pairing.pairBankWithPayment(d1, "pay-r", pairRow, null, clock, "tx-1")
+        val rows = listOf(pairRow, filed)
+        assertEquals(1, StatementImport.confirmSummary(paired, rows).count)
+        var n = 0
+        val after = StatementImport.confirm(paired, rows, clock) { "imp-${++n}" }
+        assertEquals(2, after.payments.size)
+        assertEquals(cents("991.00"), after.savingsAmount)
+        assertEquals(cents("9.00"), Spent.of(after, "food", "2026-03"))
     }
 }

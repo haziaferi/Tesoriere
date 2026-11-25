@@ -498,12 +498,12 @@ object StatementImport {
         val notices = MutableList<PaymentNotice?>(rows.size) { null }
         var rules = d.importState.payeeRules
         val keys = d.importState.importedKeys.toMutableList()
-        val onPayments = paymentKeys(d)
+        val since = pairedSince(d, rows)
         for (i in recordOrder(rows)) {
             val rr = rows[i]
             // a row named as a receipt's pair is recorded by pairing, never as new spending, and a row
-            // a payment holds the keys of since the review was built, paired by hand, is recorded already (SPEC R107, R118, R119)
-            if (!rr.include || rr.pairPaymentId != null || pairedSince(rr, onPayments)) continue
+            // a payment took the keys of since the review was built, paired by hand, is recorded already (SPEC R107, R118, R119)
+            if (!rr.include || rr.pairPaymentId != null || i in since) continue
             val r = rr.row
             val amt = abs(r.amount)
             val payoff = rr.payoffAccountId
@@ -562,15 +562,24 @@ object StatementImport {
     }
 
     /**
-     * A row paired by hand since the review was built (SPEC R119): it did not arrive DUPLICATE, and a
-     * payment holds one of its keys now. A row that arrived DUPLICATE is recorded when ticked (SPEC R107).
+     * The rows of [rows] paired since the review was built (SPEC R119), indices: a row that did not
+     * arrive DUPLICATE held keys no payment held then, so each payment holding such a row's keys now
+     * took them since, and stands for one row only, so a twin row with the same keys, as two equal
+     * coffees on one day with no FITID, is still recorded. Each payment takes the row naming it as
+     * its pair, else a row with the very keys it holds, else the first row sharing one of them. A
+     * row that arrived DUPLICATE is recorded when ticked (SPEC R107).
      */
-    private fun pairedSince(rr: ReviewRow, onPayments: Set<String>): Boolean =
-        rr.status != RowStatus.DUPLICATE && keyStrings(rr.keys).any { it in onPayments }
-
-    /** Every key a payment holds (SPEC R26). */
-    private fun paymentKeys(d: ProfileData): Set<String> =
-        d.payments.flatMapTo(HashSet()) { p -> p.bankKeys?.let { keyStrings(it) } ?: emptyList() }
+    private fun pairedSince(d: ProfileData, rows: List<ReviewRow>): Set<Int> {
+        val taken = HashSet<Int>()
+        for (p in d.payments) {
+            val held = p.bankKeys ?: continue
+            val pk = keyStrings(held).toSet()
+            val open = rows.indices.filter { it !in taken && rows[it].status != RowStatus.DUPLICATE && keyStrings(rows[it].keys).any { k -> k in pk } }
+            val pick = open.firstOrNull { rows[it].pairPaymentId == p.id } ?: open.firstOrNull { rows[it].keys == held } ?: open.firstOrNull() ?: continue
+            taken += pick
+        }
+        return taken
+    }
 
     /**
      * What the Confirm names against [d] as it stands (SPEC R107): the ticked rows' count, the money out
@@ -578,8 +587,8 @@ object StatementImport {
      * review was built (SPEC R119), is not counted.
      */
     fun confirmSummary(d: ProfileData, rows: List<ReviewRow>): ConfirmSummary {
-        val onPayments = paymentKeys(d)
-        val ticked = rows.filter { it.include && it.pairPaymentId == null && !pairedSince(it, onPayments) }
+        val since = pairedSince(d, rows)
+        val ticked = rows.filterIndexed { i, it -> it.include && it.pairPaymentId == null && i !in since }
         return ConfirmSummary(
             count = ticked.size,
             moneyOut = ticked.filter { it.row.amount < 0 }.sumOf { -it.row.amount },
