@@ -6,6 +6,7 @@ import com.hazia.tesoriere.Fixture.goal
 import com.hazia.tesoriere.Fixture.profile
 import com.hazia.tesoriere.TestClock
 import com.hazia.tesoriere.cents
+import com.hazia.tesoriere.engine.Accounts
 import com.hazia.tesoriere.engine.GoalEditing
 import com.hazia.tesoriere.engine.Writes
 import com.hazia.tesoriere.model.Account
@@ -157,6 +158,37 @@ class PaymentsTest {
         assertFalse(Payments.canSave(d, draft("5.00", PaymentSource.Goal("trip"), "fun" to "5.00")))
         val live = Payments.record(world(), draft("5.00", PaymentSource.Goal("trip"), "fun" to "5.00"), clock, "pay-2")
         assertNull(Payments.notice(live, "pay-2"))
+    }
+
+    /** A 40.00 payment under Groceries charged to Card, then Card deleted (SPEC R88). */
+    private fun chargedToDeletedCard(): ProfileData {
+        val d = Payments.record(world(), draft("40.00", PaymentSource.Account("card"), "groc" to "40.00"), clock, "pay-1")
+        return Accounts.deleteCascade(d, "card", clock) { "t-close" }.also { assertTrue(it.accounts.isEmpty()) }
+    }
+
+    // SPEC:R54 SPEC:R88
+    @Test fun `R54 a 40_00 payment charged to a deleted card carries a warning code, and a new payment to that card cannot be saved`() {
+        val d = chargedToDeletedCard()
+        assertEquals(PaymentNotice.SOURCE_ACCOUNT_DELETED, Payments.notice(d, "pay-1"))
+        assertFalse(Payments.canSave(d, draft("5.00", PaymentSource.Account("card"), "fun" to "5.00")))
+        val live = Payments.record(world(), draft("5.00", PaymentSource.Account("card"), "fun" to "5.00"), clock, "pay-2")
+        assertNull(Payments.notice(live, "pay-2"))
+    }
+
+    // SPEC:R54 SPEC:R88 SPEC:R25
+    @Test fun `R54 a 40_00 payment charged to a deleted card re-files into 25_00 and 15_00 or is removed, Savings staying 1,000_00`() {
+        val d0 = chargedToDeletedCard()
+        val refiled = draft("40.00", PaymentSource.Account("card"), "groc" to "25.00", "home" to "15.00")
+        assertTrue(Payments.canSave(d0, refiled, editing = "pay-1"))
+        val d1 = Payments.edit(d0, "pay-1", refiled)
+        assertEquals(PaymentSource.Account("card"), d1.payments.single().source)
+        assertEquals(cents("15.00"), Spent.of(d1, "home", "2026-03"))
+        assertEquals(cents("1,000.00"), d1.savings.amount)
+        assertTrue(d1.accounts.isEmpty())
+        val d2 = Payments.remove(d1, "pay-1")
+        assertTrue(d2.payments.isEmpty())
+        assertEquals(cents("1,000.00"), d2.savings.amount)
+        assertEquals(d0.transactions, d2.transactions)
     }
 
     // SPEC:R21

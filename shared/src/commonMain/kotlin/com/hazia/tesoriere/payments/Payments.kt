@@ -29,15 +29,18 @@ object Payments {
             PaymentSource.Savings -> true
             // a Goal deleted since stays this payment's source; it moves Savings instead (SPEC R54)
             is PaymentSource.Goal -> base.goals.firstOrNull { it.id == s.id }?.let { draft.total <= it.saved } ?: (old?.source == s)
-            is PaymentSource.Account -> base.accounts.any { it.id == s.id }
+            // an Account deleted since stays this payment's source and moves no balance (SPEC R54, R88)
+            is PaymentSource.Account -> base.accounts.any { it.id == s.id } || old?.source == s
         }
     }
 
-    /** The warning code for a recorded payment, or null when there is none (SPEC R54). */
-    fun notice(d: ProfileData, paymentId: String): PaymentNotice? {
-        val source = d.payments.firstOrNull { it.id == paymentId }?.source as? PaymentSource.Goal ?: return null
-        return if (d.goals.none { it.id == source.id }) PaymentNotice.SOURCE_GOAL_DELETED else null
-    }
+    /** The warning code for a recorded payment whose source was deleted since, or null when there is none (SPEC R54). */
+    fun notice(d: ProfileData, paymentId: String): PaymentNotice? =
+        when (val source = d.payments.firstOrNull { it.id == paymentId }?.source) {
+            is PaymentSource.Goal -> PaymentNotice.SOURCE_GOAL_DELETED.takeIf { d.goals.none { it.id == source.id } }
+            is PaymentSource.Account -> PaymentNotice.SOURCE_ACCOUNT_DELETED.takeIf { d.accounts.none { it.id == source.id } }
+            PaymentSource.Savings, null -> null
+        }
 
     /** Records [draft] as a new payment and applies its source (SPEC R54). */
     fun record(d: ProfileData, draft: PaymentDraft, clock: Clock, id: String): ProfileData {
@@ -69,7 +72,7 @@ object Payments {
 
     /**
      * SPEC R54's table: Savings and a Goal go down by the total, an Account's balance goes up. A
-     * Goal deleted since moves Savings in its place.
+     * Goal deleted since moves Savings in its place; an Account deleted since moves nothing.
      */
     private fun move(d: ProfileData, source: PaymentSource, total: Money): ProfileData = when {
         // touching Savings ends its unset state, counting from zero (SPEC R49)

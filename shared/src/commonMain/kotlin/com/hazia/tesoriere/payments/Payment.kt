@@ -103,6 +103,9 @@ data class Payment(
 enum class PaymentNotice {
     /** Its source Goal was deleted: undoing, editing or removing it moves Savings in the Goal's place. */
     SOURCE_GOAL_DELETED,
+
+    /** Its source Account was deleted: editing, re-filing or removing it moves no balance (SPEC R88). */
+    SOURCE_ACCOUNT_DELETED,
 }
 
 /** What the payment editor holds before it is saved. */
