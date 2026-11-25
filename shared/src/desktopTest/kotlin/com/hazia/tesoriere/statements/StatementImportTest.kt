@@ -209,7 +209,7 @@ class StatementImportTest {
     // ---- the review --------------------------------------------------------------------------------
 
     // SPEC:R107, R22, R54, R89
-    @Test fun `R107 the March review names 1,335_30 and leaves Savings at 2,335_30 and the card at 240_00`() {
+    @Test fun `R107 the March review names 4 rows, 114_70 out and 1,450_00 in, and leaves Savings at 2,335_30 and the card at 240_00`() {
         val d = world()
         val review = StatementImport.review(d, march(), clock.today)
         assertEquals(listOf(18, 10, 7, 5, 3), review.map { it.row.date.day })   // newest first
@@ -224,7 +224,7 @@ class StatementImportTest {
 
         val filed = marchFiled(d)
         assertTrue(StatementImport.canConfirm(d, filed))
-        assertEquals(cents("1,335.30"), StatementImport.confirmTotal(filed))
+        assertEquals(ConfirmSummary(count = 4, moneyOut = cents("114.70"), moneyIn = cents("1,450.00")), StatementImport.confirmSummary(filed))
         val after = StatementImport.confirm(d, filed, clock, ids::next)
 
         assertEquals(cents("2,335.30"), after.savings.amount)
@@ -244,6 +244,33 @@ class StatementImportTest {
         assertEquals(LocalDate(2026, 3, 18), after.transactions.first { it.key == "acct:orbita" }.date)
         assertEquals(8, after.importState.importedKeys.size)
         assertEquals(clock.today, after.importState.lastImportDate)
+    }
+
+    // SPEC:R107, R50
+    @Test fun `R107 the 1,450_00 salary sent on into a Goal holding 110_00 leaves it 1,560_00 and Savings 885_30`() {
+        val d = world()
+        val filed = marchFiled(d).map { if (it.row.description == "STIPENDIO MARZO") it.copy(incomingGoalId = "cash") else it }
+        assertTrue(StatementImport.canConfirm(d, filed))
+        assertEquals(ConfirmSummary(4, cents("114.70"), cents("1,450.00")), StatementImport.confirmSummary(filed))
+        val after = StatementImport.confirm(d, filed, clock, ids::next)
+        assertEquals(cents("1,560.00"), after.goals.single().saved)
+        assertEquals(cents("885.30"), after.savings.amount)
+        val salary = after.transactions.filter { it.payee == "STIPENDIO MARZO" }
+        assertEquals(listOf("savings" to cents("1,450.00"), "goal:cash" to cents("1,450.00")), salary.map { it.key to it.amount })
+        assertTrue(salary.all { it.date == LocalDate(2026, 3, 7) && !it.isIncome })
+        assertEquals(8, after.importState.importedKeys.size)
+    }
+
+    // SPEC:R107
+    @Test fun `R107 money in sent to a Goal deleted before Confirm stays in Savings, and an outflow sent into a Goal keeps Confirm off`() {
+        val d = world()
+        val filed = marchFiled(d).map { if (it.row.description == "STIPENDIO MARZO") it.copy(incomingGoalId = "gone") else it }
+        assertTrue(StatementImport.canConfirm(d, filed))
+        val after = StatementImport.confirm(d, filed, clock, ids::next)
+        assertEquals(cents("2,335.30"), after.savings.amount)
+        assertEquals(cents("110.00"), after.goals.single().saved)
+        val wrong = marchFiled(d).map { if (it.row.description == "POS MERCATO VERDE 0412") it.copy(incomingGoalId = "cash") else it }
+        assertFalse(StatementImport.canConfirm(d, wrong))
     }
 
     // SPEC:R23, R107

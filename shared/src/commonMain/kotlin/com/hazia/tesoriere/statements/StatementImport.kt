@@ -29,15 +29,18 @@ import kotlin.math.abs
  *   `spend:` a draft from a Goal, `charge:` a draft from an Account (SPEC R22, R54), and any of
  *   them may be split (SPEC R24). `payoff:` becomes [ReviewRow.payoffAccountId], written as
  *   Sci-Fin did through Accounts.quickAdd with the Savings pair on (SPEC R89).
- * - Money in goes to Savings only. Sci-Fin's choice of sending it on into a Goal is not ported:
- *   the review row has no field for it.
+ * - Money in goes to Savings, and on into a Goal when [ReviewRow.incomingGoalId] names one, as
+ *   Sci-Fin's `goal:<id>` target did: a `savings` row, then a goal quick-add of the same amount on
+ *   the same day; a Goal deleted before Confirm leaves the money in Savings (SPEC R107).
  * - Keys are a BankKeys (SPEC R26), and duplicates are also found against every payment's
  *   bankKeys, so a bank row recorded through a pair is not offered again.
  * - A payee rule is learned from a row filed under one category, from any source; a split row
  *   teaches nothing (SPEC R108). Sci-Fin learned from a `cat:` target only. A rule pre-fills a
  *   one-part draft from Savings.
- * - canConfirm() replaces `unassigned()`: it also checks that a draft's parts add up (SPEC R23).
- *   confirmTotal() is new: the figure the Confirm names (SPEC R107).
+ * - canConfirm() replaces `unassigned()`: it also checks that a draft's parts add up (SPEC R23),
+ *   and an outflow sent into a Goal holds it back, as Sci-Fin's `goal:` target on an outflow did.
+ *   confirmSummary() gives the count and the money out and in apart, the figures of Sci-Fin's
+ *   `importSummary()` line, as figures with no sentence (SPEC R16, R107).
  * - No wording: Sci-Fin's review notes are dropped (the status is the code, SPEC R16), and its
  *   target lists with their labels (`inflowTargets`, `outflowTargets`) are the design pass's.
  * - Names: ImportRow is BankRow, ImportStatus is RowStatus (with PAIR, set by pairing, SPEC R37),
@@ -54,8 +57,9 @@ enum class RowStatus { READY, INCOMING, DUPLICATE, RECURRING, PAIR }
  * A row in the review: what the app thinks, and what the user starts with. A ticked outflow is
  * recorded through [draft] (a payment, SPEC R21) or [payoffAccountId] (a payment off an Account,
  * SPEC R89), exactly one of them; both are null until the user files it or a payee rule
- * pre-fills a draft (SPEC R108). Money in uses neither: it goes to Savings. [pairPaymentId] is
- * filled by pairing (SPEC R37).
+ * pre-fills a draft (SPEC R108). Money in uses neither: it goes to Savings, and on into the Goal
+ * [incomingGoalId] when the user picks one (SPEC R107). [pairPaymentId] is filled by pairing
+ * (SPEC R37).
  */
 data class ReviewRow(
     val row: BankRow,
@@ -66,7 +70,14 @@ data class ReviewRow(
     val draft: PaymentDraft?,
     val payoffAccountId: String?,
     val pairPaymentId: String?,
+    val incomingGoalId: String? = null,
 )
+
+/**
+ * What the review's Confirm names (SPEC R107): how many ticked rows it records, and the money out
+ * and the money in apart, each a positive figure. How it reads is the design pass's (SPEC R16).
+ */
+data class ConfirmSummary(val count: Int, val moneyOut: Money, val moneyIn: Money)
 
 object StatementImport {
 
@@ -293,13 +304,14 @@ object StatementImport {
     /**
      * Whether the review's Confirm is on (SPEC R107): every ticked outflow is either a payment
      * whose parts add up and whose source exists (SPEC R23, R54) or a payoff of an Account that
-     * exists. Rows paying from the same Goal are taken in turn, as [confirm] writes them, so two
-     * that together pay more than it holds are caught here.
+     * exists, and none is sent into a Goal. Rows paying from the same Goal are taken in turn, as
+     * [confirm] writes them, so two that together pay more than it holds are caught here.
      */
     fun canConfirm(d: ProfileData, rows: List<ReviewRow>): Boolean {
         val holds = d.goals.associate { it.id to it.saved }.toMutableMap()
         for (rr in rows) {
             if (!rr.include || rr.row.amount >= 0) continue
+            if (rr.incomingGoalId != null) return false
             val payoff = rr.payoffAccountId
             val draft = recorded(rr)
             when {
@@ -319,12 +331,19 @@ object StatementImport {
         return true
     }
 
-    /** The figure the Confirm names (SPEC R107): the ticked rows' sum, money in positive and money out negative. */
-    fun confirmTotal(rows: List<ReviewRow>): Money = rows.filter { it.include }.sumOf { it.row.amount }
+    /** What the Confirm names (SPEC R107): the ticked rows' count, the money out and the money in, each positive. */
+    fun confirmSummary(rows: List<ReviewRow>): ConfirmSummary {
+        val ticked = rows.filter { it.include }
+        return ConfirmSummary(
+            count = ticked.size,
+            moneyOut = ticked.filter { it.row.amount < 0 }.sumOf { -it.row.amount },
+            moneyIn = ticked.filter { it.row.amount > 0 }.sumOf { it.row.amount },
+        )
+    }
 
     /**
-     * Records every ticked row with the statement's day (SPEC R107): money in to Savings, an
-     * outflow as its payment with the row's keys (SPEC R21, R26) or as a payoff with the Savings
+     * Records every ticked row with the statement's day (SPEC R107): money in to Savings and on
+     * into the Goal it was sent to, if that Goal still exists (SPEC R50), an outflow as its payment with the row's keys (SPEC R21, R26) or as a payoff with the Savings
      * pair (SPEC R89). A row filed under one category teaches its payee that category (SPEC R108);
      * every recorded row's keys are kept.
      */
@@ -338,7 +357,12 @@ object StatementImport {
             val amt = abs(r.amount)
             val payoff = rr.payoffAccountId
             next = when {
-                r.amount > 0 -> Writes.savingsQuickAdd(next, amt, r.description, false, clock, ids(), r.date)
+                r.amount > 0 -> {
+                    val saved = Writes.savingsQuickAdd(next, amt, r.description, false, clock, ids(), r.date)
+                    // a Goal deleted while the review was open leaves the money in Savings
+                    val goal = rr.incomingGoalId?.takeIf { id -> saved.goals.any { it.id == id } }
+                    if (goal == null) saved else Writes.goalQuickAdd(saved, goal, amt, r.description, clock, ids(), r.date)
+                }
                 payoff != null -> Accounts.quickAdd(next, payoff, amt, Accounts.Direction.PAYMENT, r.description, true, clock, r.date, ids = ids)
                 else -> {
                     val draft = requireNotNull(recorded(rr))
