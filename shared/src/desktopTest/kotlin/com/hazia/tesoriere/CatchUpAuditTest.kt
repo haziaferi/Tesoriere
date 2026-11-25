@@ -3,9 +3,11 @@ package com.hazia.tesoriere
 import com.hazia.tesoriere.Fixture.category
 import com.hazia.tesoriere.Fixture.profile
 import com.hazia.tesoriere.Fixture.recurring
+import com.hazia.tesoriere.engine.Ended
 import com.hazia.tesoriere.engine.EndedKind
 import com.hazia.tesoriere.engine.Income
 import com.hazia.tesoriere.engine.NewMonth
+import com.hazia.tesoriere.engine.Recurring
 import com.hazia.tesoriere.engine.savingsAmount
 import com.hazia.tesoriere.model.Account
 import com.hazia.tesoriere.model.AccountType
@@ -23,6 +25,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * Ported from Sci-Fin native/shared/src/desktopTest/kotlin/app/scifin/CatchUpAuditTest.kt at
@@ -96,15 +99,27 @@ class CatchUpAuditTest {
     }
 
     // SPEC:R74 SPEC:R72
-    @Test fun `R74 a finished Loan payment is kept as its id and the code loanPaidOff, never a sentence`() {
+    @Test fun `R74 a finished Loan payment is kept as its id, the code loanPaidOff and its name, never a sentence`() {
         val e = recurring("pay", "260.00", Cadence.MONTHLY, LocalDate(2026, 1, 15), dueDate = LocalDate(2026, 9, 15),
             endDate = LocalDate(2026, 8, 15), linkedAccountId = "loan", lastSweptMonth = "2026-08", name = "Car loan payment")
         val loan = Account("loan", Fixture.PROFILE, "Car loan", null, AccountType.LOAN, balance = cents("120.00"), linkedRecurringExpenseId = "pay", rateType = RateType.FIXED)
         val w = world().copy(recurringExpenses = listOf(e), accounts = listOf(loan))
-        val (d, _) = NewMonth.runCatchUp(w, TestClock(LocalDate(2026, 9, 1))) { ids.next() }
-        assertEquals("pay\tloanPaidOff", d.settings.catchUpEnded)
-        val kept = NewMonth.persistedSummary(d.settings)!!
-        assertEquals("pay", kept.endedNow.single().expenseId); assertEquals(EndedKind.LOAN_PAID_OFF, kept.endedNow.single().kind)
+        val (d, s) = NewMonth.runCatchUp(w, TestClock(LocalDate(2026, 9, 1))) { ids.next() }
+        assertEquals(Ended("pay", EndedKind.LOAN_PAID_OFF, "Car loan payment"), s!!.endedNow.single())
+        assertEquals("pay\tloanPaidOff\tCar loan payment", d.settings.catchUpEnded)
+        // the expense deleted before the summary is read: the summary still names it
+        val gone = Recurring.delete(d, "pay", reverse = false, TestClock(LocalDate(2026, 9, 1))) { ids.next() }
+        assertTrue(gone.recurringExpenses.isEmpty())
+        assertEquals(Ended("pay", EndedKind.LOAN_PAID_OFF, "Car loan payment"), NewMonth.persistedSummary(gone.settings)!!.endedNow.single())
+    }
+
+    // SPEC:R74
+    @Test fun `R74 a notice kept as id and code alone reads with no name, and a name with a tab keeps it`() {
+        val s = world().settings.copy(catchUpSummaryPending = true, catchUpMonths = 2, catchUpEnded = "pay\tloanPaidOff\ngym\tended\tGym\tdowntown")
+        assertEquals(
+            listOf(Ended("pay", EndedKind.LOAN_PAID_OFF, null), Ended("gym", EndedKind.ENDED, "Gym\tdowntown")),
+            NewMonth.persistedSummary(s)!!.endedNow,
+        )
     }
 
     // SPEC:R71

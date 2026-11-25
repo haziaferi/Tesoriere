@@ -27,8 +27,10 @@ import kotlin.math.roundToLong
  *   stands for Sci-Fin's `Category.lastResetMonth` beside the expenses' `lastSweptMonth`, so a
  *   Profile with no recurring expense still processes the months of an absence. Each open sets
  *   it to the current month; a Profile with no mark yet (none given at creation) gets one.
- * - An ended expense gives a code ([EndedKind]) in place of Sci-Fin's sentence, and the kept
- *   summary stores `expenseId<TAB>code` per line in place of `name<TAB>note` (SPEC R72, R74).
+ * - An ended expense gives a code ([EndedKind]) in place of Sci-Fin's sentence, with its id and
+ *   name as typed, and the kept summary stores `expenseId<TAB>code<TAB>name` per line in place of
+ *   `name<TAB>note`, so an expense deleted since can still be named; a line of `expenseId<TAB>code`
+ *   alone reads with no name (SPEC R72, R74).
  * - `completionNoticeFor` is `endedKind`; the closing row's note comes from StoredLabels.
  */
 
@@ -46,8 +48,8 @@ enum class EndedKind(val token: String) {
     companion object { fun of(token: String): EndedKind? = entries.firstOrNull { it.token == token } }
 }
 
-/** One expense that finished: its id and why (SPEC R72). */
-data class Ended(val expenseId: String, val kind: EndedKind)
+/** One expense that finished: its id, why, and its name as typed; null only on a line kept with no name (SPEC R72, R74). */
+data class Ended(val expenseId: String, val kind: EndedKind, val name: String? = null)
 
 /** What one month's processing did. */
 data class MonthResult(val ym: String, val sweptTotal: Money, val endedNow: List<Ended>)
@@ -136,7 +138,7 @@ object NewMonth {
             }
         }
         // read after this month's payment, so a variable-rate Loan that payment cleared is paid off
-        val ended = ending.map { Ended(it.id, endedKind(next, it)) }
+        val ended = ending.map { Ended(it.id, endedKind(next, it), it.name) }
         return next to MonthResult(ym, sweptTotal, ended)
     }
 
@@ -182,7 +184,10 @@ object NewMonth {
 
     private fun record(s: Settings, run: CatchUpSummary): Settings {
         val base = if (s.catchUpSummaryPending) s else dismissed(s)
-        val lines = run.endedNow.map { "${it.expenseId}$FIELD${it.kind.token}" }
+        // a line break in a name would split its line: it is kept as a space
+        val lines = run.endedNow.map { e ->
+            listOfNotNull(e.expenseId, e.kind.token, e.name?.replace('\r', ' ')?.replace('\n', ' ')).joinToString(FIELD.toString())
+        }
         return base.copy(
             catchUpSummaryPending = true,
             catchUpMonths = base.catchUpMonths + run.monthsReplayed,
@@ -197,7 +202,9 @@ object NewMonth {
     fun persistedSummary(s: Settings): CatchUpSummary? {
         if (!s.catchUpSummaryPending) return null
         val ended = s.catchUpEnded.lines().filter { it.isNotEmpty() }.mapNotNull { l ->
-            EndedKind.of(l.substringAfter(FIELD, ""))?.let { Ended(l.substringBefore(FIELD), it) }
+            // the name is the rest of the line, a tab in it kept; a two-field line has none
+            val f = l.split(FIELD, limit = 3)
+            EndedKind.of(f.getOrElse(1) { "" })?.let { Ended(f[0], it, f.getOrNull(2)) }
         }
         return CatchUpSummary(s.catchUpMonths, s.catchUpSwept, ended, CatchUp(s.catchUpDepositCount, s.catchUpDepositTotal))
     }

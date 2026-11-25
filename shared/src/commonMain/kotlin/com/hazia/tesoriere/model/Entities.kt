@@ -194,7 +194,10 @@ data class Settings(
     val catchUpDepositTotal: Money = 0,
     val catchUpMonths: Int = 0,
     val catchUpSwept: Money = 0,
-    /** The notices, one per line as `expenseId<TAB>code`, the code an `EndedKind` token (SPEC R72, R74). */
+    /**
+     * The notices, one per line as `expenseId<TAB>code<TAB>name`, the code an `EndedKind` token and
+     * the name as typed (SPEC R72, R74); a line of `expenseId<TAB>code` alone has no name.
+     */
     val catchUpEnded: String = "",
     val incomeType: IncomeType = IncomeType.SALARIED,
     /** Hourly only: the rate a new shift starts from, per hour. */
