@@ -264,3 +264,6 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R119 · changed · a row paired while its review is open is not recorded by that Confirm; spending stays in the receipt's month · builder
 - 2026-11-25 · R114 · changed · a pair-available note follows the category notes and leaves Confirm on · builder
 - 2026-11-25 · R107 · changed · a ticked duplicate whose keys a payment holds is not recorded again · builder
+- 2026-11-25 · R118 · changed · as many rows as possible name a payment; the order decides among such choices · builder
+- 2026-11-25 · R107 · changed · a ticked duplicate is recorded as before, whatever payment holds its keys · builder
+- 2026-11-25 · R119 · changed · only a row that did not arrive DUPLICATE is skipped at Confirm once a pair holds its keys · builder
