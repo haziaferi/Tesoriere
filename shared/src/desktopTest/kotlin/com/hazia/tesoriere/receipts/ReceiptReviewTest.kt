@@ -132,6 +132,20 @@ class ReceiptReviewTest {
         assertFalse(Receipts.hasChanges(Receipts.setSource(r, PaymentSource.Savings)))
     }
 
+    // SPEC:R114 SPEC:R33
+    @Test fun `R114 a line moved to Fun and back to Groceries leaves no change and follows a later link`() {
+        val d0 = world()
+        val r0 = Receipts.open(d0, fiveLines())
+        val back = Receipts.moveLine(Receipts.moveLine(r0, 0, "fun"), 0, "groc")
+        assertEquals(r0.lineCategories, back.lineCategories)
+        assertFalse(Receipts.hasChanges(back))
+        val linked = Receipts.link(back, "ch-groc", "fruit")
+        assertEquals(listOf<String?>("fruit", "fruit", "fruit", "home", "home"), linked.lineCategories)
+        // after an answer, the line's home is the answer: moved away and back to it, it follows the next answer
+        val again = Receipts.moveLine(Receipts.moveLine(linked, 1, "fun"), 1, "fruit")
+        assertEquals(listOf<String?>("out", "out", "out", "home", "home"), Receipts.link(again, "ch-groc", "out").lineCategories)
+    }
+
     // SPEC:R32 SPEC:R114 SPEC:R115
     @Test fun `R32 an unlinked Garden whose only line is moved by hand to Household can be confirmed and the next receipt asks again`() {
         val d0 = world()

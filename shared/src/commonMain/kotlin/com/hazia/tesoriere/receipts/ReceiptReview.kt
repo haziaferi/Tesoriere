@@ -26,7 +26,8 @@ import com.hazia.tesoriere.payments.ReceiptLine
  * review, Chatelaine category id to Tesoriere category id; [addedCategories] are the categories the
  * user added in it (SPEC R114). Links made by name are not held here: Confirm makes them again
  * from the Profile (SPEC R115). [openedSource] is the source the review opened with and [moved] the
- * indices of the lines the user moved by hand, so the review knows its changes (SPEC R33, R114).
+ * indices of the lines the user moved by hand, so the review knows its changes (SPEC R33, R114);
+ * [openedCategories] the category each line opened in.
  */
 data class ReceiptReview(
     val file: ReceiptFile,
@@ -36,6 +37,7 @@ data class ReceiptReview(
     val addedCategories: List<Category>,
     val openedSource: PaymentSource = source,
     val moved: Set<Int> = emptySet(),
+    val openedCategories: List<String?> = lineCategories,
 )
 
 /** What a review notes for one Chatelaine category (SPEC R114). Codes, not wording (SPEC R16). */
@@ -91,11 +93,19 @@ object Receipts {
     /**
      * Files line [index] under [categoryId] by hand, for this receipt only; no link changes, and a
      * later answer for its Chatelaine category leaves it where it is (SPEC R31, R114). Moving it to
-     * the category it is in already changes nothing.
+     * the category it is in already changes nothing; moving it back to the one it would hold unmoved
+     * makes it unmoved again.
      */
-    fun moveLine(r: ReceiptReview, index: Int, categoryId: String): ReceiptReview =
-        if (r.lineCategories[index] == categoryId) r
-        else r.copy(lineCategories = r.lineCategories.toMutableList().also { it[index] = categoryId }, moved = r.moved + index)
+    fun moveLine(r: ReceiptReview, index: Int, categoryId: String): ReceiptReview {
+        val cats = r.lineCategories.toMutableList().also { it[index] = categoryId }
+        // back to where it would be unmoved, the answer given since or else where it opened: no longer moved (SPEC R114)
+        val home = r.newLinks[r.file.lines[index].categoryId] ?: r.openedCategories[index]
+        return when {
+            categoryId == home -> r.copy(lineCategories = cats, moved = r.moved - index)
+            r.lineCategories[index] == categoryId -> r
+            else -> r.copy(lineCategories = cats, moved = r.moved + index)
+        }
+    }
 
     /** Links Chatelaine category [chatelaineId] to the existing category [categoryId] (SPEC R32, R114). */
     fun link(r: ReceiptReview, chatelaineId: String, categoryId: String): ReceiptReview = answer(r, chatelaineId, categoryId, null)
