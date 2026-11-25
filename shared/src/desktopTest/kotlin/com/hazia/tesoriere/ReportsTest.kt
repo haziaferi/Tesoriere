@@ -7,6 +7,8 @@ import com.hazia.tesoriere.Fixture.goal
 import com.hazia.tesoriere.Fixture.profile
 import com.hazia.tesoriere.engine.AccountEditing
 import com.hazia.tesoriere.engine.Accounts
+import com.hazia.tesoriere.engine.NewMonth
+import com.hazia.tesoriere.engine.Recurring
 import com.hazia.tesoriere.engine.Reports
 import com.hazia.tesoriere.engine.Slice
 import com.hazia.tesoriere.engine.SliceKind
@@ -17,6 +19,7 @@ import com.hazia.tesoriere.engine.ymKey
 import com.hazia.tesoriere.model.Account
 import com.hazia.tesoriere.model.AccountType
 import com.hazia.tesoriere.model.ProfileData
+import com.hazia.tesoriere.model.RateType
 import com.hazia.tesoriere.model.StoredLabels
 import com.hazia.tesoriere.model.Transaction
 import com.hazia.tesoriere.payments.Part
@@ -24,6 +27,7 @@ import com.hazia.tesoriere.payments.Payment
 import com.hazia.tesoriere.payments.PaymentDraft
 import com.hazia.tesoriere.payments.PaymentSource
 import com.hazia.tesoriere.payments.Payments
+import com.hazia.tesoriere.payments.Spent
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.number
 import kotlin.test.Test
@@ -315,6 +319,56 @@ class ReportsTest {
     }
 
     // ---- Income vs Expenses ----------------------------------------------------------------
+
+    // SPEC:R99 SPEC:R101 SPEC:R67 SPEC:R93 SPEC:R25
+    @Test fun `R99 40_00 charged to a card under Food and the card's 40_00 payment swept under Food give Food 40_00, Spending 40_00 and 40_00 out`() {
+        val clock = TestClock(today); val ids = Ids()
+        var d = profile(categories = listOf(category("food", "Food")))
+        d = AccountEditing.save(d, Account("cc", Fixture.PROFILE, "Card", type = AccountType.CREDIT), clock) { ids.next() }
+        d = Accounts.commitFixedPayment(d, "cc", cents("40.00"), "", "food", clock, "card-pay")   // first due 14 October
+        clock.setDay(LocalDate(2026, 10, 1))
+        d = NewMonth.runCatchUp(d, clock) { ids.next() }.first
+        val sweep = d.transactions.single { it.key == "rec:card-pay" }
+        assertEquals(cents("40.00"), sweep.amount); assertEquals(LocalDate(2026, 10, 14), sweep.date)
+        assertEquals(cents("960.00"), d.savingsAmount)                                            // the sweep still moves Savings
+        d = Payments.record(d, PaymentDraft(LocalDate(2026, 10, 5), cents("40.00"), PaymentSource.Account("cc"), null, listOf(Part("food", cents("40.00")))), clock, "pay")
+        val oct20 = LocalDate(2026, 10, 20)
+        assertEquals(cents("40.00"), Spent.of(d, "food", "2026-10"))
+        val s = Reports.spendingComposition(d, oct20)
+        assertEquals(listOf(Slice(SliceKind.CATEGORY, "food", cents("40.00"))), s.slices)
+        assertEquals(cents("40.00"), s.net)
+        assertEquals(cents("40.00"), Reports.incomeVsExpenses(d, oct20, 1).single().expenses)
+    }
+
+    // SPEC:R67 SPEC:R99 SPEC:R73
+    @Test fun `R67 a Loan's 229_70 payment swept under Car still counts 229_70 in Car's spent and Spending`() {
+        val clock = TestClock(today); val ids = Ids()
+        var d = profile(savings = "5,000.00", categories = listOf(category("car", "Car")))
+        d = Accounts.getLoan(d, cents("9,800.00"), 0.059, 48, RateType.FIXED, "Car loan", "Car loan payment", "car", false, clock) { ids.next() }
+        clock.setDay(LocalDate(2026, 10, 1))
+        d = NewMonth.runCatchUp(d, clock) { ids.next() }.first
+        assertEquals(cents("229.70"), Spent.of(d, "car", "2026-10"))
+        assertEquals(cents("229.70"), Reports.spendingComposition(d, LocalDate(2026, 10, 20)).net)
+    }
+
+    // SPEC:R67 SPEC:R66 SPEC:R93
+    @Test fun `R67 a card's 40_00 payment released from the card, deleted with its return, lowers no spent and Savings is 1,000_00`() {
+        val clock = TestClock(today); val ids = Ids()
+        var d = profile(categories = listOf(category("food", "Food")))
+        d = AccountEditing.save(d, Account("cc", Fixture.PROFILE, "Card", type = AccountType.CREDIT), clock) { ids.next() }
+        d = Accounts.commitFixedPayment(d, "cc", cents("40.00"), "", "food", clock, "card-pay")
+        clock.setDay(LocalDate(2026, 10, 1))
+        d = NewMonth.runCatchUp(d, clock) { ids.next() }.first                    // swept as a card payoff, dated 14 October
+        clock.setDay(LocalDate(2026, 10, 10))
+        d = Accounts.commitFixedPayment(d, "cc", cents("50.00"), "", "food", clock, "card-pay-2")   // releases card-pay (R87)
+        assertNull(d.recurringExpenses.single { it.id == "card-pay" }.linkedAccountId)
+        d = Recurring.delete(d, "card-pay", reverse = true, clock) { ids.next() }
+        val back = d.transactions.last { it.key == "rec:card-pay" }
+        assertEquals(cents("-40.00"), back.amount)
+        assertEquals(cents("1,000.00"), d.savingsAmount)
+        assertEquals(0L, Spent.of(d, "food", "2026-10"))
+        assertTrue(Reports.spendingComposition(d, LocalDate(2026, 10, 20)).slices.isEmpty())
+    }
 
     // SPEC:R101 SPEC:R54
     @Test fun `R101 1,450_00 in, 200_00 into a Goal and 30_00 paid from Savings read 30_00 out, 110_00 after 80_00 from the Goal, 150_00 after 40_00 by card and after 60_00 paid off it`() {

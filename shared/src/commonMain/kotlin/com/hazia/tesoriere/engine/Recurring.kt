@@ -26,6 +26,11 @@ import kotlinx.datetime.number
  *   category's spent for its month (SPEC R25). A return on deletion is filed under the category
  *   of the rows it reverses, one row per category, never the expense's category of the day (SPEC
  *   R66, owner answer of 2026-11-25).
+ * - A row written while the expense is linked to a card is marked `cardPayoff`: it moves Savings
+ *   and counts in no spent, since the charges it pays count through their parts (SPEC R67, R93,
+ *   owner answer A of 2026-11-25). Sci-Fin counted a card's payment as spending. The mark is
+ *   written, not read from the link, so a later link, release or deletion leaves past rows as
+ *   they were; a return carries the mark of the rows it reverses.
  * - The rows' notes come from StoredLabels, not Sci-Fin's `stored()`.
  * - Sci-Fin's section references are replaced by SPEC rule numbers.
  */
@@ -312,7 +317,7 @@ object Recurring {
      */
     fun applyReconcile(d: ProfileData, r: Reconcile, clock: Clock, ids: () -> String): ProfileData {
         val e = d.recurringExpenses.first { it.id == r.expenseId }
-        var next = Ledger.logAndMove(d, row(e, r.delta, StoredLabels.EDIT_RECONCILIATION, r.occurrenceDate), clock, ids()).first
+        var next = Ledger.logAndMove(d, row(d, e, r.delta, StoredLabels.EDIT_RECONCILIATION, r.occurrenceDate), clock, ids()).first
         next.accounts.firstOrNull { it.id == e.linkedAccountId && it.type == AccountType.LOAN }?.let { loan ->
             next = Accounts.balanceEdit(next, loan.id, loan.balance - r.delta, StoredLabels.EDIT_RECONCILIATION, clock, ids(), r.occurrenceDate)
         }
@@ -348,10 +353,12 @@ object Recurring {
         val rows = reversedRows(d, e, clock.today())
         if (rows.sumOf { it.amount } <= 0) return d
         var next = d
-        for ((categoryId, filed) in rows.groupBy { it.categoryId }) {
+        // a card payoff's rows are returned as a card payoff, counted in no spent either (SPEC R67)
+        for ((filedAs, filed) in rows.groupBy { it.categoryId to it.cardPayoff }) {
             val back = filed.sumOf { it.amount }
             if (back == 0L) continue
-            val m = Movement(-back, TransactionKey.RecurringKey(e.id), e.name, StoredLabels.DELETION_REVERSAL, categoryId = categoryId)
+            val (categoryId, cardPayoff) = filedAs
+            val m = Movement(-back, TransactionKey.RecurringKey(e.id), e.name, StoredLabels.DELETION_REVERSAL, categoryId = categoryId, cardPayoff = cardPayoff)
             next = Ledger.logAndMove(next, m, clock, ids()).first
         }
         return next
@@ -381,19 +388,26 @@ object Recurring {
         var next = d
         if (dates == null) {
             val share = sweepAmountForMonth(e, monthDate.year, monthDate.month.number)
-            if (share > 0) next = Ledger.logAndMove(next, row(e, share, StoredLabels.RECURRING_SWEEP, monthDate.firstOfMonth()), clock, ids()).first
+            if (share > 0) next = Ledger.logAndMove(next, row(next, e, share, StoredLabels.RECURRING_SWEEP, monthDate.firstOfMonth()), clock, ids()).first
             return next to share
         }
         if (e.finishedAt != null) return next to 0
         var total = 0L
         for (day in dates) {
-            next = Ledger.logAndMove(next, row(e, e.amount, StoredLabels.RECURRING_SWEEP, day), clock, ids()).first
+            next = Ledger.logAndMove(next, row(next, e, e.amount, StoredLabels.RECURRING_SWEEP, day), clock, ids()).first
             total += e.amount
         }
         return next to total
     }
 
-    /** A `rec:` movement for [e], filed under its category as it stands (SPEC R67). */
-    private fun row(e: RecurringExpense, amount: Money, note: String, date: LocalDate?) =
-        Movement(amount, TransactionKey.RecurringKey(e.id), e.name, note, date = date, categoryId = e.categoryId)
+    /**
+     * A `rec:` movement for [e], filed under its category as it stands (SPEC R67); while [e] is
+     * linked to a card it is a card payoff, counted in no spent (SPEC R67, R93).
+     */
+    private fun row(d: ProfileData, e: RecurringExpense, amount: Money, note: String, date: LocalDate?) =
+        Movement(amount, TransactionKey.RecurringKey(e.id), e.name, note, date = date, categoryId = e.categoryId, cardPayoff = paysCard(d, e))
+
+    /** Whether [e] is a card's payment (SPEC R93): linked to an Account of type credit. */
+    fun paysCard(d: ProfileData, e: RecurringExpense): Boolean =
+        e.linkedAccountId != null && d.accounts.any { it.id == e.linkedAccountId && it.type == AccountType.CREDIT }
 }

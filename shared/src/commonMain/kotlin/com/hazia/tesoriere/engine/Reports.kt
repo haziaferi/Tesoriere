@@ -25,7 +25,8 @@ import kotlin.time.Instant
  *   recurring expense and its Goals slice are gone, and `savings` rows count in no slice: money
  *   into a Goal or paid off an Account is a transfer, counted when a payment spends it (owner,
  *   2026-11-25). Parts and sweep rows with no category (both only from a Sci-Fin backup) are
- *   Uncategorised (SPEC R99).
+ *   Uncategorised (SPEC R99). A card's payment's sweeps are a card payoff, in no slice and no
+ *   expense: the charges they pay count through their parts (SPEC R67, R93, R101).
  * - A slice is a code and an id, not a label and an icon: names are the caller's to look up and
  *   how they read is the design pass's (SPEC R16).
  * - Savings vs Owed's trend adds the payments charged to an Account to what is owed and the
@@ -186,7 +187,8 @@ object Reports {
         for (t in rows) {
             when (val k = TransactionKey.parse(t.key)) {
                 is TransactionKey.CategoryKey -> categoryIds += k.id
-                is TransactionKey.RecurringKey -> if (t.categoryId != null) categoryIds += t.categoryId else uncategorised += t.amount
+                // a card's payment is a transfer, in no slice (SPEC R67, R93)
+                is TransactionKey.RecurringKey -> if (t.cardPayoff) Unit else if (t.categoryId != null) categoryIds += t.categoryId else uncategorised += t.amount
                 is TransactionKey.GoalKey, TransactionKey.SavingsKey, is TransactionKey.AccountKey, is TransactionKey.GoalSpendKey -> Unit
             }
         }

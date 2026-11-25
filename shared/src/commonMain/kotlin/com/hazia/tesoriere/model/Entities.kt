@@ -149,6 +149,11 @@ data class Transaction(
     val rate: Money? = null,
     /** A recurring sweep's category at sweep time (owner answer 2 of 2026-11-24); null on every other row. */
     val categoryId: String? = null,
+    /**
+     * A `rec:` row written while its expense was linked to a card: a card payoff, a transfer that
+     * moves Savings and counts in no spent (SPEC R67, R93, owner answer A of 2026-11-25).
+     */
+    val cardPayoff: Boolean = false,
 )
 
 /** One per Profile. The defaults are a fresh install's: every piece SPEC R18 starts off is off. */

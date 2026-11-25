@@ -61,6 +61,8 @@ data class Movement(
     val rate: Money? = null,
     /** A recurring sweep's category at sweep time (owner answer 2 of 2026-11-24). */
     val categoryId: String? = null,
+    /** A `rec:` row of an expense linked to a card: counted in no spent (SPEC R67, R93). */
+    val cardPayoff: Boolean = false,
 )
 
 object Ledger {
@@ -95,6 +97,7 @@ object Ledger {
             hoursWorked = m.hoursWorked,
             rate = m.rate,
             categoryId = m.categoryId,
+            cardPayoff = m.cardPayoff,
         )
         val effect = savingsEffect(tx)
         var next = d.copy(transactions = d.transactions + tx)
