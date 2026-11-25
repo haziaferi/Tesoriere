@@ -40,8 +40,8 @@ class CardFeesTest {
     private fun ProfileData.increased(amount: String, picked: String? = null) =
         Accounts.quickAdd(this, "cc", cents(amount), Accounts.Direction.INCREASE, null, Accounts.PayoffFrom.None, clock, categoryId = picked) { ids.next() }
 
-    private fun ProfileData.edited(balance: String, picked: String? = null) =
-        AccountEditing.save(this, accounts.single().copy(balance = cents(balance)), clock, riseCategoryId = picked) { ids.next() }
+    private fun ProfileData.edited(balance: String, picked: String? = null, rise: AccountEditing.BalanceRise? = AccountEditing.BalanceRise.FEES) =
+        AccountEditing.save(this, accounts.single().copy(balance = cents(balance)), clock, rise = rise, riseCategoryId = picked) { ids.next() }
 
     private fun fees(d: ProfileData) = Spent.of(d, "fees", "2026-09")
 
@@ -76,10 +76,11 @@ class CardFeesTest {
     @Test fun `R110 a card with no fees category refuses both rises unless one is picked, and one whose charges are not logged takes them under none`() {
         val bare = world(card(fees = null))
         assertFailsWith<IllegalArgumentException> { bare.increased("12.50") }
-        assertFalse(AccountEditing.canSave(bare, bare.accounts.single().copy(balance = cents("320.00"))))
+        val fees = AccountEditing.BalanceRise.FEES
+        assertFalse(AccountEditing.canSave(bare, bare.accounts.single().copy(balance = cents("320.00")), rise = fees))
         assertEquals(bare, bare.edited("320.00"))
         assertEquals(cents("12.50"), Spent.of(bare.increased("12.50", picked = "bank"), "bank", "2026-09"))
-        assertTrue(AccountEditing.canSave(bare, bare.accounts.single().copy(balance = cents("320.00")), riseCategoryId = "bank"))
+        assertTrue(AccountEditing.canSave(bare, bare.accounts.single().copy(balance = cents("320.00")), rise = fees, riseCategoryId = "bank"))
         assertEquals(cents("20.00"), Spent.of(bare.edited("320.00", picked = "bank"), "bank", "2026-09"))
         val notLogged = world(card(fees = null, notLogged = true)).increased("12.50").edited("320.00")
         assertEquals(cents("320.00"), notLogged.accounts.single().balance)
@@ -87,6 +88,26 @@ class CardFeesTest {
         assertTrue(Reports.spendingComposition(notLogged, day).slices.isEmpty())
         // a fees category that does not exist is not saved
         assertFalse(AccountEditing.canSave(bare, bare.accounts.single().copy(feesCategoryId = "nowhere")))
+    }
+
+    // SPEC:R110 SPEC:R86
+    @Test fun `R110 edited from 312_50 to 320_00 as a correction adds nothing, also with no fees category, and with no choice it is not saved`() {
+        val correction = AccountEditing.BalanceRise.CORRECTION
+        val d = world(card(balance = "312.50")).edited("320.00", rise = correction)
+        assertEquals(cents("320.00"), d.accounts.single().balance)
+        assertEquals(0L, fees(d))
+        assertNull(d.transactions.single().categoryId)
+        val bare = world(card(fees = null, balance = "312.50"))
+        assertEquals(cents("320.00"), bare.edited("320.00", rise = correction).accounts.single().balance)
+        // the choice is the caller's: no choice is a code, and the edit is not saved
+        val up = bare.accounts.single().copy(balance = cents("320.00"))
+        assertEquals(AccountEditing.AccountProblem.RISE_CHOICE_MISSING, AccountEditing.problem(bare, up))
+        assertEquals(AccountEditing.AccountProblem.RISE_CATEGORY_MISSING, AccountEditing.problem(bare, up, AccountEditing.BalanceRise.FEES))
+        assertNull(AccountEditing.problem(bare, up, correction))
+        assertEquals(bare, bare.edited("320.00", rise = null))
+        // a fall, a Loan's rise and a new card's opening balance need no choice
+        assertNull(AccountEditing.problem(bare, bare.accounts.single().copy(balance = cents("300.00"))))
+        assertNull(AccountEditing.problem(bare, card(balance = "640.00").copy(id = "new")))
     }
 
     // SPEC:R110 SPEC:R99

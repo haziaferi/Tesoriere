@@ -209,3 +209,5 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R99 · changed · a Loan's hand payments are in their category's slice while nothing is charged to it · owner
 - 2026-11-25 · R101 · changed · a Loan's hand payments are expenses while nothing is charged to it · owner
 - 2026-11-25 · R107 · changed · a statement payoff of a Loan that counts as spending needs a category · owner
+- 2026-11-25 · R110 · changed · a direct edit upward on a card is interest or fees or a correction, as the user chooses; a correction needs no category · owner
+- 2026-11-25 · R86 · changed · a rise of a card's balance in the editor takes a choice of interest or fees, or a correction · owner
