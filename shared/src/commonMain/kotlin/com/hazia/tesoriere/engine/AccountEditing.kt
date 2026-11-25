@@ -14,11 +14,28 @@ import com.hazia.tesoriere.model.StoredLabels
  *
  * Changed from Sci-Fin: stored notes come from StoredLabels; `fresh` sets no icon name (how an
  * Account looks is the design pass's, SPEC R16); section references are SPEC rule numbers.
+ * canSave() is Tesoriere's: a name, and a payoff category that exists while a card's charges
+ * are not logged (SPEC R109); save() refuses what it refuses, as it refused a blank name.
  */
 object AccountEditing {
 
+    /**
+     * Whether [draft] can be saved: it has a name (SPEC R86), and its switch for charges not
+     * logged is on only on a card with a payoff category that exists (SPEC R109).
+     */
+    fun canSave(d: ProfileData, draft: Account): Boolean {
+        if (draft.name.isBlank()) return false
+        if (draft.chargesNotLogged) {
+            if (draft.type != AccountType.CREDIT) return false
+            if (draft.payoffCategoryId == null || d.categories.none { it.id == draft.payoffCategoryId }) return false
+        }
+        return true
+    }
+
+    /** Saves [draft], or returns [d] unchanged when it cannot be saved ([canSave]). */
     fun save(d: ProfileData, draft: Account, clock: Clock, ids: () -> String): ProfileData {
-        val name = draft.name.trim(); if (name.isEmpty()) return d
+        if (!canSave(d, draft)) return d
+        val name = draft.name.trim()
         val existing = d.accounts.firstOrNull { it.id == draft.id }
         val cleaned = draft.copy(
             name = name,

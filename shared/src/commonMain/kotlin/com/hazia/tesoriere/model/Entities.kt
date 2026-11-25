@@ -23,7 +23,8 @@ import kotlin.time.Instant
  * Changed from Sci-Fin: `Category.spent` and `Category.lastResetMonth` are gone, since spent is
  * worked out per month (SPEC R25, R59); Settings' appearance fields are gone (SPEC R16); the
  * feature switches of SPEC R18 are added; a recurring expense has a category and a ledger row
- * can carry the category it was filed under (owner answer 2 of 2026-11-24).
+ * can carry the category it was filed under (owner answer 2 of 2026-11-24); a card can be marked
+ * as one whose charges are not logged, with a payoff category (SPEC R109).
  */
 
 @Serializable
@@ -114,6 +115,12 @@ data class Account(
     val balance: Money = 0,
     /** Credit only. A rate, not money: 0.219 is 21.9 %. */
     val apr: Double? = null,
+    /**
+     * Credit only: the user does not log this card's charges, so its payoffs count as spending in
+     * [payoffCategoryId], which must name a category that exists while this is on (SPEC R109).
+     */
+    val chargesNotLogged: Boolean = false,
+    val payoffCategoryId: String? = null,
     val linkedRecurringExpenseId: String? = null,
     /** Loan only. */
     val autoUpdateFromPayments: Boolean = false,
@@ -147,7 +154,11 @@ data class Transaction(
     /** Hourly paydays only. Hours are not money. */
     val hoursWorked: Double? = null,
     val rate: Money? = null,
-    /** A recurring sweep's category at sweep time (owner answer 2 of 2026-11-24); null on every other row. */
+    /**
+     * The category a row counting as spending is filed under, as written (SPEC R25, R51): a
+     * recurring sweep's at sweep time (owner answer 2 of 2026-11-24), and the payoff category on a
+     * card's payoff rows while its charges are not logged (SPEC R109); null on every other row.
+     */
     val categoryId: String? = null,
     /**
      * A `rec:` row written while its expense was linked to a card: a card payoff, a transfer that

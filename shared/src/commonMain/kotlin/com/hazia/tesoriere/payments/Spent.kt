@@ -19,23 +19,20 @@ import com.hazia.tesoriere.model.StoredLabels
 object Spent {
 
     /**
-     * The category's spent for month [ym] (`YYYY-MM`): its parts of payments dated that month, its
-     * adjustments dated that month, and the recurring expense rows filed under it and dated that
-     * month (SPEC R25, R67), other than a card's payment's: a card payoff is a transfer, and the
-     * charges it pays count already through their parts (SPEC R93, owner answer A of 2026-11-25).
+     * The category's spent for month [ym] (`YYYY-MM`): its parts of payments dated that month, a
+     * refund's lowering it, and the ledger rows dated that month that count in it as written
+     * (Ledger.spent): its adjustments, the recurring expense rows filed under it (SPEC R25, R67)
+     * other than a card's payment's, a card payoff being a transfer whose charges count already
+     * through their parts (SPEC R93, owner answer A of 2026-11-25), and the payoff rows of a card
+     * whose charges are not logged, filed under it (SPEC R109).
      */
     fun of(d: ProfileData, categoryId: String, ym: String): Money {
         val parts = d.payments.filter { it.date.ymKey() == ym }
             .sumOf { p -> p.parts.filter { it.categoryId == categoryId }.sumOf { it.amount } }
-        val key = TransactionKey.CategoryKey(categoryId).stored
-        val adjustments = d.transactions.filter { it.key == key && it.date.ymKey() == ym }.sumOf { it.amount }
-        val swept = d.transactions
-            .filter { it.key.startsWith(RECURRING_PREFIX) && !it.cardPayoff && it.categoryId == categoryId && it.date.ymKey() == ym }
-            .sumOf { it.amount }
-        return parts + adjustments + swept
+        val rows = d.transactions.filter { it.date.ymKey() == ym }
+            .sumOf { t -> Ledger.spent(t)?.takeIf { it.categoryId == categoryId }?.amount ?: 0L }
+        return parts + rows
     }
-
-    private const val RECURRING_PREFIX = "rec:"
 
     /**
      * Sets the category's spent for [ym] to [newValue] by logging the difference as an adjustment

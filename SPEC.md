@@ -80,6 +80,7 @@ Kinds: O owner rule · D decided · I inherited · A assumed · Q open.
 | D-R92 | Card payoff outlook | 10. Credit and Loan accounts |
 | D-R93 | Committing a card's fixed payment | 10. Credit and Loan accounts |
 | D-R94 | Changing an Account's type | 10. Credit and Loan accounts |
+| D-R109 | A card whose charges are not logged | 10. Credit and Loan accounts |
 | D-R95 | Savings movements in a report | 11. Reports |
 | D-R96 | Age of Money | 11. Reports |
 | D-R97 | Age of Money over the months | 11. Reports |
@@ -429,7 +430,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R51 · The ledger
 
-**Rule:** Every movement of money other than a payment is a ledger row: a key naming what it changes, the signed change to it, a date, the instant it was logged and the target's name at that instant. How Savings moves follows from the key, as below. The date places the row in its month and in reports; the figure it changes moves when the row is written, whatever its date.
+**Rule:** Every movement of money other than a payment is a ledger row: a key naming what it changes, the signed change to it, a date, the instant it was logged, the target's name at that instant and, for a row that counts as spending, the category it is filed under (R25). How Savings moves follows from the key, as below. The date places the row in its month and in reports; the figure it changes moves when the row is written, whatever its date.
 
 **Values:**
 
@@ -470,7 +471,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 | Condition | Holds when |
 |---|---|
-| Same target | both rows have the same `key`; two `cat:` adjustments are also dated in the same month (R25) |
+| Same target | both rows have the same `key` and are filed under the same category or none; two `cat:` adjustments, or two rows filed under a category, are also dated in the same month (R25) |
 | Opposite | the amounts are equal, opposite and not zero |
 | Next | the second is the next row on that key in logged order, with none between |
 | Window | they were logged at most 48 hours apart |
@@ -480,11 +481,11 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Evidence:** Sci-Fin's spec, section 7.3, and `engine/Ledger.kt` at `2892110`.
 
-**Acceptance:** Rows of +40.00 and -40.00 on one Goal logged 47 hours apart pair; 49 hours apart they do not; four rows +40.00, -40.00, +40.00, -40.00 logged in that order make two pairs, the first two and the last two.
+**Acceptance:** Rows of +40.00 and -40.00 on one Goal logged 47 hours apart pair; 49 hours apart they do not; four rows +40.00, -40.00, +40.00, -40.00 logged in that order make two pairs, the first two and the last two. A -60.00 `savings` row filed under Shopping and a +60.00 `savings` correction logged an hour later do not pair; two such rows both filed under Shopping in one month do.
 
-**Not:** Deleting single rows: the ledger would stop adding up to the figures it moved.
+**Not:** Deleting single rows: the ledger would stop adding up to the figures it moved. Pairing a row filed under a category with one that is not: Savings would come out even and the category's spent would lose the first.
 
-**Since:** 2026-11-24 · builder · own words
+**Since:** 2026-11-25 · builder · own words
 
 ### D-R21 · Payment
 
@@ -567,7 +568,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R25 · Spent is derived
 
-**Rule:** A category's spent figure for a month is computed when read, from the parts of the payments dated in that month, the category's logged adjustments dated in it, and the recurring expense rows filed under the category and dated in it, other than a card's payment's (R67, R93). It is never stored.
+**Rule:** A category's spent figure for a month is computed when read, from the parts of the payments dated in that month, the category's logged adjustments dated in it, and the other ledger rows filed under the category and dated in it: recurring expense rows other than a card payoff (R67, R93), and the payoff rows of a card whose charges are not logged (R109). It is never stored.
 
 **Why:** A late receipt can re-file a payment that is already recorded (R38); with a derived figure that is one change to the payment, not correction rows.
 
@@ -924,7 +925,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### O-R67 · Every recurring expense has a category
 
-**Rule:** Every recurring expense has a category, picked from the existing ones or created on the spot when the expense is created or edited, and it cannot be saved without one. Each sweep, share and accepted difference carries the category the expense has when the row is written, so a change of category applies to rows written after it, as R34 does for links; a return on deletion carries the category of the rows it reverses (R66), and every row other than a card payoff counts in its category's spent for the row's month (R25), so a return can leave a month's spent below zero, as intended. A row written while the expense is linked to a card is a card payoff (R93), a transfer that moves Savings and counts in no spent, since the charges it pays count already through their parts; a return is one when the rows it reverses are, and an expense linked to a Loan counts as any other.
+**Rule:** Every recurring expense has a category, picked from the existing ones or created on the spot when the expense is created or edited, and it cannot be saved without one. Each sweep, share and accepted difference carries the category the expense has when the row is written, so a change of category applies to rows written after it, as R34 does for links; a return on deletion carries the category of the rows it reverses (R66), and every row other than a card payoff counts in its category's spent for the row's month (R25), so a return can leave a month's spent below zero, as intended. A row written while the expense is linked to a card is a card payoff (R93), a transfer that moves Savings and counts in no spent, since the charges it pays count already through their parts, unless the card's charges are not logged, when the row is filed under the card's payoff category instead and counts there (R109); a return is one when the rows it reverses are, and an expense linked to a Loan counts as any other.
 
 **Why:** Rent and subscriptions are spending; left out of every category, a month's spent figures would miss them. A card's payment is not: what it pays was counted when charged (R22).
 
@@ -1056,7 +1057,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 | Type | Holds besides its name and balance |
 |---|---|
-| credit | a yearly rate, and at most one linked recurring expense: a fixed payment (R93) |
+| credit | a yearly rate, at most one linked recurring expense: a fixed payment (R93), and whether its charges are not logged, with the payoff category its payoffs then count in (R109) |
 | loan | the principal, a yearly rate, a term in months, a rate type (fixed, variable or interest-only), the day it started, whether it follows its payment (R73), and at most one linked recurring expense: its payment |
 
 **Evidence:** Sci-Fin's spec, sections 7.1 and 7.2, and `engine/Accounts.kt` at `2892110`.
@@ -1103,7 +1104,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R89 · Quick-add on an Account
 
-**Rule:** A quick-add on an Account is a payment off it or, on a Loan only, an increase, as below; a charge to a card is a payment from the card (R22), never a quick-add. Each logs one `acct:` row, noted with the user's note, else `Paid off` or `Increased`. A payment off an Account takes its money from Savings, from a Goal, at most what the Goal holds, or from nowhere, logging in the same step a `savings` or `spend:<goalId>` row of minus the amount noted with the user's note, else `Payment to` and the Account's name; Savings is the default unless the Account is linked to a recurring expense, whose sweep already moved Savings, where nowhere is, and the user can change it for each payment.
+**Rule:** A quick-add on an Account is a payment off it or, on a Loan only, an increase, as below; a charge to a card is a payment from the card (R22), never a quick-add. Each logs one `acct:` row, noted with the user's note, else `Paid off` or `Increased`. A payment off an Account takes its money from Savings, from a Goal, at most what the Goal holds, or from nowhere, logging in the same step a `savings` or `spend:<goalId>` row of minus the amount noted with the user's note, else `Payment to` and the Account's name, and filed under the card's payoff category while its charges are not logged (R109); Savings is the default unless the Account is linked to a recurring expense, whose sweep already moved Savings, where nowhere is, and the user can change it for each payment.
 
 **Values:**
 
@@ -1185,7 +1186,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R93 · Committing a card's fixed payment
 
-**Rule:** A fixed monthly payment chosen for a card can be committed as a monthly fixed-date recurring expense of that amount, named after the card followed by `payment` unless the user names it, in a category the user picks (R67), linked both ways to the card (R87), first due one month after today on today's day of the month, with no end date, so nothing sweeps this month (R64); its sweeps pay the card off and count in no category's spent (R67). A card never follows its payment: only a Loan does (R73). The minimum payment is never committed: it moves with the balance, which a recurring expense cannot (R60).
+**Rule:** A fixed monthly payment chosen for a card can be committed as a monthly fixed-date recurring expense of that amount, named after the card followed by `payment` unless the user names it, in a category the user picks (R67), linked both ways to the card (R87), first due one month after today on today's day of the month, with no end date, so nothing sweeps this month (R64); its sweeps pay the card off and count in no category's spent (R67), unless the card's charges are not logged (R109). A card never follows its payment: only a Loan does (R73). The minimum payment is never committed: it moves with the balance, which a recurring expense cannot (R60).
 
 **Evidence:** Sci-Fin's spec, section 9.2, and `engine/Accounts.kt` at `2892110`; its sweeps as a card payoff: owner, 2026-11-25.
 
@@ -1195,15 +1196,38 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R94 · Changing an Account's type
 
-**Rule:** Changing a Loan to a card clears what belongs to a Loan: following its payment, the principal, the yearly rate, the term, the rate type and the start day; its linked payment is deleted, after a prompt that cannot be skipped and offers its return on deletion (R66), and the card stays, linked to nothing. Changing a card to a Loan clears its yearly rate, so it cannot follow a payment until a rate is filled in (R86).
+**Rule:** Changing a Loan to a card clears what belongs to a Loan: following its payment, the principal, the yearly rate, the term, the rate type and the start day; its linked payment is deleted, after a prompt that cannot be skipped and offers its return on deletion (R66), and the card stays, linked to nothing. Changing a card to a Loan clears its yearly rate, so it cannot follow a payment until a rate is filled in (R86), and its switch for charges not logged with its payoff category (R109).
 
 **Why:** A card cannot keep a Loan's tracked balance honest, which is what following a payment is for.
 
 **Evidence:** Sci-Fin's spec, section 7.2, and `engine/Accounts.kt` at `2892110`.
 
-**Acceptance:** A Loan at 5 % following its payment, changed to a card, has no rate, principal, term, rate type or start day and does not follow. A card at 20 % changed to a Loan has no rate and cannot follow. A Loan of 4,000.00 whose 260.00 payment, due the 20th, swept on creation on 10 September 2026 from Savings of 5,000.00, changed to a card with the return accepted, stays as a card linked to nothing, its payment is gone, and Savings is 5,000.00.
+**Acceptance:** A Loan at 5 % following its payment, changed to a card, has no rate, principal, term, rate type or start day and does not follow. A card at 20 % changed to a Loan has no rate and cannot follow, and one whose charges were not logged under Shopping has the switch off and no payoff category. A Loan of 4,000.00 whose 260.00 payment, due the 20th, swept on creation on 10 September 2026 from Savings of 5,000.00, changed to a card with the return accepted, stays as a card linked to nothing, its payment is gone, and Savings is 5,000.00.
 
 **Since:** 2026-11-25 · builder · own words
+
+### D-R109 · A card whose charges are not logged
+
+**Rule:** A card has a switch, off by default, for charges the user does not log in Tesoriere; switched on, it needs a payoff category, one that exists. While it is on, the card's payoffs count as spending in that category, each dated its row: a payment off the card from Savings or from a Goal (R89), a statement payoff (R107) and its fixed payment's sweeps (R93); while it is off, the charges count through their parts (R22) and a payoff is a transfer. Each row records when it is written whether it counts and in which category, and is read as written, so turning the switch, changing the category or deleting the card later leaves every past month as it was.
+
+**Why:** A card whose spending the user does not log one by one, such as one paid off in full each month, would otherwise leave that spending in no month; with both its charges and its payoff counted, the same money would count twice.
+
+**Values:**
+
+| Row | Switch on when it is written | Switch off when it is written |
+|---|---|---|
+| the `savings` or `spend:` row of a payment off the card (R89) | filed under the payoff category, counting minus its amount | filed under none: a transfer |
+| a sweep of the card's fixed payment (R93), and a return of such sweeps (R66) | filed under the payoff category, counting its amount | a card payoff, in no spent (R67) |
+| a payment off the card from nowhere | counts nowhere: the fixed payment's sweep counted it | counts nowhere |
+| a payment charged to the card (R22) | counts through its parts, after a warning the user can dismiss that the card's charges are not logged | counts through its parts |
+
+**Evidence:** Owner, 2026-11-25, after the real-world check of R21, R25, R26, R54 and R67; the reading as written: builder, 2026-11-25.
+
+**Acceptance:** With the switch on and Shopping as the payoff category, 60.00 paid off the card from Savings in September 2026 adds 60.00 to Shopping's spent for September and to its Spending, and 60.00 paid from a Goal holding 80.00 adds 60.00 more; its 50.00 fixed payment's sweep adds 50.00 and its return takes it off again, and a statement payoff of 40.00 adds 40.00. With the switch turned off in October after the 60.00 from Savings, Shopping's September stays 60.00 and a 30.00 payoff in October adds nothing; a card with the switch off whose September payoff counted nothing, turned on in October, leaves September as it was. Deleting the card leaves September as it was. The switch on with no payoff category, or one that does not exist, is not saved. A payment charged to the card carries the warning.
+
+**Not:** Reading the switch as it stands when the figures are read: turned on, it would count past payoffs as spending in months whose charges were counted already, and turned off, or the card deleted, it would take payoffs out of months whose charges were never logged.
+
+**Since:** 2026-11-25 · owner · agreed rewording
 
 ## 11. Reports
 
@@ -1277,13 +1301,13 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 | Slice | Holds |
 |---|---|
-| each category | its spent figure for the month (R25): its parts of payments from any source (Savings, a Goal or an Account), a refund's lowering it (R21), its `cat:` adjustments, and the sweep rows filed under it (R67), other than a card's payment's |
+| each category | its spent figure for the month (R25): its parts of payments from any source (Savings, a Goal or an Account), a refund's lowering it (R21), its `cat:` adjustments, the sweep rows filed under it (R67), other than a card's payment's, and the payoff rows of a card whose charges are not logged, filed under it as their payoff category (R109) |
 | Uncategorised | parts with no category (R21) and sweep rows with no category (R19) |
-| no slice | `goal:` rows, `savings` rows of either sign (income, corrections, a payment off an Account, R89), `acct:` rows, `spend:` rows, and the sweep rows of a card's payment (R67, R93) |
+| no slice | `goal:` rows, `savings` rows of either sign (income, corrections, a payment off an Account, R89), `acct:` rows, `spend:` rows, and the sweep rows of a card's payment (R67, R93), each unless filed under a category (R109) |
 
 **Evidence:** Sci-Fin's spec, section 5.2, and `engine/Reports.kt` at `2892110`, with the slices of payments and sweeps from R22, R25 and R67; the transfers left out: owner, 2026-11-25.
 
-**Acceptance:** A 42.30 payment split 30.00 Groceries and 12.30 Household counts 30.00 in Groceries and 12.30 in Household. In a month with 100.00 and 50.00 into two Goals, a 30.00 adjustment on Food, 1,450.00 of income, a -20.00 `savings` row, 60.00 paid off a card from Savings and a 99.00 `acct:` row, the one slice is Food 30.00, totalling 30.00. A 60.00 sweep filed under Phone counts in Phone; a 40.00 payment by card and a 25.00 one from a Goal, both under Food, count 65.00 in Food. 40.00 charged to a card under Food and the card's 40.00 payment swept under Food give one slice, Food 40.00, totalling 40.00. Food at 30.00 and -50.00 in one month is a plain list. A 40.00 payment under Food and a 15.00 refund under Food in the month give one slice, Food 25.00. A 600.00 yearly expense under Insurance gives one slice, Insurance 50.00, in each month of its cycle, the month its bill is paid included.
+**Acceptance:** A 42.30 payment split 30.00 Groceries and 12.30 Household counts 30.00 in Groceries and 12.30 in Household. In a month with 100.00 and 50.00 into two Goals, a 30.00 adjustment on Food, 1,450.00 of income, a -20.00 `savings` row, 60.00 paid off a card from Savings and a 99.00 `acct:` row, the one slice is Food 30.00, totalling 30.00. A 60.00 sweep filed under Phone counts in Phone; a 40.00 payment by card and a 25.00 one from a Goal, both under Food, count 65.00 in Food. 40.00 charged to a card under Food and the card's 40.00 payment swept under Food give one slice, Food 40.00, totalling 40.00. Food at 30.00 and -50.00 in one month is a plain list. A 40.00 payment under Food and a 15.00 refund under Food in the month give one slice, Food 25.00. 60.00 paid off a card whose charges are not logged, from Savings, gives one slice of 60.00 in its payoff category. A 600.00 yearly expense under Insurance gives one slice, Insurance 50.00, in each month of its cycle, the month its bill is paid included.
 
 **Not:** Sci-Fin's Goals slice, its slice per recurring expense, and its Spending without card charges: Goal money counts when a payment spends it, a sweep in its category, and a card-paid trip in its categories.
 
@@ -1312,6 +1336,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 | a payment, from Savings, a Goal or an Account | its parts, which add up to its total (R23); a refund's, negative, lower the expenses and are no income (R21) |
 | a sweep row or a `cat:` adjustment | its amount |
 | a sweep row of a card's payment (R93) | nothing: a card payoff, whose charges count through their parts |
+| a card's payoff row filed under its payoff category: a sweep, a `savings` or a `spend:` row (R109) | its amount: the card's charges are not logged, so its payoff stands for them |
 | a `goal:` row | nothing: a transfer, counted when a payment spends the Goal's money |
 | a `savings` row, a payment off an Account among them (R89) | nothing: a transfer, an income or a correction |
 | an `acct:` row, a `spend:` row | nothing |
@@ -1786,7 +1811,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R50 · Goals hold money out of Savings: Adding 150.00 to a Goal raises its saved money by 150.00 and lowers Savings by 150.00.
 - R51 · The ledger: A 20.00 adjustment on a category is stored as `cat:<id>` with amount 2000 and lowers Savings by 20.00; a 100.00 sweep is `rec:<id>` with amount 10000 and lowers Savings by 100.00; an `acct:` row leaves Savings as it was; a 60.00 payoff of a card from a Goal is `spend:<goalId>` with amount -6000 and leaves Savings as it was.
 - R52 · Direct edits log the change: Setting Savings from 150.00 to 1,000.00 logs a `savings` row of +850.00; setting a Goal's saved money from 400.00 to 300.00 logs a `goal:<id>` row of -100.00 and raises Savings by 100.00.
-- R53 · Undoing a mistaken entry: Rows of +40.00 and -40.00 on one Goal logged 47 hours apart pair; 49 hours apart they do not; four rows +40.00, -40.00, +40.00, -40.00 logged in that order make two pairs, the first two and the last two.
+- R53 · Undoing a mistaken entry: Rows of +40.00 and -40.00 on one Goal logged 47 hours apart pair; 49 hours apart they do not; four rows +40.00, -40.00, +40.00, -40.00 logged in that order make two pairs, the first two and the last two. A -60.00 `savings` row filed under Shopping and a +60.00 `savings` correction logged an hour later do not pair; two such rows both filed under Shopping in one month do.
 - R21 · Payment: A recorded receipt payment holds every receipt line; a paired payment holds both its `receiptId` and its `bankKeys`; a recurring expense's sweep records no payment. With Savings at 1,000.00 and a 40.00 payment under Fun, a 15.00 refund from Savings under Fun leaves Savings at 975.00 and Fun's spent for the month at 25.00, and logs no ledger row and no income.
 - R22 · Source and parts are separate: A EUR 40 receipt charged to a card adds its parts to their categories' spent figures and EUR 40 to the card's balance, and moves nothing in Savings.
 - R54 · What a payment's source moves: A 42.30 payment from Savings lowers Savings by 42.30; a 30.00 payment from a Goal holding 50.00 leaves it 20.00 and Savings unchanged, and one of 60.00, after a warning, leaves it 0.00 and Savings 10.00 lower; removed, the Goal holds 50.00 and Savings is as it was; edited to 55.00 it takes 5.00 from Savings, and to 40.00 none, leaving the Goal 10.00; a 40.00 payment charged to a card with a 0.00 balance leaves the balance at 40.00, and a 15.00 refund to it then leaves 25.00; a 15.00 refund into a Goal holding 50.00 leaves it 65.00. With Savings at 1,000.00: 100.00 into a Goal, a 30.00 payment from it, the Goal deleted with its 70.00 returned leaves 970.00; removing the payment then gives 1,000.00 with a `savings` row of +30.00, re-filing its parts leaves 970.00 and logs nothing, and lowering its total to 25.00 gives 975.00 with a row of +5.00; after each, the movements of Savings add up to Savings. A 40.00 payment charged to a card that is deleted since carries a warning, can be re-filed into two parts or removed with Savings unchanged, and a new payment charged to that card cannot be saved. A 40.00 payment charged to a card at 0.00 that is deleted since, removed, logs an `acct:` row of +40.00 for that card; moved to a second card instead, it raises that card to 40.00 and logs the same row; after each, Savings vs Owed's point for the month equals its figure of the day (R100).
@@ -1832,12 +1857,13 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R91 · Taking the loan or saving for it: 9,800.00 at 5.9 % over 48 months, taken on 14 September 2026 from Savings of 1,000.00, creates a Loan of 9,800.00 with one +9,800.00 `Opening balance` row and a payment of 229.70 first due 14 October 2026, ending 14 September 2030, marked swept for September 2026; Savings stays 1,000.00. With no category, or one that does not exist, nothing is created. Saving for 12,000.00 over 48 months on 14 September 2026 creates a goal of 12,000.00 by 14 September 2030 named `Savings goal`.
 - R92 · Card payoff outlook: 640.00 at 21.9 % paid 50.00 a month clears in 15 months with 95.63 of interest; at 11.00 a month it is never cleared; at 0 % it clears in 13 months; a balance of 0.00 clears in 0 months. The minimum on 640.00 at 21.9 % starts at 25.00 and clears in 35 months with 230.40 of interest; on 3,000.00 at 0 % it starts at 60.00; 1,000.00 at 5 % a month is never cleared.
 - R93 · Committing a card's fixed payment: Committing 50.00 on 14 September 2026 for a card named Credit Card creates `Credit Card payment` of 50.00, first due 14 October 2026, with no end date, linked both ways; the card does not follow it, and its 50.00 sweeps add nothing to the chosen category's spent. A card that linked an earlier expense releases it.
-- R94 · Changing an Account's type: A Loan at 5 % following its payment, changed to a card, has no rate, principal, term, rate type or start day and does not follow. A card at 20 % changed to a Loan has no rate and cannot follow. A Loan of 4,000.00 whose 260.00 payment, due the 20th, swept on creation on 10 September 2026 from Savings of 5,000.00, changed to a card with the return accepted, stays as a card linked to nothing, its payment is gone, and Savings is 5,000.00.
+- R94 · Changing an Account's type: A Loan at 5 % following its payment, changed to a card, has no rate, principal, term, rate type or start day and does not follow. A card at 20 % changed to a Loan has no rate and cannot follow, and one whose charges were not logged under Shopping has the switch off and no payoff category. A Loan of 4,000.00 whose 260.00 payment, due the 20th, swept on creation on 10 September 2026 from Savings of 5,000.00, changed to a card with the return accepted, stays as a card linked to nothing, its payment is gone, and Savings is 5,000.00.
+- R109 · A card whose charges are not logged: With the switch on and Shopping as the payoff category, 60.00 paid off the card from Savings in September 2026 adds 60.00 to Shopping's spent for September and to its Spending, and 60.00 paid from a Goal holding 80.00 adds 60.00 more; its 50.00 fixed payment's sweep adds 50.00 and its return takes it off again, and a statement payoff of 40.00 adds 40.00. With the switch turned off in October after the 60.00 from Savings, Shopping's September stays 60.00 and a 30.00 payoff in October adds nothing; a card with the switch off whose September payoff counted nothing, turned on in October, leaves September as it was. Deleting the card leaves September as it was. The switch on with no payoff category, or one that does not exist, is not saved. A payment charged to the card carries the warning.
 - R95 · Savings movements in a report: In a month with a 100.00 sweep, a 42.30 payment from Savings, a 30.00 payment from a Goal and a 40.00 payment charged to a card, 142.30 went out of Savings; a 60.00 payment from a Goal holding 50.00 takes 10.00 more out. A 30.00 refund to Savings is 30.00 in: read on 14 September 2026 after 100.00 in on 1 June and a 100.00 payment from Savings on 10 August, a 30.00 refund to Savings on 1 September gives an Age of Money of 13 days (R96), and a 460.00 refund on 1 August leaves Coverage's outflow as it was (R98).
 - R96 · Age of Money: Read on 14 September 2026: 100.00 in on 1 June, 100.00 in on 1 August and 50.00 out on 10 August reads 105 days; with 60.00 more out on 1 September it reads 44. 100.00 in on 1 June and 350.00 out on 10 June reads 0; with 1,000.00 in on 1 July and 400.00 out on 1 August it reads 75, the July parcel holding 350.00; with 351.00 more out on 1 September it reads 0. A 100.00 payment from Savings on 10 August in place of the 50.00 empties the June parcel and reads 44; the same payment from a Goal empties nothing and reads 105. An `acct:` row opens no parcel.
 - R97 · Age of Money over the months: With 100.00 in on 20 August 2026, a two-month trend read on 14 September is 11 days for August and 25 for September. With 300.00 in on 10 July, 400.00 out on 5 August and 200.00 in on 1 September, a six-month trend read on 14 September has points for July, August and September only, and August's is 0.
 - R98 · Coverage: Read on 14 September 2026, the months are 1 June to 31 August, 92 days. Savings of 920.00 with 920.00 out on 1 July and a first row on 1 May covers 92 days; at -5.00 it covers 0; with the first row on 1 July there is no figure. A 920.00 payment from Savings in place of the row gives 92; charged to a card, there is no figure. Savings of 25.00 against 920.00 out covers 2 days and 35.00 covers 4.
-- R99 · Spending: A 42.30 payment split 30.00 Groceries and 12.30 Household counts 30.00 in Groceries and 12.30 in Household. In a month with 100.00 and 50.00 into two Goals, a 30.00 adjustment on Food, 1,450.00 of income, a -20.00 `savings` row, 60.00 paid off a card from Savings and a 99.00 `acct:` row, the one slice is Food 30.00, totalling 30.00. A 60.00 sweep filed under Phone counts in Phone; a 40.00 payment by card and a 25.00 one from a Goal, both under Food, count 65.00 in Food. 40.00 charged to a card under Food and the card's 40.00 payment swept under Food give one slice, Food 40.00, totalling 40.00. Food at 30.00 and -50.00 in one month is a plain list. A 40.00 payment under Food and a 15.00 refund under Food in the month give one slice, Food 25.00. A 600.00 yearly expense under Insurance gives one slice, Insurance 50.00, in each month of its cycle, the month its bill is paid included.
+- R99 · Spending: A 42.30 payment split 30.00 Groceries and 12.30 Household counts 30.00 in Groceries and 12.30 in Household. In a month with 100.00 and 50.00 into two Goals, a 30.00 adjustment on Food, 1,450.00 of income, a -20.00 `savings` row, 60.00 paid off a card from Savings and a 99.00 `acct:` row, the one slice is Food 30.00, totalling 30.00. A 60.00 sweep filed under Phone counts in Phone; a 40.00 payment by card and a 25.00 one from a Goal, both under Food, count 65.00 in Food. 40.00 charged to a card under Food and the card's 40.00 payment swept under Food give one slice, Food 40.00, totalling 40.00. Food at 30.00 and -50.00 in one month is a plain list. A 40.00 payment under Food and a 15.00 refund under Food in the month give one slice, Food 25.00. 60.00 paid off a card whose charges are not logged, from Savings, gives one slice of 60.00 in its payoff category. A 600.00 yearly expense under Insurance gives one slice, Insurance 50.00, in each month of its cycle, the month its bill is paid included.
 - R100 · Savings vs Owed: Read on 14 September 2026, with 1,000.00 into Savings on 10 July, a card opened at 640.00 on 1 September and a 40.00 payment charged to it on 5 September, it reads 320.00; a three-month trend reads 1,000.00 for July and August and 320.00 for September.
 - R101 · Income vs Expenses: With Income on, 1,450.00 of income, 200.00 into a Goal and a 30.00 payment from Savings in September 2026 read 1,450.00 in and 30.00 out; an 80.00 payment from the Goal makes 110.00 out; a 40.00 payment charged to a card makes 150.00; paying 60.00 off the card from Savings leaves 150.00, and a 15.00 refund to Savings makes 135.00 out with 1,450.00 still in. A month with a 100.00 sweep and nothing else reads 100.00 out, and one with 40.00 charged to a card and the card's 40.00 payment swept, and nothing else, reads 40.00 out.
 - R102 · Overtime calculator: 22.00 an hour for 10 hours is 220.00 a month and 2,640.00 a year; for 0.5 hours, 11.00 and 132.00; for -3 hours, 0.00 and 0.00. A month's pay is 3,200.00 from 3,200.00 paid monthly or 1,600.00 paid twice a month, and 2,600.00 from 1,200.00 every two weeks or 600.00 weekly. Salaried at 3,200.00 a month over 160 hours pre-fills 20.00; over 0 hours, nothing; with Income off or a pay of 0.00, nothing. Hourly at 20.00 pre-fills 20.00 and has no month's pay.

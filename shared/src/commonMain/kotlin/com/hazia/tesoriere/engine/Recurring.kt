@@ -30,7 +30,9 @@ import kotlinx.datetime.number
  *   and counts in no spent, since the charges it pays count through their parts (SPEC R67, R93,
  *   owner answer A of 2026-11-25). Sci-Fin counted a card's payment as spending. The mark is
  *   written, not read from the link, so a later link, release or deletion leaves past rows as
- *   they were; a return carries the mark of the rows it reverses.
+ *   they were; a return carries the mark of the rows it reverses. A card whose charges are not
+ *   logged has its payment's rows filed under its payoff category instead, unmarked, so they
+ *   count there (SPEC R109), written so in the same way.
  * - The rows' notes come from StoredLabels, not Sci-Fin's `stored()`.
  * - Sci-Fin's section references are replaced by SPEC rule numbers.
  */
@@ -427,11 +429,24 @@ object Recurring {
     }
 
     /**
-     * A `rec:` movement for [e], filed under its category as it stands (SPEC R67); while [e] is
-     * linked to a card it is a card payoff, counted in no spent (SPEC R67, R93).
+     * A `rec:` movement for [e], filed as [filing] says when it is written (SPEC R67, R109).
      */
-    private fun row(d: ProfileData, e: RecurringExpense, amount: Money, note: String, date: LocalDate?) =
-        Movement(amount, TransactionKey.RecurringKey(e.id), e.name, note, date = date, categoryId = e.categoryId, cardPayoff = paysCard(d, e))
+    private fun row(d: ProfileData, e: RecurringExpense, amount: Money, note: String, date: LocalDate?): Movement {
+        val (categoryId, payoff) = filing(d, e)
+        return Movement(amount, TransactionKey.RecurringKey(e.id), e.name, note, date = date, categoryId = categoryId, cardPayoff = payoff)
+    }
+
+    /**
+     * How a row of [e] written now is filed: under its category as it stands (SPEC R67); while it
+     * is linked to a card, as a card payoff counted in no spent (SPEC R67, R93), unless the card's
+     * charges are not logged, when it is filed under the card's payoff category and counts there
+     * (SPEC R109). Returns the category and whether the row is a card payoff.
+     */
+    fun filing(d: ProfileData, e: RecurringExpense): Pair<String, Boolean> {
+        val card = e.linkedAccountId?.let { id -> d.accounts.firstOrNull { it.id == id && it.type == AccountType.CREDIT } }
+            ?: return e.categoryId to false
+        return Accounts.payoffCategory(d, card)?.let { it to false } ?: (e.categoryId to true)
+    }
 
     /** Whether [e] is a card's payment (SPEC R93): linked to an Account of type credit. */
     fun paysCard(d: ProfileData, e: RecurringExpense): Boolean =

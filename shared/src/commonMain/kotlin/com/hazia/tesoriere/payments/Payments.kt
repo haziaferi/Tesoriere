@@ -4,6 +4,7 @@ import com.hazia.tesoriere.engine.Clock
 import com.hazia.tesoriere.engine.Ledger
 import com.hazia.tesoriere.engine.Movement
 import com.hazia.tesoriere.engine.TransactionKey
+import com.hazia.tesoriere.model.AccountType
 import com.hazia.tesoriere.model.Money
 import com.hazia.tesoriere.model.ProfileData
 import com.hazia.tesoriere.model.StoredLabels
@@ -65,11 +66,16 @@ object Payments {
         return maxOf(0L, draft.total - maxOf(0L, goal.saved))
     }
 
-    /** The warning code for a draft before it is saved, or null when there is none: a Goal short of its total (SPEC R54). */
-    fun draftNotice(d: ProfileData, draft: PaymentDraft, editing: String? = null): PaymentNotice? {
-        val s = draft.source as? PaymentSource.Goal ?: return null
-        if (d.goals.none { it.id == s.id }) return null
-        return PaymentNotice.GOAL_SHORT.takeIf { fromSavings(d, draft, editing) > 0 }
+    /**
+     * The warning code for a draft before it is saved, or null when there is none: a Goal short
+     * of its total (SPEC R54), or a card whose charges are not logged (SPEC R109).
+     */
+    fun draftNotice(d: ProfileData, draft: PaymentDraft, editing: String? = null): PaymentNotice? = when (val s = draft.source) {
+        is PaymentSource.Goal ->
+            if (d.goals.none { it.id == s.id }) null else PaymentNotice.GOAL_SHORT.takeIf { fromSavings(d, draft, editing) > 0 }
+        is PaymentSource.Account ->
+            PaymentNotice.CHARGES_NOT_LOGGED.takeIf { d.accounts.any { it.id == s.id && it.type == AccountType.CREDIT && it.chargesNotLogged } }
+        PaymentSource.Savings -> null
     }
 
     /** The warning code for a recorded payment whose source was deleted since, or null when there is none (SPEC R54). */

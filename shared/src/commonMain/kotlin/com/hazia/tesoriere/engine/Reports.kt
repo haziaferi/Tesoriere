@@ -28,7 +28,9 @@ import kotlin.time.Instant
  *   into a Goal or paid off an Account is a transfer, counted when a payment spends it (owner,
  *   2026-11-25). Parts and sweep rows with no category (both only from a Sci-Fin backup) are
  *   Uncategorised (SPEC R99). A card's payment's sweeps are a card payoff, in no slice and no
- *   expense: the charges they pay count through their parts (SPEC R67, R93, R101).
+ *   expense: the charges they pay count through their parts (SPEC R67, R93, R101); a card whose
+ *   charges are not logged has its payoff rows filed under its payoff category, counted there
+ *   (SPEC R109). Every row is read as written, through Ledger.spent.
  * - A slice is a code and an id, not a label and an icon: names are the caller's to look up and
  *   how they read is the design pass's (SPEC R16).
  * - Savings vs Owed's trend adds the payments charged to an Account to what is owed and the
@@ -190,13 +192,11 @@ object Reports {
         d.categories.forEach { categoryIds += it.id }
         payments.forEach { p -> p.parts.forEach { part -> part.categoryId?.let { categoryIds += it } } }
         var uncategorised = payments.sumOf { p -> p.parts.filter { it.categoryId == null }.sumOf { it.amount } }
+        // each row as it was written (Ledger.spent): a card's payment is a transfer, in no slice
+        // (SPEC R67, R93), unless filed under the payoff category of a card whose charges are not logged (SPEC R109)
         for (t in rows) {
-            when (val k = TransactionKey.parse(t.key)) {
-                is TransactionKey.CategoryKey -> categoryIds += k.id
-                // a card's payment is a transfer, in no slice (SPEC R67, R93)
-                is TransactionKey.RecurringKey -> if (t.cardPayoff) Unit else if (t.categoryId != null) categoryIds += t.categoryId else uncategorised += t.amount
-                is TransactionKey.GoalKey, TransactionKey.SavingsKey, is TransactionKey.AccountKey, is TransactionKey.GoalSpendKey -> Unit
-            }
+            val s = Ledger.spent(t) ?: continue
+            if (s.categoryId != null) categoryIds += s.categoryId else uncategorised += s.amount
         }
         return categoryIds.map { Slice(SliceKind.CATEGORY, it, Spent.of(d, it, ym)) } + Slice(SliceKind.UNCATEGORISED, null, uncategorised)
     }

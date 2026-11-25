@@ -32,6 +32,9 @@ import kotlin.math.roundToLong
  * - A payment off an Account takes its money from Savings, a Goal or nowhere ([PayoffFrom]), where
  *   Sci-Fin had a Savings pair on or off; from a Goal it logs a `spend:` row, at most what the
  *   Goal holds (SPEC R51, R89, owner answer I of 2026-11-25).
+ * - A card can be one whose charges are not logged (SPEC R109, owner answer D of 2026-11-25): the
+ *   `savings` or `spend:` row of a payoff is then filed under its payoff category, written so
+ *   with the row; changing a card to a Loan clears the switch (SPEC R94).
  * - Every recurring expense has a category (SPEC R67): getLoan and commitFixedPayment take one and
  *   refuse a category that does not exist.
  * - Money stays in Long cents (SPEC R20). Rates are Double; each product of money and a rate is
@@ -229,16 +232,29 @@ object Accounts {
         var next = balanceEdit(d, accountId, a.balance + signed, note, clock, ids(), date)
         if (direction != Direction.PAYMENT) return next
         val fromNote = payee ?: StoredLabels.fill(StoredLabels.PAYMENT_TO, a.name)
+        // a card whose charges are not logged files its payoff under its payoff category, as written (SPEC R109)
+        val filed = payoffCategory(d, a)
         when (from) {
-            PayoffFrom.Savings -> next = Writes.savingsQuickAdd(next, -amount, fromNote, false, clock, ids(), date)
+            PayoffFrom.Savings ->
+                next = Ledger.logAndMove(next, Movement(-amount, TransactionKey.SavingsKey, StoredLabels.SAVINGS, fromNote, date = date, categoryId = filed), clock, ids()).first
             is PayoffFrom.Goal -> {
                 val g = requireNotNull(goal)
                 next = next.copy(goals = next.goals.map { if (it.id == g.id) it.copy(saved = it.saved - amount) else it })
-                next = Ledger.logAndMove(next, Movement(-amount, TransactionKey.GoalSpendKey(g.id), g.name, fromNote, date = date), clock, ids()).first
+                next = Ledger.logAndMove(next, Movement(-amount, TransactionKey.GoalSpendKey(g.id), g.name, fromNote, date = date, categoryId = filed), clock, ids()).first
             }
             PayoffFrom.None -> Unit
         }
         return next
+    }
+
+    /**
+     * The category [a]'s payoffs count in while its charges are not logged (SPEC R109): its
+     * payoff category, when it is a card with the switch on and that category exists; else null,
+     * and a payoff is a transfer.
+     */
+    fun payoffCategory(d: ProfileData, a: Account): String? {
+        if (a.type != AccountType.CREDIT || !a.chargesNotLogged) return null
+        return a.payoffCategoryId?.takeIf { id -> d.categories.any { it.id == id } }
     }
 
     /** A Loan with no rate cannot follow its payment: the update has nothing to work out from (SPEC R86). */
@@ -250,7 +266,7 @@ object Accounts {
         return if (next == AccountType.CREDIT) a.copy(
             type = next, autoUpdateFromPayments = false,
             principal = null, interestRate = null, termMonths = null, rateType = null, originationDate = null,
-        ) else a.copy(type = next, apr = null)
+        ) else a.copy(type = next, apr = null, chargesNotLogged = false, payoffCategoryId = null)
     }
 
     /** A Loan is finished when its linked expense is (SPEC R87, R72). */

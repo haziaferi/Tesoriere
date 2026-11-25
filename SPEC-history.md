@@ -178,3 +178,14 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R51 · changed · a spend row also logs a payment off an Account from a Goal · owner
 - 2026-11-25 · R85 · changed · an Account moves Savings through a payment off it from Savings · owner
 - 2026-11-25 · R107 · changed · a statement payoff takes its money from Savings, a Goal or nowhere, as R89 · owner
+- 2026-11-25 · R109 · added · a card whose charges are not logged: its payoffs count as spending in its payoff category, recorded on each row as written · owner
+- 2026-11-25 · R51 · changed · a row that counts as spending names the category it is filed under · owner
+- 2026-11-25 · R53 · changed · two rows pair only when filed under the same category, and in the same month when filed under one · owner
+- 2026-11-25 · R25 · changed · a card's payoff rows count in its payoff category while its charges are not logged · owner
+- 2026-11-25 · R67 · changed · a card's payment's rows count in the card's payoff category while its charges are not logged · owner
+- 2026-11-25 · R85 · changed · a card holds whether its charges are not logged, with a payoff category · owner
+- 2026-11-25 · R89 · changed · a payment off a card whose charges are not logged is filed under its payoff category · owner
+- 2026-11-25 · R93 · changed · a card's committed payment counts in the payoff category while its charges are not logged · owner
+- 2026-11-25 · R94 · changed · a card changed to a Loan clears its switch for charges not logged · owner
+- 2026-11-25 · R99 · changed · a card's payoff rows filed under its payoff category are in that slice · owner
+- 2026-11-25 · R101 · changed · a card's payoff rows filed under its payoff category are expenses · owner

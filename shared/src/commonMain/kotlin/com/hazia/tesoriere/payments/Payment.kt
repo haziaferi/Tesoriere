@@ -114,6 +114,9 @@ enum class PaymentNotice {
 
     /** A draft from a Goal that holds less than its total: the Goal pays all it holds, Savings the rest (SPEC R54). */
     GOAL_SHORT,
+
+    /** A draft charged to a card whose charges are not logged: its payoff counts that spending already (SPEC R109). */
+    CHARGES_NOT_LOGGED,
 }
 
 /** What the payment editor holds before it is saved. */
