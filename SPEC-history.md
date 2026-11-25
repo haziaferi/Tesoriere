@@ -245,3 +245,4 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R114 · added · moving a line, linking or adding a Chatelaine category in the review; the notes; what counts as changes · builder
 - 2026-11-25 · R115 · added · Confirm records through the payment path, keeps every line and the receipt id; when Confirm stays off · builder
 - 2026-11-25 · R116 · added · a scan reads only names ending in .json, writes nothing, sorts each file; one id twice is offered once · builder
+- 2026-11-25 · R117 · added · a receipt file read as rule 123's JSON, format first; unknown keys passed over; anything else wrong is unreadable · builder

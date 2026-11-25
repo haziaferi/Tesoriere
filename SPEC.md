@@ -104,6 +104,7 @@ Kinds: O owner rule · D decided · I inherited · A assumed · Q open.
 | D-R29 | Picking up receipts | 14. Chatelaine receipts |
 | D-R30 | Receipt files Tesoriere cannot take | 14. Chatelaine receipts |
 | D-R116 | Scanning the receipt folder | 14. Chatelaine receipts |
+| D-R117 | Reading a receipt file | 14. Chatelaine receipts |
 | D-R31 | Receipt review | 14. Chatelaine receipts |
 | D-R32 | Category links | 14. Chatelaine receipts |
 | D-R33 | Closing a review | 14. Chatelaine receipts |
@@ -1699,6 +1700,32 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-25 · builder · own words
 
+### D-R117 · Reading a receipt file
+
+**Rule:** A receipt file is read as UTF-8 JSON in the format of Chatelaine's spec, rule 123, its `format` key first: a whole number above the highest format Tesoriere reads, 1, refuses the file naming that format, whatever else it holds (R30). Any other file is read whole or not at all, as below: a key rule 123 does not name is passed over, `pack` may be absent, and a file that fails any other row is unreadable (R30).
+
+**Values:**
+
+| The file | Read as |
+|---|---|
+| `format` a whole number above 1 | newer format, naming it |
+| not UTF-8, not JSON, or not one JSON object | unreadable |
+| `format` missing, not a whole number, or below 1 | unreadable |
+| a key rule 123 gives the receipt or a line missing, `pack` aside, or holding what cannot be read as its kind: text, a whole number, or the array of line objects | unreadable |
+| `date` not a calendar day written `YYYY-MM-DD` | unreadable |
+| `receiptId` blank, or `lines` empty | unreadable |
+| `totalPaid` other than the sum of the lines' `pricePaid` | unreadable |
+| a line with no `pack` | a line with no pack |
+| a key rule 123 does not name | passed over |
+
+**Evidence:** Chatelaine's spec, rule 123, with its JSON encoding as merged in Chatelaine, which settled the phase 1 plan's owner answer 1; read 2026-11-25. A blank receipt id or an empty `lines` read as unreadable: builder, 2026-11-25, since a receipt is the items ticked at one store (Chatelaine's spec, rule 124) and its id is what R30 tells a recorded file by.
+
+**Acceptance:** The example file of Chatelaine's spec, rule 123, reads as a receipt of 10.99 at Supermarket A on 2026-11-24 in EUR with three lines, the batteries with no pack; the same file with `format` 2 and a key of its own, or with `format` 2 and no `lines`, gives newer format 2; with any one key of rule 123 other than `pack` taken out, with `totalPaid` 11.00, or with a `quantity` of 1.5, it is unreadable; with a key `note` added it reads as before.
+
+**Not:** Reading what can be read of a file that fails a row: a receipt half read would record a payment that is not the one made. Taking `totalPaid` when the lines add up otherwise: the payment's parts could not add up to it (R23).
+
+**Since:** 2026-11-25 · builder · own words
+
 ### D-R31 · Receipt review
 
 **Rule:** A receipt is reviewed as one payment: its store, date and total, and its lines each in the Tesoriere category its category link gives (R32). A line can be moved to another category for this receipt only; no line can be left out. One Confirm, naming the total, records the payment; closing the review records nothing.
@@ -2045,6 +2072,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R29 · Picking up receipts: With the default, opening the app with three new files offers three receipts and runs no background work; with the daily check on, three new files give one notification that day; no receipt is recorded before its Confirm.
 - R30 · Receipt files Tesoriere cannot take: One file per row, put in the receipt folder, is listed with its reason (or, for a recorded id, not at all) and changes no figure.
 - R116 · Scanning the receipt folder: Three new files give three receipts ready, a count of 3, and the Profile unchanged; a file whose receipt id is recorded is not listed; a format-2 file is refused naming 2; a USD file in a EUR Profile is refused naming USD and EUR; a file that is not JSON is refused as unreadable; two files holding one receipt id give one receipt; a file named `chatelaine-receipt-rc-9.part` is not read. Each leaves the Profile unchanged.
+- R117 · Reading a receipt file: The example file of Chatelaine's spec, rule 123, reads as a receipt of 10.99 at Supermarket A on 2026-11-24 in EUR with three lines, the batteries with no pack; the same file with `format` 2 and a key of its own, or with `format` 2 and no `lines`, gives newer format 2; with any one key of rule 123 other than `pack` taken out, with `totalPaid` 11.00, or with a `quantity` of 1.5, it is unreadable; with a key `note` added it reads as before.
 - R31 · Receipt review: A receipt of five lines in two categories records one payment of the receipt's total with two parts; moving one line to a third category gives three parts and changes no category link; closing the review leaves no payment.
 - R32 · Category links: A receipt with category Pulizia links to Tesoriere's pulizia; a later receipt with the same id named Pulizie stays linked and shows the names-differ note; a new category with no equal name keeps Confirm off until it is added or linked.
 - R33 · Closing a review: Adding a category in a review and closing it shows the warning; dismissing it returns to the review with the change intact; closing anyway leaves no new category and no new link.
