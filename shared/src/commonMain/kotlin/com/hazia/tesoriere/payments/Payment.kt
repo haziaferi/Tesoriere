@@ -54,7 +54,7 @@ object PaymentSourceSerializer : KSerializer<PaymentSource> {
 /**
  * One category's share of a payment (SPEC R21, R23). [categoryId] is null only for a part read
  * from a Sci-Fin backup (owner answer 3 of 2026-11-24), which counts in no category's spent.
- * [amount] may be negative only for a difference part (SPEC R39).
+ * [amount] has the sign of the payment's total: negative on a refund (SPEC R21, R23).
  */
 @Serializable
 data class Part(val categoryId: String?, val amount: Money)
@@ -80,7 +80,7 @@ data class ReceiptLine(
     val categoryId: String,
 )
 
-/** A payment (SPEC R21): one date, one total, one source, and parts that add up to the total. */
+/** A payment (SPEC R21): one date, one total, one source, and parts that add up to the total. A refund's total is negative. */
 @Serializable
 data class Payment(
     val id: String,

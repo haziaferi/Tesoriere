@@ -11,7 +11,9 @@ import com.hazia.tesoriere.model.StoredLabels
 /*
  * Tesoriere's own: recording, editing and removing a payment (SPEC R21-R25, R54). A payment is
  * its own record and writes no ledger row; its source moves Savings, a Goal or an Account at
- * once, and its parts count in their categories' spent when read (SPEC R25). The two rows: what
+ * once, and its parts count in their categories' spent when read (SPEC R25). A refund is a
+ * payment with a negative total and negative parts: the same arithmetic moves its source the
+ * other way and lowers its categories' spent (SPEC R21, R23). The two rows: what
  * a payment from a Goal deleted since moves in Savings, when edited or removed, is logged as a
  * `savings` row, so the reports' replay of Savings (SPEC R95) still adds up to it; and a change to
  * what is charged to an Account deleted since is logged as an `acct:` row, so its rows and its
@@ -23,14 +25,16 @@ object Payments {
     fun remainder(draft: PaymentDraft): Money = draft.total - draft.parts.sumOf { it.amount }
 
     /**
-     * Whether the editor's save is on: a positive total, parts in categories that exist, adding
-     * up to the total (SPEC R23), and a source that exists; a Goal pays at most what it holds
-     * (SPEC R54). When [editing] names the payment being edited, its own effect counts as undone.
+     * Whether the editor's save is on: a total other than zero, negative for a refund (SPEC R21),
+     * parts in categories that exist, each of the total's sign, adding up to the total (SPEC R23),
+     * and a source that exists; a Goal pays at most what it holds (SPEC R54). When [editing] names
+     * the payment being edited, its own effect counts as undone.
      */
     fun canSave(d: ProfileData, draft: PaymentDraft, editing: String? = null): Boolean {
-        if (draft.total <= 0 || draft.parts.isEmpty() || remainder(draft) != 0L) return false
+        if (draft.total == 0L || draft.parts.isEmpty() || remainder(draft) != 0L) return false
         val categories = d.categories.mapTo(HashSet()) { it.id }
-        if (draft.parts.any { it.amount == 0L || it.categoryId == null || it.categoryId !in categories }) return false
+        val refund = draft.total < 0
+        if (draft.parts.any { it.amount == 0L || (it.amount < 0) != refund || it.categoryId == null || it.categoryId !in categories }) return false
         val old = editing?.let { id -> d.payments.firstOrNull { it.id == id } }
         val base = old?.let { undo(d, it) } ?: d
         return when (val s = draft.source) {

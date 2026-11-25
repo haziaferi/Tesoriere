@@ -43,7 +43,9 @@ import kotlin.math.abs
  *   (SPEC R89, R107); Sci-Fin always paired.
  * - Money in goes to Savings, and on into a Goal when [ReviewRow.incomingGoalId] names one, as
  *   Sci-Fin's `goal:<id>` target did: a `savings` row, then a goal quick-add of the same amount on
- *   the same day; a Goal deleted before Confirm leaves the money in Savings (SPEC R107).
+ *   the same day; a Goal deleted before Confirm leaves the money in Savings (SPEC R107). Money in
+ *   can also be filed as a refund, a payment with a negative total and its keys (SPEC R21, R107),
+ *   which Sci-Fin did not have.
  * - Keys are a BankKeys (SPEC R26), and duplicates are also found against every payment's
  *   bankKeys, so a bank row recorded through a pair is not offered again. The synthetic key makes
  *   the description's spacing one space and trims it first; Sci-Fin took it as written.
@@ -77,9 +79,9 @@ enum class RowStatus { READY, INCOMING, DUPLICATE, RECURRING, PAIR }
  * A row in the review: what the app thinks, and what the user starts with. A ticked outflow is
  * recorded through [draft] (a payment, SPEC R21) or [payoffAccountId] (a payment off an Account,
  * SPEC R89), exactly one of them; both are null until the user files it or a payee rule
- * pre-fills a draft (SPEC R108). Money in uses neither: it goes to Savings, and on into the Goal
- * [incomingGoalId] when the user picks one (SPEC R107). [pairPaymentId] is filled by pairing
- * (SPEC R37).
+ * pre-fills a draft (SPEC R108). Money in goes to Savings, and on into the Goal [incomingGoalId]
+ * when the user picks one, or, filed with a [draft] of negative total, is recorded as a refund
+ * (SPEC R21, R107). [pairPaymentId] is filled by pairing (SPEC R37).
  */
 data class ReviewRow(
     val row: BankRow,
@@ -343,9 +345,12 @@ object StatementImport {
         return kept.joinToString(" ").ifEmpty { payee }
     }
 
-    /** The payment an outflow [row] becomes: its day, its amount as the total, its description as the payee. */
+    /**
+     * The payment a [row] becomes: its day, minus its amount as the total, its description as the
+     * payee. Money out is a purchase; money in a refund, with a negative total (SPEC R21, R107).
+     */
     fun draft(row: BankRow, parts: List<Part>, source: PaymentSource = PaymentSource.Savings): PaymentDraft {
-        require(row.amount < 0) { "only money out is a payment" }
+        require(row.amount != 0L) { "a row of zero moves nothing" }
         return PaymentDraft(row.date, -row.amount, source, row.description, parts)
     }
 
@@ -421,7 +426,14 @@ object StatementImport {
     fun canConfirm(d: ProfileData, rows: List<ReviewRow>): Boolean {
         val holds = d.goals.associate { it.id to it.saved }.toMutableMap()
         for (rr in rows) {
-            if (!rr.include || rr.row.amount >= 0) continue
+            if (!rr.include) continue
+            if (rr.row.amount > 0) {
+                // money in is Savings, a Goal, or a refund: a payment whose parts add up (SPEC R21, R23, R107)
+                val refund = recorded(rr) ?: continue
+                if (rr.incomingGoalId != null || rr.payoffAccountId != null || !Payments.canSave(d, refund)) return false
+                (refund.source as? PaymentSource.Goal)?.let { s -> holds[s.id]?.let { holds[s.id] = it - refund.total } }
+                continue
+            }
             if (rr.incomingGoalId != null) return false
             val payoff = rr.payoffAccountId
             val draft = recorded(rr)
@@ -468,6 +480,12 @@ object StatementImport {
             val amt = abs(r.amount)
             val payoff = rr.payoffAccountId
             next = when {
+                r.amount > 0 && rr.draft != null -> {
+                    // a refund: a payment of minus the row's amount, with its keys; it teaches no rule (SPEC R21, R107, R108)
+                    val id = ids()
+                    val written = Payments.record(next, requireNotNull(recorded(rr)), clock, id)
+                    written.copy(payments = written.payments.map { if (it.id == id) it.copy(bankKeys = rr.keys) else it })
+                }
                 r.amount > 0 -> {
                     val saved = Writes.savingsQuickAdd(next, amt, r.description, false, clock, ids(), r.date)
                     // a Goal deleted while the review was open leaves the money in Savings

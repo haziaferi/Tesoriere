@@ -224,13 +224,46 @@ class PaymentsTest {
     }
 
     // SPEC:R21
-    @Test fun `R21 a payment needs a positive total, parts in categories that exist, and a source that exists`() {
+    @Test fun `R21 a payment needs a total other than 0_00, parts in categories that exist, and a source that exists`() {
         val d = world()
         assertFalse(Payments.canSave(d, draft("0.00", PaymentSource.Savings)))
         assertFalse(Payments.canSave(d, draft("10.00", PaymentSource.Savings, "nowhere" to "10.00")))
         assertFalse(Payments.canSave(d, draft("10.00", PaymentSource.Savings, null to "10.00")))
         assertFalse(Payments.canSave(d, draft("10.00", PaymentSource.Goal("gone"), "fun" to "10.00")))
         assertFalse(Payments.canSave(d, draft("10.00", PaymentSource.Account("gone"), "fun" to "10.00")))
+    }
+
+    // SPEC:R21 SPEC:R54 SPEC:R25
+    @Test fun `R21 after a 40_00 payment under Fun, a 15_00 refund from Savings leaves Savings 975_00 and Fun's spent 25_00, with no ledger row`() {
+        val d1 = Payments.record(world(), draft("40.00", PaymentSource.Savings, "fun" to "40.00"), clock, "pay-1")
+        val d2 = Payments.record(d1, draft("-15.00", PaymentSource.Savings, "fun" to "-15.00"), clock, "pay-2")
+        assertEquals(cents("975.00"), d2.savings.amount)
+        assertEquals(cents("25.00"), Spent.of(d2, "fun", "2026-03"))
+        assertTrue(d2.transactions.isEmpty())                                   // a refund is no income row
+        assertEquals(cents("-15.00"), d2.payments.last().total)
+        // removed, it takes the money back out
+        assertEquals(d1, Payments.remove(d2, "pay-2", clock, "t-remove"))
+    }
+
+    // SPEC:R54 SPEC:R21
+    @Test fun `R54 a 15_00 refund to a card at 40_00 leaves it 25_00, and one into a Goal holding 50_00 leaves it 65_00`() {
+        val d1 = Payments.record(world(), draft("40.00", PaymentSource.Account("card"), "groc" to "40.00"), clock, "pay-1")
+        val d2 = Payments.record(d1, draft("-15.00", PaymentSource.Account("card"), "groc" to "-15.00"), clock, "pay-2")
+        assertEquals(cents("25.00"), d2.accounts.single().balance)
+        assertEquals(cents("1,000.00"), d2.savings.amount)
+        val d3 = Payments.record(world(), draft("-15.00", PaymentSource.Goal("trip"), "fun" to "-15.00"), clock, "pay-3")
+        assertEquals(cents("65.00"), d3.goals.single().saved)
+        assertEquals(cents("1,000.00"), d3.savings.amount)
+    }
+
+    // SPEC:R23 SPEC:R21
+    @Test fun `R23 a -15_00 refund with parts of -20_00 and 5_00 cannot be saved, with one part of -15_00 it can`() {
+        val d = world()
+        assertFalse(Payments.canSave(d, draft("-15.00", PaymentSource.Savings, "fun" to "-20.00", "groc" to "5.00")))
+        assertTrue(Payments.canSave(d, draft("-15.00", PaymentSource.Savings, "fun" to "-15.00")))
+        // a purchase takes no negative part either, and a total of 0.00 with parts that net to it is no payment
+        assertFalse(Payments.canSave(d, draft("15.00", PaymentSource.Savings, "fun" to "20.00", "groc" to "-5.00")))
+        assertFalse(Payments.canSave(d, draft("0.00", PaymentSource.Savings, "fun" to "5.00", "groc" to "-5.00")))
     }
 
     // SPEC:R21 SPEC:R20

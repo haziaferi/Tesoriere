@@ -426,6 +426,39 @@ class ReportsTest {
         d = Accounts.quickAdd(d, "cc", cents("60.00"), Accounts.Direction.PAYMENT, null, pairSavings = true, clock = clock) { ids.next() }
         assertEquals(cents("150.00"), Reports.incomeVsExpenses(d, today).last().expenses)   // paying the card off is a transfer
         assertEquals(Reports.spendingComposition(d, today).net, Reports.incomeVsExpenses(d, today).last().expenses)
+        d = d.paid("-15.00", PaymentSource.Savings)                                          // a refund (SPEC R21)
+        assertEquals(cents("135.00"), Reports.incomeVsExpenses(d, today).last().expenses)
+        assertEquals(cents("1,450.00"), Reports.incomeVsExpenses(d, today).last().income)
+    }
+
+    // SPEC:R95 SPEC:R96 SPEC:R98 SPEC:R21
+    @Test fun `R95 a 30_00 refund to Savings on 1 September is money in, Age of Money 13 days, and a 460_00 refund is no outflow for Coverage`() {
+        val clock = TestClock(today); val ids = Ids("pay")
+        fun ProfileData.paid(total: String, date: LocalDate) =
+            Payments.record(this, PaymentDraft(date, cents(total), PaymentSource.Savings, null, listOf(Part("c", cents(total)))), clock, ids.next())
+        var d = profile(categories = listOf(category("c", "Clothing"))).with(tx("in", "savings", "100.00", LocalDate(2026, 6, 1)))
+        d = d.paid("100.00", LocalDate(2026, 8, 10))
+        assertEquals(0, Reports.ageOfMoney(d, today))
+        d = d.paid("-30.00", LocalDate(2026, 9, 1))
+        assertEquals(cents("30.00"), Reports.savingsMovements(d).last().effect)
+        assertEquals(13, Reports.ageOfMoney(d, today))
+        val c0 = profile(savings = "920.00", categories = listOf(category("c", "Clothing")))
+            .with(tx("a", "savings", "10.00", LocalDate(2026, 5, 1)), tx("b", "cat:x", "920.00", LocalDate(2026, 7, 1)))
+        val c1 = c0.paid("-460.00", LocalDate(2026, 8, 1))
+        assertEquals(92, Reports.coverageDaysOrNull(c1.copy(savings = c0.savings), today))   // the outflow is still 920.00
+    }
+
+    // SPEC:R99 SPEC:R101 SPEC:R21
+    @Test fun `R99 a 40_00 payment and a 15_00 refund under Food give one slice, Food 25_00, and Income vs Expenses 25_00 out with 1,450_00 in`() {
+        val clock = TestClock(today); val ids = Ids("pay")
+        var d = profile(categories = listOf(category("food", "Food")))
+        d = Writes.savingsQuickAdd(d, cents("1,450.00"), "Salary", true, clock, ids.next())
+        fun ProfileData.paid(total: String) =
+            Payments.record(this, PaymentDraft(today, cents(total), PaymentSource.Savings, null, listOf(Part("food", cents(total)))), clock, ids.next())
+        d = d.paid("40.00").paid("-15.00")
+        assertEquals(listOf(Triple(SliceKind.CATEGORY, "food", cents("25.00"))), keyed(Reports.spendingComposition(d, today).slices))
+        val point = Reports.incomeVsExpenses(d, today).last()
+        assertEquals(cents("25.00"), point.expenses); assertEquals(cents("1,450.00"), point.income)
     }
 
     // SPEC:R101 SPEC:R18

@@ -516,6 +516,30 @@ class StatementImportTest {
         assertFalse(StatementImport.canConfirm(d, over))
     }
 
+    // SPEC:R107 SPEC:R21 SPEC:R26
+    @Test fun `R107 RIMBORSO CALZATURE ORSA 25_00 filed as a refund under Household records -25_00 with its keys and lowers March's Household by 25_00`() {
+        val d = world()
+        val row = BankRow(LocalDate(2026, 3, 20), 2500, "RIMBORSO CALZATURE ORSA", "TSRF0001")
+        val review = StatementImport.review(d, listOf(row), clock.today)
+        assertEquals(RowStatus.INCOMING, review.single().status)
+        val refund = review.map { it.copy(draft = StatementImport.draft(it.row, listOf(Part("home", -2500)))) }
+        assertTrue(StatementImport.canConfirm(d, refund))
+        assertEquals(ConfirmSummary(1, 0, cents("25.00")), StatementImport.confirmSummary(refund))
+        val after = StatementImport.confirm(d, refund, clock, ids::next)
+        val p = after.payments.single()
+        assertEquals(listOf(-2500L, -2500L), listOf(p.total, Spent.of(after, "home", "2026-03")))
+        assertEquals(PaymentSource.Savings, p.source)
+        assertEquals(StatementImport.keys(row), p.bankKeys)
+        assertEquals(cents("1,025.00"), after.savings.amount)
+        assertTrue(after.transactions.isEmpty())                                   // no income row
+        assertEquals(RowStatus.DUPLICATE, StatementImport.review(after, listOf(row), clock.today).single().status)
+        // to the card, it lowers the card; parts that do not add up, or a refund also sent into a Goal, keep Confirm off
+        val toCard = review.map { it.copy(draft = StatementImport.draft(it.row, listOf(Part("home", -2500)), PaymentSource.Account("orbita"))) }
+        assertEquals(cents("275.00"), StatementImport.confirm(d, toCard, clock, ids::next).accounts.single().balance)
+        assertFalse(StatementImport.canConfirm(d, review.map { it.copy(draft = StatementImport.draft(it.row, listOf(Part("home", -2000)))) }))
+        assertFalse(StatementImport.canConfirm(d, refund.map { it.copy(incomingGoalId = "cash") }))
+    }
+
     // SPEC:R22, R107
     @Test fun `R22 a -12_40 bank row charged to a card raises it to 312_40, counts in Groceries and leaves Savings`() {
         val d = world()
