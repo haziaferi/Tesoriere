@@ -103,8 +103,14 @@ class StatementImportTest {
 
     // SPEC:R104
     @Test fun `R104 a day, a time or a word is no amount, so 04_03_2026 never reads 403,202_60`() {
-        for (raw in listOf("04/03/2026", "10:30", "EUR 12,40", "12,40 USD", "DR 12,40", "abc"))
+        for (raw in listOf("04/03/2026", "10:30", "DR 12,40", "abc", "EURO 12,40", "12,40 EUR EUR", "EUR"))
             assertNull(StatementImport.amount(raw), raw)
+    }
+
+    // SPEC:R104
+    @Test fun `R104 a three-letter currency code before or after the figure is ignored, so EUR 12,40 reads 1240`() {
+        val cases = mapOf("EUR 12,40" to 1240L, "12,40 USD" to 1240L, "eur -12,40" to -1240L, "1.234,56 EUR" to 123456L, "12,40 EUR DR" to -1240L)
+        for ((raw, expected) in cases) assertEquals(expected, StatementImport.amount(raw), raw)
     }
 
     // ---- keys and duplicates ---------------------------------------------------------------------

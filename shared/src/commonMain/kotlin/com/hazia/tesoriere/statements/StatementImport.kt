@@ -99,12 +99,17 @@ object StatementImport {
      * `12,40 DR` are -12.40, `12,40 CR` is 12.40. A text holding `/`, `:` or any other letter is a
      * day, a time or a word, never an amount.
      */
+    private val LEADING_CODE = Regex("""^[A-Za-z]{3}\s+(?=\S)""")
+    private val TRAILING_CODE = Regex("""(?<=\S)\s+[A-Za-z]{3}$""")
+
     fun amount(raw: String?): Money? {
         if (raw == null) return null
         var s = raw.trim()
         // a trailing DR is money out, CR money in (SPEC R104)
         val suffix = s.takeLast(2).uppercase().takeIf { s.length > 2 && (it == "DR" || it == "CR") }
-        if (suffix != null) s = s.dropLast(2)
+        if (suffix != null) s = s.dropLast(2).trim()
+        // one three-letter currency code before or after the figure is ignored (SPEC R104)
+        s = s.replaceFirst(LEADING_CODE, "").replaceFirst(TRAILING_CODE, "")
         if (s.any { it == '/' || it == ':' || it.isLetter() }) return null
         // the Unicode minus and the en dash stand for a minus
         var t = s.map { if (it == '−' || it == '–') '-' else it }.joinToString("").filter { it.isDigit() || it in ".,-+()" }

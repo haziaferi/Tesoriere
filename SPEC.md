@@ -1383,7 +1383,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R104 · Statement amounts
 
-**Rule:** A statement amount is read into whole cents with whole-number arithmetic only (R20): a text holding `/`, `:` or a letter other than a trailing `DR` or `CR` is no amount, since a day or a time is not one, and other characters besides digits, `.`, `,`, signs and brackets are ignored. Brackets, a leading or trailing minus, written `-`, `−` or `–`, or a trailing `DR` make it negative, and a trailing `CR` makes it positive. When both `.` and `,` appear, the last one is the decimal point; when one appears, exactly three digits after its last occurrence mark a thousands separator, and any other count a decimal point, with a third decimal rounding the cent half up.
+**Rule:** A statement amount is read into whole cents with whole-number arithmetic only (R20): one three-letter currency code before or after the figure is ignored; a text still holding `/`, `:` or a letter other than a trailing `DR` or `CR` is no amount, since a day or a time is not one, and other characters besides digits, `.`, `,`, signs and brackets are ignored. Brackets, a leading or trailing minus, written `-`, `−` or `–`, or a trailing `DR` make it negative, and a trailing `CR` makes it positive. When both `.` and `,` appear, the last one is the decimal point; when one appears, exactly three digits after its last occurrence mark a thousands separator, and any other count a decimal point, with a third decimal rounding the cent half up.
 
 **Values:**
 
@@ -1402,7 +1402,8 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 | `−12,40`, `–12,40` | -1240 |
 | `12,40 DR` | -1240 |
 | `12,40 CR` | 1240 |
-| empty, `abc`, `04/03/2026`, `10:30`, `EUR 12,40` | no amount |
+| `EUR 12,40`, `12,40 USD` | 1240 |
+| empty, `abc`, `04/03/2026`, `10:30`, `EURO 12,40`, `DR 12,40` | no amount |
 
 **Evidence:** Sci-Fin's spec, section 4.3, and `engine/Import.kt` at `2892110`, whose amounts went through a floating-point number. The minus signs, the `DR` and `CR` suffixes and the texts that are no amount: builder, 2026-11-25, after review of PR 3.
 
