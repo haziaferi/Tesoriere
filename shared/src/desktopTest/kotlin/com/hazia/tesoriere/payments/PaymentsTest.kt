@@ -6,11 +6,14 @@ import com.hazia.tesoriere.Fixture.goal
 import com.hazia.tesoriere.Fixture.profile
 import com.hazia.tesoriere.TestClock
 import com.hazia.tesoriere.cents
+import com.hazia.tesoriere.engine.Accounts
 import com.hazia.tesoriere.engine.GoalEditing
+import com.hazia.tesoriere.engine.Reports
 import com.hazia.tesoriere.engine.Writes
 import com.hazia.tesoriere.model.Account
 import com.hazia.tesoriere.model.AccountType
 import com.hazia.tesoriere.model.ProfileData
+import com.hazia.tesoriere.model.StoredLabels
 import kotlinx.datetime.LocalDate
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
@@ -67,7 +70,7 @@ class PaymentsTest {
     // SPEC:R25
     @Test fun `R25 re-filing a payment's parts changes both categories' spent for its month and writes no transaction`() {
         val d1 = Payments.record(world(), draft("40.00", PaymentSource.Savings, "groc" to "40.00"), clock, "pay-1")
-        val d2 = Payments.edit(d1, "pay-1", draft("40.00", PaymentSource.Savings, "groc" to "25.00", "home" to "15.00"))
+        val d2 = Payments.edit(d1, "pay-1", draft("40.00", PaymentSource.Savings, "groc" to "25.00", "home" to "15.00"), clock, "t-edit")
         assertEquals(cents("25.00"), Spent.of(d2, "groc", "2026-03"))
         assertEquals(cents("15.00"), Spent.of(d2, "home", "2026-03"))
         assertEquals(d1.transactions.size, d2.transactions.size)
@@ -96,10 +99,53 @@ class PaymentsTest {
     }
 
     // SPEC:R54
-    @Test fun `R54 a 60_00 payment from a Goal holding 50_00 cannot be saved`() {
+    @Test fun `R54 a 60_00 payment from a Goal holding 50_00 warns, then takes 50_00 and 10_00 from Savings, and removed restores both`() {
+        val d0 = world()
         val over = draft("60.00", PaymentSource.Goal("trip"), "fun" to "60.00")
-        assertFalse(Payments.canSave(world(), over))
-        assertTrue(Payments.canSave(world(), draft("50.00", PaymentSource.Goal("trip"), "fun" to "50.00")))
+        assertTrue(Payments.canSave(d0, over))
+        assertEquals(PaymentNotice.GOAL_SHORT, Payments.draftNotice(d0, over))
+        assertEquals(cents("10.00"), Payments.fromSavings(d0, over))
+        val within = draft("50.00", PaymentSource.Goal("trip"), "fun" to "50.00")
+        assertNull(Payments.draftNotice(d0, within)); assertEquals(0L, Payments.fromSavings(d0, within))
+        val d1 = Payments.record(d0, over, clock, "pay-1")
+        assertEquals(0L, d1.goals.single().saved)
+        assertEquals(cents("990.00"), d1.savings.amount)
+        assertEquals(cents("10.00"), d1.payments.single().fromSavings)
+        assertEquals(cents("60.00"), Spent.of(d1, "fun", "2026-03"))
+        // removed after the Goal took 30.00 more, it still returns 50.00 to the Goal and 10.00 to Savings
+        val d2 = Writes.goalQuickAdd(d1, "trip", cents("30.00"), null, clock, "t1")
+        val d3 = Payments.remove(d2, "pay-1", clock, "t-remove")
+        assertEquals(cents("80.00"), d3.goals.single().saved)
+        assertEquals(cents("970.00"), d3.savings.amount)
+    }
+
+    // SPEC:R54
+    @Test fun `R54 a short 60_00 Goal payment edited to 55_00 takes 5_00 from Savings, to 40_00 none and leaves the Goal 10_00`() {
+        val d1 = Payments.record(world(), draft("60.00", PaymentSource.Goal("trip"), "fun" to "60.00"), clock, "pay-1")
+        val to55 = draft("55.00", PaymentSource.Goal("trip"), "fun" to "55.00")
+        assertEquals(cents("5.00"), Payments.fromSavings(d1, to55, editing = "pay-1"))
+        val d2 = Payments.edit(d1, "pay-1", to55, clock, "t-edit")
+        assertEquals(listOf(0L, cents("995.00"), cents("5.00")), listOf(d2.goals.single().saved, d2.savings.amount, d2.payments.single().fromSavings))
+        val to40 = draft("40.00", PaymentSource.Goal("trip"), "fun" to "40.00")
+        assertNull(Payments.draftNotice(d2, to40, editing = "pay-1"))
+        val d3 = Payments.edit(d2, "pay-1", to40, clock, "t-edit2")
+        assertEquals(listOf(cents("10.00"), cents("1,000.00"), 0L), listOf(d3.goals.single().saved, d3.savings.amount, d3.payments.single().fromSavings))
+        assertTrue(d3.transactions.isEmpty())
+    }
+
+    // SPEC:R54 SPEC:R58 SPEC:R95
+    @Test fun `R54 a 60_00 payment that took 10_00 from Savings, its Goal deleted, re-files logging nothing and removed returns 60_00`() {
+        val d1 = Payments.record(world(), draft("60.00", PaymentSource.Goal("trip"), "fun" to "60.00"), clock, "pay-1")
+        val d2 = GoalEditing.delete(d1, "trip", returnSaved = true, clock) { "t-del" }
+        val refiled = draft("60.00", PaymentSource.Goal("trip"), "fun" to "20.00", "groc" to "40.00")
+        val d3 = Payments.edit(d2, "pay-1", refiled, clock, "t-edit")
+        assertEquals(d2.transactions, d3.transactions)
+        assertEquals(cents("990.00"), d3.savings.amount)
+        val d4 = Payments.remove(d3, "pay-1", clock, "t-remove")
+        assertEquals(cents("1,050.00"), d4.savings.amount)                     // 10.00 back from its share, 50.00 in the Goal's place
+        assertEquals(cents("50.00"), d4.transactions.single { it.id == "t-remove" }.amount)
+        assertEquals(d3.savings.amount, replayed(d3))
+        assertEquals(d4.savings.amount, replayed(d4))
     }
 
     // SPEC:R54
@@ -107,7 +153,7 @@ class PaymentsTest {
         val d1 = Payments.record(world(), draft("30.00", PaymentSource.Goal("trip"), "fun" to "30.00"), clock, "pay-1")
         // the Goal can take back its own 30.00 plus the 20.00 it still holds
         assertTrue(Payments.canSave(d1, draft("50.00", PaymentSource.Goal("trip"), "fun" to "50.00"), editing = "pay-1"))
-        val d2 = Payments.edit(d1, "pay-1", draft("30.00", PaymentSource.Savings, "fun" to "30.00"))
+        val d2 = Payments.edit(d1, "pay-1", draft("30.00", PaymentSource.Savings, "fun" to "30.00"), clock, "t-edit")
         assertEquals(cents("50.00"), d2.goals.single().saved)
         assertEquals(cents("970.00"), d2.savings.amount)
         assertEquals("pay-1", d2.payments.single().id)
@@ -118,7 +164,7 @@ class PaymentsTest {
     @Test fun `R54 removing a payment undoes its effect`() {
         val d0 = world()
         val d1 = Payments.record(d0, draft("40.00", PaymentSource.Account("card"), "groc" to "40.00"), clock, "pay-1")
-        val d2 = Payments.remove(d1, "pay-1")
+        val d2 = Payments.remove(d1, "pay-1", clock, "t-remove")
         assertEquals(d0, d2)
     }
 
@@ -132,22 +178,47 @@ class PaymentsTest {
         return d
     }
 
-    // SPEC:R54 SPEC:R58
-    @Test fun `R54 removing a payment from a deleted Goal returns its 30_00 to Savings`() {
-        val d = Payments.remove(paidFromDeletedGoal(), "pay-1")
+    /** Savings as the reports replay it (SPEC R95): the fixture's 1,000.00 plus every movement since. */
+    private fun replayed(d: ProfileData) = cents("1,000.00") + Reports.savingsMovements(d).sumOf { it.effect }
+
+    // SPEC:R54 SPEC:R58 SPEC:R95
+    @Test fun `R54 removing a payment from a deleted Goal returns its 30_00 to Savings with a savings row of 30_00`() {
+        val d = Payments.remove(paidFromDeletedGoal(), "pay-1", clock, "t-remove")
         assertEquals(cents("1,000.00"), d.savings.amount)
         assertTrue(d.payments.isEmpty())
+        val row = d.transactions.last()
+        assertEquals(listOf("t-remove", "savings", StoredLabels.DELETED_GOAL_PAYMENT), listOf(row.id, row.key, row.payee))
+        assertEquals(cents("30.00"), row.amount); assertEquals(day, row.date)
+        assertEquals(d.savings.amount, replayed(d))
     }
 
-    // SPEC:R54 SPEC:R25
-    @Test fun `R54 re-filing a deleted Goal's payment keeps its source and leaves Savings at 970_00`() {
+    // SPEC:R54 SPEC:R25 SPEC:R95
+    @Test fun `R54 re-filing a deleted Goal's payment keeps its source, leaves Savings at 970_00 and logs nothing`() {
         val d0 = paidFromDeletedGoal()
         val refiled = draft("30.00", PaymentSource.Goal("trip"), "fun" to "10.00", "groc" to "20.00")
         assertTrue(Payments.canSave(d0, refiled, editing = "pay-1"))
-        val d1 = Payments.edit(d0, "pay-1", refiled)
+        val d1 = Payments.edit(d0, "pay-1", refiled, clock, "t-edit")
         assertEquals(cents("970.00"), d1.savings.amount)
         assertEquals(PaymentSource.Goal("trip"), d1.payments.single().source)
         assertEquals(cents("20.00"), Spent.of(d1, "groc", "2026-03"))
+        assertEquals(d0.transactions, d1.transactions)
+        assertEquals(d1.savings.amount, replayed(d1))
+    }
+
+    // SPEC:R54 SPEC:R95
+    @Test fun `R54 a deleted Goal's 30_00 payment lowered to 25_00 gives Savings 975_00 with a savings row of 5_00`() {
+        val d = Payments.edit(paidFromDeletedGoal(), "pay-1", draft("25.00", PaymentSource.Goal("trip"), "fun" to "25.00"), clock, "t-edit")
+        assertEquals(cents("975.00"), d.savings.amount)
+        assertEquals(cents("5.00"), d.transactions.single { it.id == "t-edit" }.amount)
+        assertEquals(d.savings.amount, replayed(d))
+    }
+
+    // SPEC:R54 SPEC:R95
+    @Test fun `R54 a deleted Goal's 30_00 payment moved to Savings leaves 970_00 and the replay adds up`() {
+        val d = Payments.edit(paidFromDeletedGoal(), "pay-1", draft("30.00", PaymentSource.Savings, "fun" to "30.00"), clock, "t-edit")
+        assertEquals(cents("970.00"), d.savings.amount)
+        assertEquals(cents("30.00"), d.transactions.single { it.id == "t-edit" }.amount)
+        assertEquals(d.savings.amount, replayed(d))
     }
 
     // SPEC:R54
@@ -159,14 +230,99 @@ class PaymentsTest {
         assertNull(Payments.notice(live, "pay-2"))
     }
 
+    /** A 40.00 payment under Groceries charged to Card, then Card deleted (SPEC R88). */
+    private fun chargedToDeletedCard(): ProfileData {
+        val d = Payments.record(world(), draft("40.00", PaymentSource.Account("card"), "groc" to "40.00"), clock, "pay-1")
+        return Accounts.deleteCascade(d, "card", clock) { "t-close" }.also { assertTrue(it.accounts.isEmpty()) }
+    }
+
+    // SPEC:R54 SPEC:R88
+    @Test fun `R54 a 40_00 payment charged to a deleted card carries a warning code, and a new payment to that card cannot be saved`() {
+        val d = chargedToDeletedCard()
+        assertEquals(PaymentNotice.SOURCE_ACCOUNT_DELETED, Payments.notice(d, "pay-1"))
+        assertFalse(Payments.canSave(d, draft("5.00", PaymentSource.Account("card"), "fun" to "5.00")))
+        val live = Payments.record(world(), draft("5.00", PaymentSource.Account("card"), "fun" to "5.00"), clock, "pay-2")
+        assertNull(Payments.notice(live, "pay-2"))
+    }
+
+    // SPEC:R54 SPEC:R88 SPEC:R25
+    @Test fun `R54 a 40_00 payment charged to a deleted card re-files into 25_00 and 15_00 or is removed, Savings staying 1,000_00`() {
+        val d0 = chargedToDeletedCard()
+        val refiled = draft("40.00", PaymentSource.Account("card"), "groc" to "25.00", "home" to "15.00")
+        assertTrue(Payments.canSave(d0, refiled, editing = "pay-1"))
+        val d1 = Payments.edit(d0, "pay-1", refiled, clock, "t-edit")
+        assertEquals(PaymentSource.Account("card"), d1.payments.single().source)
+        assertEquals(cents("15.00"), Spent.of(d1, "home", "2026-03"))
+        assertEquals(cents("1,000.00"), d1.savings.amount)
+        assertTrue(d1.accounts.isEmpty())
+        val d2 = Payments.remove(d1, "pay-1", clock, "t-remove")
+        assertTrue(d2.payments.isEmpty())
+        assertEquals(cents("1,000.00"), d2.savings.amount)
+        // re-filing logs nothing; the removal logs +40.00 on the card, so its rows and payments add up to zero
+        assertEquals(d0.transactions, d1.transactions)
+        val row = d2.transactions.last()
+        assertEquals(d0.transactions, d2.transactions.dropLast(1))
+        assertEquals("acct:card", row.key); assertEquals(cents("40.00"), row.amount)
+        assertEquals(0L, d2.transactions.filter { it.key == "acct:card" }.sumOf { it.amount })
+    }
+
     // SPEC:R21
-    @Test fun `R21 a payment needs a positive total, parts in categories that exist, and a source that exists`() {
+    @Test fun `R21 a payment needs a total other than 0_00, parts in categories that exist, and a source that exists`() {
         val d = world()
         assertFalse(Payments.canSave(d, draft("0.00", PaymentSource.Savings)))
         assertFalse(Payments.canSave(d, draft("10.00", PaymentSource.Savings, "nowhere" to "10.00")))
         assertFalse(Payments.canSave(d, draft("10.00", PaymentSource.Savings, null to "10.00")))
         assertFalse(Payments.canSave(d, draft("10.00", PaymentSource.Goal("gone"), "fun" to "10.00")))
         assertFalse(Payments.canSave(d, draft("10.00", PaymentSource.Account("gone"), "fun" to "10.00")))
+    }
+
+    // SPEC:R21 SPEC:R54 SPEC:R25
+    @Test fun `R21 after a 40_00 payment under Fun, a 15_00 refund from Savings leaves Savings 975_00 and Fun's spent 25_00, with no ledger row`() {
+        val d1 = Payments.record(world(), draft("40.00", PaymentSource.Savings, "fun" to "40.00"), clock, "pay-1")
+        val d2 = Payments.record(d1, draft("-15.00", PaymentSource.Savings, "fun" to "-15.00"), clock, "pay-2")
+        assertEquals(cents("975.00"), d2.savings.amount)
+        assertEquals(cents("25.00"), Spent.of(d2, "fun", "2026-03"))
+        assertTrue(d2.transactions.isEmpty())                                   // a refund is no income row
+        assertEquals(cents("-15.00"), d2.payments.last().total)
+        // removed, it takes the money back out
+        assertEquals(d1, Payments.remove(d2, "pay-2", clock, "t-remove"))
+    }
+
+    // SPEC:R54 SPEC:R21
+    @Test fun `R54 a 15_00 refund to a card at 40_00 leaves it 25_00, and one into a Goal holding 50_00 leaves it 65_00`() {
+        val d1 = Payments.record(world(), draft("40.00", PaymentSource.Account("card"), "groc" to "40.00"), clock, "pay-1")
+        val d2 = Payments.record(d1, draft("-15.00", PaymentSource.Account("card"), "groc" to "-15.00"), clock, "pay-2")
+        assertEquals(cents("25.00"), d2.accounts.single().balance)
+        assertEquals(cents("1,000.00"), d2.savings.amount)
+        val d3 = Payments.record(world(), draft("-15.00", PaymentSource.Goal("trip"), "fun" to "-15.00"), clock, "pay-3")
+        assertEquals(cents("65.00"), d3.goals.single().saved)
+        assertEquals(cents("1,000.00"), d3.savings.amount)
+    }
+
+    // SPEC:R23 SPEC:R21
+    @Test fun `R23 a -15_00 refund with parts of -20_00 and 5_00 cannot be saved, with one part of -15_00 it can`() {
+        val d = world()
+        assertFalse(Payments.canSave(d, draft("-15.00", PaymentSource.Savings, "fun" to "-20.00", "groc" to "5.00")))
+        assertTrue(Payments.canSave(d, draft("-15.00", PaymentSource.Savings, "fun" to "-15.00")))
+        // a purchase takes no negative part either, and a total of 0.00 with parts that net to it is no payment
+        assertFalse(Payments.canSave(d, draft("15.00", PaymentSource.Savings, "fun" to "20.00", "groc" to "-5.00")))
+        assertFalse(Payments.canSave(d, draft("0.00", PaymentSource.Savings, "fun" to "5.00", "groc" to "-5.00")))
+    }
+
+    // SPEC:R23 SPEC:R39
+    @Test fun `R23 a 42_10 payment with item parts of 30_00 and 12_30 and a -0_20 difference part saves, the -0_20 as an item part or two difference parts do not`() {
+        val d = world()
+        fun pay(vararg parts: Part) = PaymentDraft(day, cents("42.10"), PaymentSource.Savings, "Corner shop", parts.toList())
+        val items = arrayOf(Part("groc", cents("30.00")), Part("home", cents("12.30")))
+        assertTrue(Payments.canSave(d, pay(*items, Part("fun", cents("-0.20"), difference = true))))
+        assertFalse(Payments.canSave(d, pay(*items, Part("fun", cents("-0.20")))))
+        assertFalse(Payments.canSave(d, pay(*items, Part("fun", cents("-0.10"), difference = true), Part("fun", cents("-0.10"), difference = true))))
+        // a refund's difference part may be positive; its item parts stay negative
+        val refund = PaymentDraft(day, cents("-14.80"), PaymentSource.Savings, null, listOf(Part("fun", cents("-15.00")), Part("fun", cents("0.20"), difference = true)))
+        assertTrue(Payments.canSave(d, refund))
+        val p = Payments.record(d, pay(*items, Part("fun", cents("-0.20"), difference = true)), clock, "pay-1").payments.single()
+        assertEquals(p, Json.decodeFromString(Payment.serializer(), Json.encodeToString(Payment.serializer(), p)))
+        assertTrue(p.parts.last().difference)
     }
 
     // SPEC:R21 SPEC:R20

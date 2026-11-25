@@ -59,8 +59,14 @@ data class Movement(
     /** Hourly paydays only. */
     val hoursWorked: Double? = null,
     val rate: Money? = null,
-    /** A recurring sweep's category at sweep time (owner answer 2 of 2026-11-24). */
+    /** A recurring sweep's category at sweep time (owner answer 2 of 2026-11-24), or a card's payoff category (SPEC R109). */
     val categoryId: String? = null,
+    /** A `rec:` row of an expense linked to a card, or to a Loan with a payment charged to it: counted in no spent (SPEC R67, R93). */
+    val accountPayoff: Boolean = false,
+    /** The group of the rows of one Account quick-add, undone together (SPEC R111). */
+    val groupId: String? = null,
+    /** A bimonthly or yearly expense's share row (SPEC R63). */
+    val share: Boolean = false,
 )
 
 object Ledger {
@@ -74,6 +80,25 @@ object Ledger {
         is TransactionKey.AccountKey -> 0
         is TransactionKey.GoalSpendKey -> 0      // it left Savings when it went into the Goal
         else -> -tx.amount
+    }
+
+    /** What one ledger row counts in a category's spent (SPEC R25): the category, null for Uncategorised, and the amount. */
+    data class RowSpent(val categoryId: String?, val amount: Money)
+
+    /**
+     * What [tx] counts as spending, read as it was written (SPEC R25, R109), or null for none: a
+     * `cat:` adjustment in its own category; a sweep in the category it was filed under, unless it
+     * is an Account payoff (SPEC R67); a `savings` or `spend:` row filed under a card's payoff
+     * category by minus its amount, the money that left Savings or the Goal (SPEC R109); an
+     * `acct:` row filed under a category by its amount, a card's interest or fees (SPEC R110).
+     * Every other row, income, transfers and corrections, counts nowhere.
+     */
+    fun spent(tx: Transaction): RowSpent? = when (val k = TransactionKey.parse(tx.key)) {
+        is TransactionKey.CategoryKey -> RowSpent(k.id, tx.amount)
+        is TransactionKey.RecurringKey -> if (tx.accountPayoff) null else RowSpent(tx.categoryId, tx.amount)
+        TransactionKey.SavingsKey, is TransactionKey.GoalSpendKey -> tx.categoryId?.let { RowSpent(it, -tx.amount) }
+        is TransactionKey.AccountKey -> tx.categoryId?.let { RowSpent(it, tx.amount) }
+        is TransactionKey.GoalKey -> null
     }
 
     /**
@@ -95,6 +120,9 @@ object Ledger {
             hoursWorked = m.hoursWorked,
             rate = m.rate,
             categoryId = m.categoryId,
+            accountPayoff = m.accountPayoff,
+            groupId = m.groupId,
+            share = m.share,
         )
         val effect = savingsEffect(tx)
         var next = d.copy(transactions = d.transactions + tx)
@@ -109,9 +137,12 @@ object Ledger {
         return next to tx
     }
 
-    /** A movement on an Account alone: logged, never touching Savings (SPEC R51). */
-    fun logAccountEdit(d: ProfileData, accountId: String, accountName: String, delta: Money, payee: String?, clock: Clock, id: String, date: LocalDate? = null): ProfileData =
-        logAndMove(d, Movement(delta, TransactionKey.AccountKey(accountId), accountName, payee, date = date), clock, id).first
+    /** A movement on an Account alone: logged, never touching Savings (SPEC R51); [categoryId] files a card's interest or fees (SPEC R110). */
+    fun logAccountEdit(
+        d: ProfileData, accountId: String, accountName: String, delta: Money, payee: String?, clock: Clock, id: String,
+        date: LocalDate? = null, categoryId: String? = null, groupId: String? = null,
+    ): ProfileData =
+        logAndMove(d, Movement(delta, TransactionKey.AccountKey(accountId), accountName, payee, date = date, categoryId = categoryId, groupId = groupId), clock, id).first
 
     /**
      * SPEC R53's conditions, found once against the ledger as it stands. Returns each row that
@@ -122,8 +153,9 @@ object Ledger {
         val pairs = HashMap<String, String>()
         transactions
             .filter { !it.key.startsWith("rec:") }                       // not a sweep
-            // same target; an adjustment's target is its category's spent for one month (SPEC R25)
-            .groupBy { if (it.key.startsWith("cat:")) "${it.key}|${it.date.ymKey()}" else it.key }
+            // same target, filed under the same category or none; a row counting in a category's
+            // spent targets that spent for one month (SPEC R25, R53)
+            .groupBy { if (it.key.startsWith("cat:") || it.categoryId != null) "${it.key}|${it.categoryId}|${it.date.ymKey()}" else it.key }
             .values
             .forEach { rows ->
                 val sorted = rows.sortedWith(compareBy({ it.loggedAt }, { it.id }))   // next in logged order

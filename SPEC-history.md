@@ -74,3 +74,169 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-24 · R49 · changed · acceptance: goal checks skipped with Income off while Savings is unset · builder
 - 2026-11-24 · R53 · changed · two cat: adjustments pair only within one month · builder
 - 2026-11-24 · R54 · changed · a deleted Goal's payment moves Savings when undone, after a dismissable warning · owner
+- 2026-11-24 · R60 · added · recurring expenses, cadences and date modes · builder
+- 2026-11-24 · R61 · added · the chain of due dates · builder
+- 2026-11-24 · R62 · added · apportioned share · builder
+- 2026-11-24 · R63 · added · sweeps, one row per due date · builder
+- 2026-11-24 · R64 · added · creating a recurring expense: when it sweeps · builder
+- 2026-11-24 · R65 · added · editing a recurring expense: the difference offered · builder
+- 2026-11-24 · R66 · added · deleting a recurring expense: the return offered · builder
+- 2026-11-24 · R67 · added · every recurring expense has a category; its rows count in that category's spent · owner
+- 2026-11-24 · R68 · added · recurring threshold note · builder
+- 2026-11-24 · R69 · added · reminder dates · builder
+- 2026-11-24 · R21 · changed · a recurring expense's sweeps are ledger rows, not payments · owner
+- 2026-11-24 · R25 · changed · spent counts the recurring expense rows filed under the category · owner
+- 2026-11-24 · R70 · added · the month cycle: each missed month replayed, no write for categories · builder
+- 2026-11-24 · R71 · added · automatic deposits caught up on the same open · builder
+- 2026-11-24 · R72 · added · end of a term: finishing, the closing Loan row, the notice codes · builder
+- 2026-11-24 · R73 · added · a Loan that follows its payment · builder
+- 2026-11-24 · R74 · added · catch-up summary kept until dismissed · builder
+- 2026-11-24 · R71 · changed · automatic deposit switched back on counts from that day · builder
+- 2026-11-24 · R69 · changed · the payday reminder's date · builder
+- 2026-11-25 · R75 · added · the Income switch: off on a fresh Profile, what switching off clears · builder
+- 2026-11-25 · R76 · added · paydays by cadence; a cadence change clears the paydays and the deposit marker · builder
+- 2026-11-25 · R77 · added · income received this month, worked out from the rows · builder
+- 2026-11-25 · R78 · added · the count of days with no income logged, salaried by hand · builder
+- 2026-11-25 · R79 · added · salaried or hourly; changing the type · builder
+- 2026-11-25 · R80 · added · logged hours as shifts that move no money · builder
+- 2026-11-25 · R81 · added · the hourly payday: confirmed or nothing this time · builder
+- 2026-11-25 · R82 · added · the hourly estimate learned from the last three paydays · builder
+- 2026-11-25 · R83 · added · leaving hourly settles the logged hours · builder
+- 2026-11-25 · R84 · added · a salaried payday offered for logging by hand · builder
+- 2026-11-25 · R85 · added · Credit and Loan accounts: off on a fresh Profile, what moves a balance · builder
+- 2026-11-25 · R86 · added · creating and editing an Account: opening row, corrections, following needs a rate · builder
+- 2026-11-25 · R87 · added · an Account and its linked payment: linked both ways, deleted together · builder
+- 2026-11-25 · R88 · added · payments charged to a deleted Account stay and keep counting · builder
+- 2026-11-25 · R89 · added · quick-add on an Account: payment or Loan increase, the paired Savings row; no charge (R22) · builder
+- 2026-11-25 · R90 · added · the loan calculator's figures by rate type · builder
+- 2026-11-25 · R91 · added · taking the loan or saving for it · builder
+- 2026-11-25 · R92 · added · the card payoff outlook, walked in whole cents · builder
+- 2026-11-25 · R93 · added · committing a card's fixed payment as a linked recurring expense · builder
+- 2026-11-25 · R94 · added · changing an Account's type clears the type it leaves · builder
+- 2026-11-25 · R95 · added · what a report reads as movements of Savings: ledger rows and payments from Savings · builder
+- 2026-11-25 · R96 · added · Age of Money, oldest money first, with the shortfall carried · builder
+- 2026-11-25 · R97 · added · Age of Money over the months, as of each month's last day · builder
+- 2026-11-25 · R98 · added · coverage over the last three complete months, in whole cents · builder
+- 2026-11-25 · R99 · added · Spending from payment parts, adjustments and sweeps by category · builder
+- 2026-11-25 · R100 · added · Savings vs Owed and its trend, with payments charged to Accounts · builder
+- 2026-11-25 · R101 · added · Income vs Expenses, every payment an expense · builder
+- 2026-11-25 · R102 · added · the overtime calculator, its pre-filled rate and a month's pay by cadence · builder
+- 2026-11-25 · R26 · changed · the two keys spelled out, checked against payments' bank keys too; payee rules in R108 · builder
+- 2026-11-25 · R103 · added · statement formats: OFX blocks and CSV records, rows with no day or amount or of zero dropped · builder
+- 2026-11-25 · R104 · added · statement amounts read into cents with whole-number arithmetic · builder
+- 2026-11-25 · R105 · added · CSV columns found by header keywords, never by position · builder
+- 2026-11-25 · R106 · added · statement dates, year first or day first · builder
+- 2026-11-25 · R107 · added · the import review: statuses, what a ticked row becomes, when Confirm is on, the total · builder
+- 2026-11-25 · R108 · added · payee rules learned from one-category rows only · builder
+- 2026-11-25 · R99 · changed · Spending counts what was spent; money into Goals and paid off Accounts left out · owner
+- 2026-11-25 · R101 · changed · expenses are what was spent, the Spending total; transfers left out · owner
+- 2026-11-25 · R66 · changed · the return on deletion is filed under the category of the rows it reverses · owner
+- 2026-11-25 · R67 · changed · a return on deletion carries the reversed rows' category, not the expense's · owner
+- 2026-11-25 · R54 · changed · a payment charged to an Account deleted since: kept, editable after a warning, moves no balance · owner
+- 2026-11-25 · R54 · changed · a deleted Goal's payment logs the Savings it moves as a savings row · builder
+- 2026-11-25 · R70 · changed · the Profile keeps the last month processed, so a Profile with no recurring expense catches up too · builder
+- 2026-11-25 · R72 · changed · a finished expense's notice holds its name as typed too · builder
+- 2026-11-25 · R74 · changed · the kept summary names each finished expense, deleted or not · builder
+- 2026-11-25 · R107 · changed · money in can go on into a Goal, as in Sci-Fin · builder
+- 2026-11-25 · R107 · changed · Confirm names the count, the money out and the money in apart · builder
+- 2026-11-25 · R26 · changed · Confirm names the money out and the money in apart · builder
+- 2026-11-25 · R104 · changed · a text holding a slash, a colon or a letter is no amount; Unicode minus signs and DR/CR suffixes read · builder
+- 2026-11-25 · R105 · changed · the amount keyword value never takes a Value date column · builder
+- 2026-11-25 · R54 · changed · a change to what is charged to a deleted Account logs an acct row, so its rows and payments still add up to zero · builder
+- 2026-11-25 · R88 · changed · a later change to a deleted Account's payments keeps its rows and payments at zero · builder
+- 2026-11-25 · R25 · changed · a card's payment's sweep rows count in no spent · owner
+- 2026-11-25 · R67 · changed · a row written while the expense is linked to a card is a card payoff, counted in no spent · owner
+- 2026-11-25 · R93 · changed · a card's committed payment sweeps as a card payoff · owner
+- 2026-11-25 · R99 · changed · a card's payment's sweeps are in no slice · owner
+- 2026-11-25 · R101 · changed · a card's payment's sweeps are no expense · owner
+- 2026-11-25 · R107 · changed · a statement payoff pairs Savings by R89's default, off for an Account linked to a recurring expense · builder
+- 2026-11-25 · R70 · changed · each past month is processed with the due dates moved on to its 1st, so a share sweeps at the rate in force that month · builder
+- 2026-11-25 · R73 · changed · a Loan its payments take to 0 gives its expense the loanPaidOff notice · builder
+- 2026-11-25 · R74 · changed · a notice kept with an empty name reads with no name · builder
+- 2026-11-25 · R104 · changed · a three-letter currency code before or after the figure is ignored · builder
+- 2026-11-25 · R105 · changed · Italian headers (Data contabile, Data valuta, Causale, Dare, Avere and others) are read, and the booking date wins over the value date · builder
+- 2026-11-25 · R26 · changed · the synthetic key makes runs of spaces, tabs and non-breaking spaces one space and trims before taking 40 characters · builder
+- 2026-11-25 · R108 · changed · a payee rule is kept under a rule name that drops words holding a digit, masked card numbers and card-payment words · builder
+- 2026-11-25 · R107 · changed · an outflow of a recurring expense's amount within 3 days of one of its due dates is RECURRING too, unless the expense is a card's payment · builder
+- 2026-11-25 · R66 · changed · a return on deletion lowers its category's spent in the month of the delete, which may fall below zero · builder
+- 2026-11-25 · R67 · changed · a return can leave a month's spent below zero, as intended · builder
+- 2026-11-25 · R62 · changed · the monthly share is what counts in spent and Spending each month, never the whole bill in the month the bank pays it · builder
+- 2026-11-25 · R99 · changed · a bimonthly or yearly expense counts its share each month, not its whole amount in the month the bank pays it · builder
+- 2026-11-25 · R107 · changed · the name match leaves a card's payment out too, as the amount match does · builder
+- 2026-11-25 · R107 · changed · neither match finds a row dated more than 3 days before the expense's first due date · builder
+- 2026-11-25 · R21 · changed · a refund is a payment with a negative total and parts adding up to it, and is not income · owner
+- 2026-11-25 · R23 · changed · a total is not zero and every part has the total's sign · owner
+- 2026-11-25 · R54 · changed · a refund moves its source the other way: Savings and a Goal up, an Account's balance down · owner
+- 2026-11-25 · R95 · changed · a refund to Savings is money into Savings · owner
+- 2026-11-25 · R99 · changed · a refund lowers its categories' slices · owner
+- 2026-11-25 · R101 · changed · a refund lowers the expenses and is no income · owner
+- 2026-11-25 · R107 · changed · a row of money in can be recorded as a refund with its keys · owner
+- 2026-11-25 · R54 · changed · a Goal short of a payment's total pays all it holds and Savings the rest, after a warning; the payment keeps that share · owner
+- 2026-11-25 · R95 · changed · the share a Goal's payment took from Savings is money out of Savings · owner
+- 2026-11-25 · R107 · changed · a row from a Goal short of it takes the rest from Savings after a warning, instead of keeping Confirm off · owner
+- 2026-11-25 · R89 · changed · a payment off an Account takes its money from Savings, a Goal (at most what it holds) or nowhere · owner
+- 2026-11-25 · R51 · changed · a spend row also logs a payment off an Account from a Goal · owner
+- 2026-11-25 · R85 · changed · an Account moves Savings through a payment off it from Savings · owner
+- 2026-11-25 · R107 · changed · a statement payoff takes its money from Savings, a Goal or nowhere, as R89 · owner
+- 2026-11-25 · R109 · added · a card whose charges are not logged: its payoffs count as spending in its payoff category, recorded on each row as written · owner
+- 2026-11-25 · R51 · changed · a row that counts as spending names the category it is filed under · owner
+- 2026-11-25 · R53 · changed · two rows pair only when filed under the same category, and in the same month when filed under one · owner
+- 2026-11-25 · R25 · changed · a card's payoff rows count in its payoff category while its charges are not logged · owner
+- 2026-11-25 · R67 · changed · a card's payment's rows count in the card's payoff category while its charges are not logged · owner
+- 2026-11-25 · R85 · changed · a card holds whether its charges are not logged, with a payoff category · owner
+- 2026-11-25 · R89 · changed · a payment off a card whose charges are not logged is filed under its payoff category · owner
+- 2026-11-25 · R93 · changed · a card's committed payment counts in the payoff category while its charges are not logged · owner
+- 2026-11-25 · R94 · changed · a card changed to a Loan clears its switch for charges not logged · owner
+- 2026-11-25 · R99 · changed · a card's payoff rows filed under its payoff category are in that slice · owner
+- 2026-11-25 · R101 · changed · a card's payoff rows filed under its payoff category are expenses · owner
+- 2026-11-25 · R110 · added · a rise in a card's balance that is not a payment is interest or fees, counted as spending in its category · owner
+- 2026-11-25 · R25 · changed · a card's interest and fees count in their category · owner
+- 2026-11-25 · R85 · changed · a card holds a fees category · owner
+- 2026-11-25 · R86 · changed · a rise in a card's balance in the editor is interest or fees · owner
+- 2026-11-25 · R89 · changed · a card takes an increase as interest or fees, filed under a category · owner
+- 2026-11-25 · R94 · changed · a card changed to a Loan clears its fees category · owner
+- 2026-11-25 · R99 · changed · a card's interest and fees are in their category's slice · owner
+- 2026-11-25 · R101 · changed · a card's interest and fees are expenses · owner
+- 2026-11-25 · R67 · changed · a Loan's payment is a transfer once a payment is charged to the Loan, as written on each row; earlier months stay as they were · owner
+- 2026-11-25 · R25 · changed · a Loan's payment's rows count in no spent once a payment is charged to the Loan · owner
+- 2026-11-25 · R99 · changed · a Loan's payment's sweeps are in no slice once a payment is charged to the Loan · owner
+- 2026-11-25 · R101 · changed · a Loan's payment's sweeps are no expense once a payment is charged to the Loan · owner
+- 2026-11-25 · R23 · changed · a pair's difference part, at most one, may have either sign; every other part keeps the total's · owner
+- 2026-11-25 · R39 · changed · the difference part is marked as such and is negative when the bank row is below the receipt · owner
+- 2026-11-25 · R21 · changed · a part says whether it is a pair's difference part · owner
+- 2026-11-25 · R89 · changed · a hand payment off a Loan counts as spending while nothing is charged to it, a transfer once something is, as written · owner
+- 2026-11-25 · R25 · changed · a Loan's hand payments count in their category while nothing is charged to it · owner
+- 2026-11-25 · R99 · changed · a Loan's hand payments are in their category's slice while nothing is charged to it · owner
+- 2026-11-25 · R101 · changed · a Loan's hand payments are expenses while nothing is charged to it · owner
+- 2026-11-25 · R107 · changed · a statement payoff of a Loan that counts as spending needs a category · owner
+- 2026-11-25 · R110 · changed · a direct edit upward on a card is interest or fees or a correction, as the user chooses; a correction needs no category · owner
+- 2026-11-25 · R86 · changed · a rise of a card's balance in the editor takes a choice of interest or fees, or a correction · owner
+- 2026-11-25 · R60 · changed · an expense keeps the day it was created; one from a Sci-Fin backup takes its first due date; Task 22's migration adds it · owner
+- 2026-11-25 · R64 · changed · creating an expense, a Loan's payment or a card's fixed payment keeps today as its creation day · owner
+- 2026-11-25 · R107 · changed · neither recurring match finds a row dated before the later of the first due date and the creation day · owner
+- 2026-11-25 · R89 · changed · a Loan's payment by hand counts under the picked category, else the Loan's own, else its linked payment's · owner
+- 2026-11-25 · R85 · changed · a Loan holds a category of its own; Task 22's migration adds it · owner
+- 2026-11-25 · R86 · changed · a Loan is saved with or without its own category, never with one that does not exist · owner
+- 2026-11-25 · R91 · changed · a Loan taken from the calculator takes its payment's category as its own · owner
+- 2026-11-25 · R94 · changed · a Loan changed to a card clears its own category · owner
+- 2026-11-25 · R110 · changed · a card whose charges are not logged asks no fees-or-correction choice for a rise by hand · owner
+- 2026-11-25 · R86 · changed · a card whose charges are not logged asks no choice for a rise of its balance · owner
+- 2026-11-25 · R67 · changed · restated to the owner's rule; the rows of an expense linked to an Account move to R87 · owner
+- 2026-11-25 · R87 · changed · how a linked expense's rows count, by link at write time, moved here from R67 · owner
+- 2026-11-25 · R110 · changed · rule restated in two sentences; its cases are in the table · owner
+- 2026-11-25 · R60 · changed · the creation day is part of schema 1, still edited in place; no migration adds it · builder
+- 2026-11-25 · R85 · changed · a Loan's own category is part of schema 1, still edited in place; no migration adds it · builder
+- 2026-11-25 · R107 · changed · the floor and the amount match also read the expense's sweep rows, so an edit of its schedule keeps a swept bill found · builder
+- 2026-11-25 · R94 · changed · a Loan changed to a card that cannot be saved changes nothing: its payment and the return stay · builder
+- 2026-11-25 · R107 · changed · Confirm records and checks the ticked rows oldest first, one day's rows in the review's order · builder
+- 2026-11-25 · R107 · changed · money sent into a Goal counts for the later rows paid from it in the same Confirm · builder
+- 2026-11-25 · R89 · changed · a picked category that does not exist refuses a Loan's payment by hand instead of being passed over · builder
+- 2026-11-25 · R110 · changed · a picked category that does not exist refuses a rise instead of being passed over · builder
+- 2026-11-25 · R111 · added · an Account quick-add can be undone as a whole, its rows sharing one group; refused for a deleted Account or Goal · owner
+- 2026-11-25 · R53 · changed · the rows of one Account quick-add are deleted together when it is undone · owner
+- 2026-11-25 · R51 · changed · the rows of one Account quick-add share a group · owner
+- 2026-11-25 · R63 · changed · a bimonthly or yearly expense's share row is marked as a share · builder
+- 2026-11-25 · R107 · changed · a share row lowers no floor and matches no bill: only sweeps of a due date do · builder
+- 2026-11-25 · R109 · changed · a statement refund to a card whose charges are not logged carries the same warning as a payment · builder
+- 2026-11-25 · R111 · changed · undoing a statement payoff keeps its keys; the row returns unticked as already recorded and can be ticked · builder
+- 2026-11-25 · R111 · changed · undoing a quick-add on unset Savings leaves Savings at 0.00, not unset · builder

@@ -54,10 +54,12 @@ object PaymentSourceSerializer : KSerializer<PaymentSource> {
 /**
  * One category's share of a payment (SPEC R21, R23). [categoryId] is null only for a part read
  * from a Sci-Fin backup (owner answer 3 of 2026-11-24), which counts in no category's spent.
- * [amount] may be negative only for a difference part (SPEC R39).
+ * [amount] has the sign of the payment's total: negative on a refund (SPEC R21, R23), except on
+ * the one part marked [difference], a pair's difference between the bank row and the receipt
+ * (SPEC R39), which may have either sign. Pairing (PR 4) sets the mark; nothing else does.
  */
 @Serializable
-data class Part(val categoryId: String?, val amount: Money)
+data class Part(val categoryId: String?, val amount: Money, val difference: Boolean = false)
 
 /** A bank row's two keys (SPEC R26): the OFX FITID when there is one, and `syn:date|amount|description`. */
 @Serializable
@@ -80,7 +82,7 @@ data class ReceiptLine(
     val categoryId: String,
 )
 
-/** A payment (SPEC R21): one date, one total, one source, and parts that add up to the total. */
+/** A payment (SPEC R21): one date, one total, one source, and parts that add up to the total. A refund's total is negative. */
 @Serializable
 data class Payment(
     val id: String,
@@ -94,6 +96,11 @@ data class Payment(
     val receiptId: String? = null,
     val receiptLines: List<ReceiptLine> = emptyList(),
     val bankKeys: BankKeys? = null,
+    /**
+     * A payment from a Goal short of its total: the share Savings paid, the Goal paying the rest
+     * (SPEC R54). Kept so undoing, editing or removing it restores both exactly; 0 otherwise.
+     */
+    val fromSavings: Money = 0,
 )
 
 /**
@@ -103,6 +110,15 @@ data class Payment(
 enum class PaymentNotice {
     /** Its source Goal was deleted: undoing, editing or removing it moves Savings in the Goal's place. */
     SOURCE_GOAL_DELETED,
+
+    /** Its source Account was deleted: editing, re-filing or removing it moves no balance (SPEC R88). */
+    SOURCE_ACCOUNT_DELETED,
+
+    /** A draft from a Goal that holds less than its total: the Goal pays all it holds, Savings the rest (SPEC R54). */
+    GOAL_SHORT,
+
+    /** A draft charged to a card whose charges are not logged: its payoff counts that spending already (SPEC R109). */
+    CHARGES_NOT_LOGGED,
 }
 
 /** What the payment editor holds before it is saved. */

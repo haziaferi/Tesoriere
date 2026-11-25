@@ -23,7 +23,8 @@ import kotlin.time.Instant
  * Changed from Sci-Fin: `Category.spent` and `Category.lastResetMonth` are gone, since spent is
  * worked out per month (SPEC R25, R59); Settings' appearance fields are gone (SPEC R16); the
  * feature switches of SPEC R18 are added; a recurring expense has a category and a ledger row
- * can carry the category it was filed under (owner answer 2 of 2026-11-24).
+ * can carry the category it was filed under (owner answer 2 of 2026-11-24); a card can be marked
+ * as one whose charges are not logged, with a payoff category (SPEC R109).
  */
 
 @Serializable
@@ -101,6 +102,12 @@ data class RecurringExpense(
     /** Set once the final occurrence has passed; `dueDate` stops advancing. */
     val finishedAt: LocalDate? = null,
     val linkedAccountId: String? = null,
+    /**
+     * The day it was created (SPEC R60, R64); null for one read from a Sci-Fin backup, which
+     * reads as its first due date (Recurring.createdOn). Part of schema 1, which is still edited
+     * in place until the first install.
+     */
+    val createdOn: LocalDate? = null,
 )
 
 @Serializable
@@ -114,6 +121,14 @@ data class Account(
     val balance: Money = 0,
     /** Credit only. A rate, not money: 0.219 is 21.9 %. */
     val apr: Double? = null,
+    /**
+     * Credit only: the user does not log this card's charges, so its payoffs count as spending in
+     * [payoffCategoryId], which must name a category that exists while this is on (SPEC R109).
+     */
+    val chargesNotLogged: Boolean = false,
+    val payoffCategoryId: String? = null,
+    /** Credit only: where a rise of the balance that is not a payment, its interest or fees, is filed unless one is picked (SPEC R110). */
+    val feesCategoryId: String? = null,
     val linkedRecurringExpenseId: String? = null,
     /** Loan only. */
     val autoUpdateFromPayments: Boolean = false,
@@ -122,6 +137,12 @@ data class Account(
     val termMonths: Int? = null,
     val rateType: RateType? = null,
     val originationDate: LocalDate? = null,
+    /**
+     * Loan only: the category a payment off it by hand counts in while nothing is charged to it,
+     * unless the payment picks another (SPEC R89). Optional; a Sci-Fin backup has none. Part of
+     * schema 1, which is still edited in place until the first install.
+     */
+    val loanCategoryId: String? = null,
 )
 
 /**
@@ -147,8 +168,32 @@ data class Transaction(
     /** Hourly paydays only. Hours are not money. */
     val hoursWorked: Double? = null,
     val rate: Money? = null,
-    /** A recurring sweep's category at sweep time (owner answer 2 of 2026-11-24); null on every other row. */
+    /**
+     * The category a row counting as spending is filed under, as written (SPEC R25, R51): a
+     * recurring sweep's at sweep time (owner answer 2 of 2026-11-24), and the payoff category on a
+     * card's payoff rows while its charges are not logged (SPEC R109), and a card's interest or
+     * fees on its `acct:` row (SPEC R110); null on every other row.
+     */
     val categoryId: String? = null,
+    /**
+     * A `rec:` row written while its expense was linked to a card, or to a Loan with a payment
+     * charged to it: an Account payoff, a transfer that moves Savings and counts in no spent
+     * (SPEC R67, R93, owner answers A and F of 2026-11-25). Written once, never read from the link.
+     */
+    val accountPayoff: Boolean = false,
+    /**
+     * The group shared by the rows of one Account quick-add, so it can be undone as a whole
+     * (SPEC R111): the id of its `acct:` row. Null on every other row, and on rows written before
+     * groups were kept or read from a Sci-Fin backup. Part of schema 1, still edited in place.
+     */
+    val groupId: String? = null,
+    /**
+     * A `rec:` row of a bimonthly or yearly expense's monthly share, or an accepted difference of
+     * one (SPEC R62, R63, R65): money set aside toward a bill still to come, which the import
+     * review never takes as a bill already paid (SPEC R107). Part of schema 1, still edited in
+     * place; false on every other row and on a Sci-Fin backup's rows.
+     */
+    val share: Boolean = false,
 )
 
 /** One per Profile. The defaults are a fresh install's: every piece SPEC R18 starts off is off. */
@@ -182,13 +227,22 @@ data class Settings(
     val onboardingComplete: Boolean = false,
     val onboardingStep: Int? = null,
     val goalPromptDismissed: Boolean = false,
+    /**
+     * The last month the month cycle processed, `YYYY-MM` (SPEC R70): the Profile's creation month
+     * on a fresh Profile, then the current month after each open. It stands for Sci-Fin's
+     * `Category.lastResetMonth`, which Tesoriere drops with the stored spent figure (SPEC R25).
+     */
+    val lastMonthProcessed: String? = null,
     val catchUpSummaryPending: Boolean = false,
     /** The catch-up summary, kept until dismissed: deposits, months replayed, what they swept, notices. */
     val catchUpDepositCount: Int = 0,
     val catchUpDepositTotal: Money = 0,
     val catchUpMonths: Int = 0,
     val catchUpSwept: Money = 0,
-    /** The notices, one per line as `name<TAB>note`. */
+    /**
+     * The notices, one per line as `expenseId<TAB>code<TAB>name`, the code an `EndedKind` token and
+     * the name as typed (SPEC R72, R74); a line of `expenseId<TAB>code` alone has no name.
+     */
     val catchUpEnded: String = "",
     val incomeType: IncomeType = IncomeType.SALARIED,
     /** Hourly only: the rate a new shift starts from, per hour. */

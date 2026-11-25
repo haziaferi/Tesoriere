@@ -14,10 +14,46 @@ object StoredLabels {
     const val STARTING_BALANCE = "Starting balance"
     /** The payee of an income row the app deposited by itself. */
     const val AUTO_DEPOSIT = "Auto-deposit"
+    /** The payee of a confirmed hourly payday's income row (SPEC R81). */
+    const val PAYDAY = "Payday"
     /** The target name of a `savings` ledger row. */
     const val SAVINGS = "Savings"
     /** The note of the row that returns a deleted Goal's money to Savings (SPEC R58). */
     const val GOAL_DELETED_RETURNED = "Goal deleted — returned to Savings"
+    /** The note of a recurring expense's sweep row (SPEC R63). */
+    const val RECURRING_SWEEP = "Recurring sweep"
+    /** The note of the row that returns a deleted recurring expense's sweeps (SPEC R66). */
+    const val DELETION_REVERSAL = "Deletion reversal"
+    /** The note of an accepted difference after editing a recurring expense (SPEC R65). */
+    const val EDIT_RECONCILIATION = "Edit reconciliation"
+    /** The note of the closing row of an Account that is deleted (SPEC R87). */
+    const val ACCOUNT_CLOSED = "Account closed"
+    /** The note of the first row of an Account created with a balance (SPEC R86). */
+    const val OPENING_BALANCE = "Opening balance"
+    /** The note of a quick-add payment off an Account the user wrote no note for (SPEC R89). */
+    const val PAID_OFF = "Paid off"
+    /** The note of a quick-add increase on a Loan the user wrote no note for (SPEC R89). */
+    const val INCREASED = "Increased"
+    /** The name of a Loan taken from the calculator the user did not name (SPEC R91). */
+    const val LOAN = "Loan"
+    /** The name of a Loan's payment the user did not name (SPEC R91). */
+    const val LOAN_PAYMENT = "Loan payment"
+    /** The name of a goal made by saving for a loan instead, the user did not name (SPEC R91). */
+    const val SAVINGS_GOAL = "Savings goal"
+    /** The note of the row that clears a Loan whose payment reached the end of its term (SPEC R72). */
+    const val LOAN_FINISHED = "Loan finished"
+    /**
+     * The note of the `savings` row that logs what a payment from a Goal deleted since moves in
+     * Savings when it is edited or removed (SPEC R54). Tesoriere's own: Sci-Fin had no such row.
+     */
+    const val DELETED_GOAL_PAYMENT = "Payment from a deleted goal"
+    /**
+     * The note of the `acct:` row that logs a change to what is charged to an Account deleted
+     * since, when one of its payments is edited or removed (SPEC R54, R88). Tesoriere's own.
+     */
+    const val DELETED_ACCOUNT_PAYMENT = "Payment to a deleted account"
+    /** The description of a statement row that carries none (SPEC R103). */
+    const val STATEMENT_ENTRY = "Statement entry"
 
     /** Templates with a name inside: `{0}` is the name, kept as the user typed it. */
     const val TOWARD = "Toward {0}"
