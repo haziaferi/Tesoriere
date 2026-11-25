@@ -1573,7 +1573,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 | Status | When, checked in this order | Ticked |
 |---|---|---|
-| `DUPLICATE` | one of its keys matches (R26) | no |
+| `DUPLICATE` | one of its keys matches (R26); ticked, it is recorded again only while no payment holds its keys (R119) | no |
 | `INCOMING` | its amount is positive | yes |
 | `PAIR` | an outflow suggested as the pair of a receipt's payment (R118); Confirm records nothing for it | no |
 | `RECURRING` | an outflow dated no earlier than the later of a recurring expense's first due date (R61) and the day it was created (R60), or than its earliest sweep row of a due date when that is earlier, whose payee's words hold the expense's name's words, or are held in them; or such an outflow of the expense's amount, or of what its rows dated on that due date hold, on a day within 3 days of one of its due dates, or of what its sweep rows of a due date dated on a day hold, within 3 days of that day; a share (R62, R63) pays toward a bill still to come and counts in neither; neither for an expense that is a card's payment (R93) | no |
@@ -1820,13 +1820,14 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R114 · Answering a receipt review
 
-**Rule:** In the review the user can move one line to another category, for this receipt only and changing no link (R31); link a Chatelaine category to an existing Tesoriere category; or add it as a new Tesoriere category with its Chatelaine name and 0.00 planned (R32). Linking or adding files every line of that Chatelaine category the user has not moved by hand under the answer, whatever category it opened in, a line moved back to the category it would hold unmoved (the one it opened in, or the answer given since) counting as not moved, and a later answer for the same Chatelaine category replaces the earlier one, dropping a category the earlier one added when no line holds it. The review holds changes, for R33's warning, once a line is moved, the source changed, a link made or a category added; the notes below say what still waits for the user, one per Chatelaine category, in the order the lines first name them.
+**Rule:** In the review the user can move one line to another category, for this receipt only and changing no link (R31); link a Chatelaine category to an existing Tesoriere category; or add it as a new Tesoriere category with its Chatelaine name and 0.00 planned (R32). Linking or adding files every line of that Chatelaine category the user has not moved by hand under the answer, whatever category it opened in, a line moved back to the category it would hold unmoved (the one it opened in, or the answer given since) counting as not moved, and a later answer for the same Chatelaine category replaces the earlier one, dropping a category the earlier one added when no line holds it. The review holds changes, for R33's warning, once a line is moved, the source changed, a link made or a category added; the notes below say what still waits for the user, one per Chatelaine category, in the order the lines first name them, then a pair available when there is one (R118).
 
 **Values:**
 
 | Note | For a Chatelaine category |
 |---|---|
 | unlinked | with no link, no equal name and no answer in this review; Confirm stays off while a line of it is in no category (R32) |
+| pair available | none: the receipt meets R37 with a payment recorded from a bank row (R118); Confirm stays on |
 | names differ | linked before, whose name differs from its Tesoriere category's ignoring capitals |
 | rename in Chatelaine | linked by the user in this review to an existing category whose name differs from it ignoring capitals |
 
@@ -1863,25 +1864,25 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R36 · Store links
 
-**Rule:** The first time a receipt from a store is paired with a bank row, Tesoriere remembers that store's name with the bank row's payee text. Later pairs for that store are suggested on the store link as well as the total and date.
+**Rule:** The first time a receipt from a store is paired with a bank row, Tesoriere remembers that store's name with the bank row's payee text. Later suggestions for that store rank the bank rows that match the link first, and still offer after them any other row whose total and date meet R37.
 
 **Why:** A bank row's text rarely equals the store's name, so the store is linked once rather than compared.
 
-**Acceptance:** After pairing an Esselunga receipt with POS ESSELUNGA MI 0423, the next Esselunga receipt is suggested only with bank rows whose payee matches that link, when one exists.
+**Acceptance:** After pairing an Esselunga receipt with POS ESSELUNGA MI 0423, the next Esselunga receipt is suggested first with the bank rows whose payee matches that link, and then with any other row that meets R37.
 
-**Since:** 2026-11-24 · owner · agreed rewording
+**Since:** 2026-11-25 · owner · agreed rewording
 
 ### D-R120 · The text a store link keeps
 
-**Rule:** A store link keeps the store's name, as the receipt file writes it, with the rule name (R108) of the first bank row the store is paired with, by suggestion or by hand; a later pair for the store leaves the link as it is. A bank row matches the link when its rule name equals the one kept.
+**Rule:** A store link keeps the store's name, as the receipt file writes it, with the rule name (R108) of the first bank row the store is paired with, by suggestion or by hand; a later pair for the store leaves the link as it is. A bank row matches the link when its rule name equals the one kept, and a match only ranks the row first among the store's suggestions: no row is left out for not matching (R36). The link is found through the payment's payee, the store, so a payee edited after Confirm is not found by its store's link.
 
 **Why:** The rule name drops the terminal ids, dates and card words that differ on every row of one store (R108).
 
-**Acceptance:** Pairing an Esselunga receipt with `POS ESSELUNGA MI 0423` keeps `esselunga mi`; `POS ESSELUNGA MI 0611` matches it and `POS ESSELUNGA TO 0611` does not; a later Esselunga pair with `ESSELUNGA SPA` by hand keeps `esselunga mi`.
+**Acceptance:** Pairing an Esselunga receipt with `POS ESSELUNGA MI 0423` keeps `esselunga mi`; `POS ESSELUNGA MI 0611` matches it and is suggested before `POS ESSELUNGA TO 0611`, which does not match and is still suggested; a later Esselunga pair with `ESSELUNGA SPA` by hand keeps `esselunga mi`.
 
-**Not:** Moving the link to each new pair's row: one unusual row would hide every usual one.
+**Not:** Moving the link to each new pair's row: one unusual row would rank first over every usual one. Hiding the rows that do not match: a store paid at a second branch would never be suggested.
 
-**Since:** 2026-11-25 · builder · own words
+**Since:** 2026-11-25 · owner · agreed rewording
 
 ### D-R37 · Pairing rule
 
@@ -1943,17 +1944,19 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R118 · Suggesting a pair
 
-**Rule:** A receipt's payment and a bank row are suggested as a pair when the row is money out not recorded yet (R26), the payment holds a receipt, no bank keys and a total above zero, their totals and days meet R37, and, once the store has a link, the row matches it (R36, R120). In the import review such a row arrives `PAIR`, unticked, naming the payment, each payment named by one row at most as below, and Confirm records nothing for a row that names a pair: only pairing it records it (R119). A receipt opened for review is suggested in the same way with each payment recorded from a bank row that holds no receipt, read as that bank row.
+**Rule:** A receipt's payment and a bank row are suggested as a pair when the row is money out not recorded yet (R26), the payment holds a receipt, no bank keys and a total above zero, and their totals and days meet R37. In the import review such a row arrives `PAIR`, unticked, naming the payment, the pairs chosen across the whole statement in the order below with each row and each payment named once at most, and Confirm records nothing for a row that names a pair: only pairing it records it (R119). A receipt opened for review is suggested in the same way with each payment recorded from a bank row that holds no receipt, read as that bank row, and its review notes the best one as a pair available, leaving Confirm on (R114).
 
 **Values:**
 
-| When more than one fits | The pair named |
+| Ranked first, in this order | Before |
 |---|---|
-| the rows | taken oldest first, each naming the best payment no earlier row named |
-| equal totals and differing totals | the equal one first |
-| the same kind of match | the one whose day is closest, then the one recorded first |
+| a row matching the store's link (R36, R120) | a row that does not |
+| equal totals | totals that differ within the tolerance (R37) |
+| the row dated closest to the receipt | rows dated further from it |
+| the row dated earlier, then the one the statement lists first | later rows |
+| the payment recorded first | payments recorded later |
 
-**Acceptance:** A 42.30 receipt recorded on 10 March and a statement row of -42.30 on 12 March: the row arrives `PAIR`, unticked, naming the receipt's payment, and the import's Confirm leaves one payment and Savings as it was; the same row on 14 March arrives `READY`; +42.30 arrives `INCOMING`. A refund, or a payment that holds bank keys already, is never named. With rows of -42.30 on 11 and 12 March, only the 11 March row names it.
+**Acceptance:** A 42.30 receipt recorded on 10 March and a statement row of -42.30 on 12 March: the row arrives `PAIR`, unticked, naming the receipt's payment, and the import's Confirm leaves one payment and Savings as it was; the same row on 14 March arrives `READY`; +42.30 arrives `INCOMING`. A refund, or a payment that holds bank keys already, is never named. With rows of -42.30 on 11 and 12 March, only the 11 March row names it; with rows of -42.40 on 11 March and -42.30 on 12 March, the 12 March row does. Two 42.30 receipts of 10 March and rows of -42.30 on 11 and 12 March: the 11 March row names the receipt recorded first and the 12 March row the other. A named payment removed while the review is open leaves its row unrecorded by that Confirm, and the next import of the statement offers the row `READY`. A receipt opened while a -42.30 payment recorded from a bank row on 12 March holds no receipt notes it as a pair available, and can still be confirmed.
 
 **Since:** 2026-11-25 · builder · own words
 
@@ -1974,8 +1977,10 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 | bank keys | the bank row's, also kept among the import's keys, so the row arrives `DUPLICATE` on a later import (R26) |
 | links, added categories and the store's source | kept as a receipt's Confirm keeps them (R115), when the receipt came second |
 | store link | made the first time the store pairs (R120) |
+| the import review still open | records nothing more for the row on its Confirm, ticked or not, and leaves it out of its figures (R107) |
+| spending | counts in the receipt's month, the payment's day, even when the bank row is dated in the next (R25) |
 
-**Acceptance:** A 42.30 receipt from Savings at 1,000.00, then its -42.30 row: one payment of 42.30 from Savings, dated the receipt's day, with the row's keys, Savings at 957.70, and the row `DUPLICATE` on the next import. A -42.30 row filed under Groceries from Savings, then a receipt of Groceries 30.00 and Household 12.30 confirmed with a card: one payment of 42.30 from the card with those two parts, the receipt's day and the row's keys, Savings back at 1,000.00 and the card 42.30 higher. A 42.10 receipt from a Goal holding 42.10, paired with a -42.30 row, warns as R54 says and takes 0.20 from Savings.
+**Acceptance:** A 42.30 receipt from Savings at 1,000.00, then its -42.30 row: one payment of 42.30 from Savings, dated the receipt's day, with the row's keys, Savings at 957.70, and the row `DUPLICATE` on the next import. A -42.30 row filed under Groceries from Savings, then a receipt of Groceries 30.00 and Household 12.30 confirmed with a card: one payment of 42.30 from the card with those two parts, the receipt's day and the row's keys, Savings back at 1,000.00 and the card 42.30 higher. A 42.10 receipt from a Goal holding 42.10, paired with a -42.30 row, warns as R54 says and takes 0.20 from Savings. A -42.30 row dated 14 March, 4 days after its receipt, ticked in the import review and paired by hand before Confirm, leaves one payment and Savings 42.30 lower once. A receipt of 30 March paired with its row of 2 April counts in March's spent.
 
 **Not:** Writing the pair outside the payment path: a short Goal, a card whose charges are not logged (R109) or a deleted source would be handled twice, two ways.
 
@@ -2143,14 +2148,14 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R113 · Opening a receipt review: With Tesoriere categories Groceries and pulizia, a first receipt with lines under Chatelaine's Groceries and Pulizia opens them in Groceries and pulizia, from Savings, and a line under Garden in no category. A store last confirmed with a card opens with the card, and with Savings once the card is deleted.
 - R114 · Answering a receipt review: A line under Garden, with no Garden in Tesoriere, is noted unlinked; linked to Household it is filed under Household with a rename-in-Chatelaine note; added instead, it is filed under a new category named Garden with 0.00 planned, and the review holds changes. A Garden line moved to Fun before the answer stays under Fun. Snack, opened under Eating out by its link and linked in the review to Groceries, files its lines under Groceries. A review whose categories all link by name holds no changes until a line is moved or the source changed, and moving a line changes no link; a line moved to Fun and back to Groceries, where it opened, leaves no change, and a later link of its Chatelaine category files it again.
 - R115 · Confirming a receipt: A 16.50 receipt with Groceries lines of 1.89, 2.40 and 3.15 and Household lines of 6.90 and 2.16, from Savings at 1,000.00, records one payment of 16.50 with parts Groceries 7.44 and Household 9.06 and all five lines, records its receipt id, and leaves Savings at 983.50; a 0.00 line under Gifts adds no part and is kept among the lines. The same receipt from a Goal holding 10.00 carries R54's warning, and confirmed leaves the Goal at 0.00 and Savings at 993.50. A receipt id recorded once cannot be confirmed again.
-- R36 · Store links: After pairing an Esselunga receipt with POS ESSELUNGA MI 0423, the next Esselunga receipt is suggested only with bank rows whose payee matches that link, when one exists.
-- R120 · The text a store link keeps: Pairing an Esselunga receipt with `POS ESSELUNGA MI 0423` keeps `esselunga mi`; `POS ESSELUNGA MI 0611` matches it and `POS ESSELUNGA TO 0611` does not; a later Esselunga pair with `ESSELUNGA SPA` by hand keeps `esselunga mi`.
+- R36 · Store links: After pairing an Esselunga receipt with POS ESSELUNGA MI 0423, the next Esselunga receipt is suggested first with the bank rows whose payee matches that link, and then with any other row that meets R37.
+- R120 · The text a store link keeps: Pairing an Esselunga receipt with `POS ESSELUNGA MI 0423` keeps `esselunga mi`; `POS ESSELUNGA MI 0611` matches it and is suggested before `POS ESSELUNGA TO 0611`, which does not match and is still suggested; a later Esselunga pair with `ESSELUNGA SPA` by hand keeps `esselunga mi`.
 - R37 · Pairing rule: Each row of the table, as a receipt and a bank row, gives the suggestion its row says; no pair is recorded without the user's confirm.
 - R38 · Whichever arrives first: Recording a EUR 42.30 receipt and then importing its bank row leaves one payment of EUR 42.30; importing the bank row first under Groceries and then its receipt with Groceries 30.00 and Household 12.30 leaves one payment with those two parts.
 - R39 · Difference part: A EUR 42.10 receipt paired with a EUR 42.30 bank row records a EUR 42.30 payment with a EUR 0.20 difference part in the category the user chose, and the pair's confirm is off until it is chosen. A EUR 42.30 receipt paired with a EUR 42.10 bank row records a EUR 42.10 payment with a EUR -0.20 difference part.
 - R40 · Pairing by hand: A EUR 40.00 receipt and a EUR 41.20 bank row, not suggested, can be paired by hand into one EUR 41.20 payment with a EUR 1.20 part the user files.
-- R118 · Suggesting a pair: A 42.30 receipt recorded on 10 March and a statement row of -42.30 on 12 March: the row arrives `PAIR`, unticked, naming the receipt's payment, and the import's Confirm leaves one payment and Savings as it was; the same row on 14 March arrives `READY`; +42.30 arrives `INCOMING`. A refund, or a payment that holds bank keys already, is never named. With rows of -42.30 on 11 and 12 March, only the 11 March row names it.
-- R119 · Recording a pair: A 42.30 receipt from Savings at 1,000.00, then its -42.30 row: one payment of 42.30 from Savings, dated the receipt's day, with the row's keys, Savings at 957.70, and the row `DUPLICATE` on the next import. A -42.30 row filed under Groceries from Savings, then a receipt of Groceries 30.00 and Household 12.30 confirmed with a card: one payment of 42.30 from the card with those two parts, the receipt's day and the row's keys, Savings back at 1,000.00 and the card 42.30 higher. A 42.10 receipt from a Goal holding 42.10, paired with a -42.30 row, warns as R54 says and takes 0.20 from Savings.
+- R118 · Suggesting a pair: A 42.30 receipt recorded on 10 March and a statement row of -42.30 on 12 March: the row arrives `PAIR`, unticked, naming the receipt's payment, and the import's Confirm leaves one payment and Savings as it was; the same row on 14 March arrives `READY`; +42.30 arrives `INCOMING`. A refund, or a payment that holds bank keys already, is never named. With rows of -42.30 on 11 and 12 March, only the 11 March row names it; with rows of -42.40 on 11 March and -42.30 on 12 March, the 12 March row does. Two 42.30 receipts of 10 March and rows of -42.30 on 11 and 12 March: the 11 March row names the receipt recorded first and the 12 March row the other. A named payment removed while the review is open leaves its row unrecorded by that Confirm, and the next import of the statement offers the row `READY`. A receipt opened while a -42.30 payment recorded from a bank row on 12 March holds no receipt notes it as a pair available, and can still be confirmed.
+- R119 · Recording a pair: A 42.30 receipt from Savings at 1,000.00, then its -42.30 row: one payment of 42.30 from Savings, dated the receipt's day, with the row's keys, Savings at 957.70, and the row `DUPLICATE` on the next import. A -42.30 row filed under Groceries from Savings, then a receipt of Groceries 30.00 and Household 12.30 confirmed with a card: one payment of 42.30 from the card with those two parts, the receipt's day and the row's keys, Savings back at 1,000.00 and the card 42.30 higher. A 42.10 receipt from a Goal holding 42.10, paired with a -42.30 row, warns as R54 says and takes 0.20 from Savings. A -42.30 row dated 14 March, 4 days after its receipt, ticked in the import review and paired by hand before Confirm, leaves one payment and Savings 42.30 lower once. A receipt of 30 March paired with its row of 2 April counts in March's spent.
 - R41 · Deleting a receipt payment: Deleting a receipt payment and reopening the app does not offer the receipt file again; restoring it brings back its parts.
 - R42 · Deleting a linked category: After deleting Pulizia, the next receipt with Chatelaine's Pulizia keeps Confirm off until its line is linked or added.
 - R43 · Test plan: CI runs the first five levels on every pull request; a release records its device walk.

@@ -258,3 +258,9 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R118 · added · which receipt payments and bank rows are suggested as pairs; PAIR rows are unticked and never recorded by Confirm · builder
 - 2026-11-25 · R119 · added · pairing edits the first payment through the payment path into one; what each field becomes; what cannot pair · builder
 - 2026-11-25 · R107 · changed · the PAIR status joins the table, checked after INCOMING and before RECURRING · builder
+- 2026-11-25 · R36 · changed · a store link ranks the rows that match it first and hides none · owner
+- 2026-11-25 · R120 · changed · a link only ranks; found through the payment's payee, so an edited payee loses it · owner
+- 2026-11-25 · R118 · changed · pairs chosen across the statement, link then equal totals first; a receipt review notes a pair available · builder
+- 2026-11-25 · R119 · changed · a row paired while its review is open is not recorded by that Confirm; spending stays in the receipt's month · builder
+- 2026-11-25 · R114 · changed · a pair-available note follows the category notes and leaves Confirm on · builder
+- 2026-11-25 · R107 · changed · a ticked duplicate whose keys a payment holds is not recorded again · builder
