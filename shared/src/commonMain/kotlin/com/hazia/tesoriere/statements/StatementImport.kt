@@ -10,6 +10,7 @@ import com.hazia.tesoriere.engine.plusDays
 import com.hazia.tesoriere.model.Money
 import com.hazia.tesoriere.model.ProfileData
 import com.hazia.tesoriere.model.StoredLabels
+import com.hazia.tesoriere.pairing.Pairing
 import com.hazia.tesoriere.payments.BankKeys
 import com.hazia.tesoriere.payments.Part
 import com.hazia.tesoriere.payments.PaymentDraft
@@ -70,14 +71,17 @@ import kotlin.math.abs
  *   ruling of 2026-11-25): Sci-Fin's name match had no date.
  * - No wording: Sci-Fin's review notes are dropped (the status is the code, SPEC R16), and its
  *   target lists with their labels (`inflowTargets`, `outflowTargets`) are the design pass's.
- * - Names: ImportRow is BankRow, ImportStatus is RowStatus (with PAIR, set by pairing, SPEC R37),
+ * - Names: ImportRow is BankRow, ImportStatus is RowStatus (with PAIR, SPEC R37, R118),
  *   annotate() is review(), parseCSV/parseOFX are parseCsv/parseOfx.
+ * - A row suggested as a receipt's pair (SPEC R118) arrives PAIR, unticked, naming the payment in
+ *   [ReviewRow.pairPaymentId]; Confirm records nothing for a row that names a pair, which only
+ *   Pairing.pairBankWithPayment records (SPEC R37, R119). Sci-Fin had no receipts.
  */
 
 /** One parsed statement row. [amount] is signed: negative is money out. */
 data class BankRow(val date: LocalDate, val amount: Money, val description: String, val fitid: String?)
 
-/** What the review thinks of a row (SPEC R107). PAIR is set by pairing with a receipt (SPEC R37), never here. */
+/** What the review thinks of a row (SPEC R107). PAIR: suggested as a receipt payment's pair (SPEC R37, R118). */
 enum class RowStatus { READY, INCOMING, DUPLICATE, RECURRING, PAIR }
 
 /**
@@ -86,7 +90,9 @@ enum class RowStatus { READY, INCOMING, DUPLICATE, RECURRING, PAIR }
  * SPEC R89), exactly one of them; both are null until the user files it or a payee rule
  * pre-fills a draft (SPEC R108). Money in goes to Savings, and on into the Goal [incomingGoalId]
  * when the user picks one, or, filed with a [draft] of negative total, is recorded as a refund
- * (SPEC R21, R107). [pairPaymentId] is filled by pairing (SPEC R37).
+ * (SPEC R21, R107). [pairPaymentId] names the receipt payment the row is suggested as the pair of
+ * (SPEC R118): while it is set, Confirm records nothing for the row, ticked or not; pairing records
+ * it (Pairing.pairBankWithPayment), and the user turning the suggestion down sets it to null.
  */
 data class ReviewRow(
     val row: BankRow,
@@ -402,13 +408,18 @@ object StatementImport {
             Recurring.dueDatesBetween(e, from, to).any { due -> -r.amount == e.amount || held(due) } ||
                 rows.map { it.date }.filter { it >= from && it <= to }.distinct().any { held(it) }
         }
-        return rows.map { r ->
+        // money out not recorded yet may be a receipt payment's pair (SPEC R118)
+        val pairs = Pairing.suggest(d, rows, rows.indices.filterTo(HashSet()) { i ->
+            rows[i].amount < 0 && keyStrings(keys(rows[i])).none { it in seen }
+        })
+        return rows.mapIndexed { i, r ->
             val keys = keys(r)
             val payee = normalisePayee(r.description)
             val pw = words(payee)
             val status = when {
                 keyStrings(keys).any { it in seen } -> RowStatus.DUPLICATE
                 r.amount > 0 -> RowStatus.INCOMING
+                i in pairs -> RowStatus.PAIR
                 named(r, pw) -> RowStatus.RECURRING
                 // a bank seldom writes the expense's name: its amount within 3 days of a due date finds it too
                 billOf(r) -> RowStatus.RECURRING
@@ -425,7 +436,7 @@ object StatementImport {
                 row = r, keys = keys, payee = payee, status = status,
                 include = status == RowStatus.READY || status == RowStatus.INCOMING,
                 draft = rule?.let { draft(r, listOf(Part(it, -r.amount))) },
-                payoffAccountId = null, pairPaymentId = null,
+                payoffAccountId = null, pairPaymentId = pairs[i],
             )
         }.sortedByDescending { it.row.date }
     }
@@ -489,7 +500,8 @@ object StatementImport {
         val keys = d.importState.importedKeys.toMutableList()
         for (i in recordOrder(rows)) {
             val rr = rows[i]
-            if (!rr.include) continue
+            // a row named as a receipt's pair is recorded by pairing, never as new spending (SPEC R118, R119)
+            if (!rr.include || rr.pairPaymentId != null) continue
             val r = rr.row
             val amt = abs(r.amount)
             val payoff = rr.payoffAccountId
@@ -547,9 +559,9 @@ object StatementImport {
         return Run(ok, notices, state)
     }
 
-    /** What the Confirm names (SPEC R107): the ticked rows' count, the money out and the money in, each positive. */
+    /** What the Confirm names (SPEC R107): the ticked rows' count, the money out and the money in, each positive; a row naming a pair is not counted (SPEC R118). */
     fun confirmSummary(rows: List<ReviewRow>): ConfirmSummary {
-        val ticked = rows.filter { it.include }
+        val ticked = rows.filter { it.include && it.pairPaymentId == null }
         return ConfirmSummary(
             count = ticked.size,
             moneyOut = ticked.filter { it.row.amount < 0 }.sumOf { -it.row.amount },

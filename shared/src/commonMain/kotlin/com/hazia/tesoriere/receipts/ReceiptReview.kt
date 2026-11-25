@@ -181,15 +181,26 @@ object Receipts {
         val problem = problem(d, r)
         require(problem == null) { "the receipt cannot be confirmed: $problem (SPEC R115)" }
         val written = Payments.record(withAdded(d, r), draft(r), clock, id)
+        return keep(d, written, r, id)
+    }
+
+    /**
+     * What a recorded receipt leaves beside its payment (SPEC R115, R119): payment [paymentId] of
+     * [written] gets the receipt's id and every line; the receipt id, the links, by name (worked
+     * out against [before], the Profile the review was opened on) or by the user, and the store's
+     * source are kept in the receipt settings. Shared by Confirm and by pairing a receipt with a
+     * bank row's payment.
+     */
+    internal fun keep(before: ProfileData, written: ProfileData, r: ReceiptReview, paymentId: String): ProfileData {
         val lines = r.file.lines.mapIndexed { i, l ->
             ReceiptLine(l.name, l.pack, l.quantity, l.pricePaid, l.categoryId, l.categoryName, r.lineCategories[i]!!)
         }
         val byName = chatelaineCategories(r).mapNotNull { (cid, name) ->
-            if (cid in r.newLinks || keptLink(d, cid) != null) null else byName(d, name)?.let { cid to it }
+            if (cid in r.newLinks || keptLink(before, cid) != null) null else byName(before, name)?.let { cid to it }
         }.toMap()
-        val s = d.receiptSettings!!
+        val s = written.receiptSettings!!
         return written.copy(
-            payments = written.payments.map { if (it.id == id) it.copy(receiptId = r.file.receiptId, receiptLines = lines) else it },
+            payments = written.payments.map { if (it.id == paymentId) it.copy(receiptId = r.file.receiptId, receiptLines = lines) else it },
             receiptSettings = s.copy(
                 recordedReceiptIds = s.recordedReceiptIds + r.file.receiptId,
                 categoryLinks = s.categoryLinks + byName + r.newLinks,
@@ -223,7 +234,8 @@ object Receipts {
 
     private fun draft(r: ReceiptReview) = PaymentDraft(r.file.date, r.file.totalPaid, r.source, r.file.store, parts(r))
 
-    private fun withAdded(d: ProfileData, r: ReceiptReview): ProfileData =
+    /** [d] with the categories the review added, as Confirm writes them (SPEC R114, R115). */
+    internal fun withAdded(d: ProfileData, r: ReceiptReview): ProfileData =
         d.copy(categories = d.categories + r.addedCategories.filter { a -> d.categories.none { it.id == a.id } })
 
     /** Each Chatelaine category id on the receipt with its name on the first line that names it. */

@@ -1,0 +1,334 @@
+package com.hazia.tesoriere.pairing
+
+import com.hazia.tesoriere.Fixture
+import com.hazia.tesoriere.Fixture.category
+import com.hazia.tesoriere.Fixture.goal
+import com.hazia.tesoriere.Fixture.line
+import com.hazia.tesoriere.Fixture.profile
+import com.hazia.tesoriere.Fixture.receipt
+import com.hazia.tesoriere.TestClock
+import com.hazia.tesoriere.cents
+import com.hazia.tesoriere.model.Account
+import com.hazia.tesoriere.model.AccountType
+import com.hazia.tesoriere.model.ProfileData
+import com.hazia.tesoriere.payments.Part
+import com.hazia.tesoriere.payments.PaymentNotice
+import com.hazia.tesoriere.payments.PaymentSource
+import com.hazia.tesoriere.payments.Payments
+import com.hazia.tesoriere.payments.Spent
+import com.hazia.tesoriere.receipts.ReceiptFile
+import com.hazia.tesoriere.receipts.Receipts
+import com.hazia.tesoriere.statements.BankRow
+import com.hazia.tesoriere.statements.ReviewRow
+import com.hazia.tesoriere.statements.RowStatus
+import com.hazia.tesoriere.statements.StatementImport
+import kotlinx.datetime.LocalDate
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+/** Every store, payee, product, figure and id here is made up, the store named as in R36's example. */
+class PairingTest {
+    private val day = LocalDate(2026, 3, 10)
+    private val clock = TestClock(day)
+    private val store = "Esselunga"
+
+    private fun world(): ProfileData = profile(
+        goals = listOf(goal("trip", "Trip", saved = "42.10")),
+        categories = listOf(category("groc", "Groceries"), category("home", "Household"), category("fun", "Fun")),
+    ).copy(
+        accounts = listOf(Account("card", Fixture.PROFILE, "Card", type = AccountType.CREDIT)),
+        receiptSettings = Fixture.receiptSettings(),
+    )
+
+    /** Groceries 30.00 and Household 12.30: 42.30. */
+    private fun shop(id: String = "rc-1", date: LocalDate = day, groc: String = "30.00", home: String = "12.30") = receipt(
+        id, store, date, line("pasta", groc, "ch-groc", "Groceries"), line("soap", home, "ch-home", "Household"),
+    )
+
+    private fun row(amount: String, date: LocalDate, description: String = "POS ESSELUNGA MI 0423", fitid: String? = "FIT-${date.day}") =
+        BankRow(date, -cents(amount), description, fitid)
+
+    private fun recordReceipt(d: ProfileData, file: ReceiptFile, source: PaymentSource = PaymentSource.Savings, id: String = "pay-r") =
+        Receipts.confirm(d, Receipts.setSource(Receipts.open(d, file), source), clock, id)
+
+    private fun reviewOf(d: ProfileData, vararg rows: BankRow): List<ReviewRow> = StatementImport.review(d, rows.toList(), day)
+
+    private fun on(dayOfMonth: Int) = LocalDate(2026, 3, dayOfMonth)
+
+    // --- R37: one test per row of the table ---
+
+    // SPEC:R37
+    @Test fun `R37 equal totals on the receipt's day match EXACT`() =
+        assertEquals(Match.EXACT, Pairing.match(day, cents("42.30"), row("42.30", on(10))))
+
+    // SPEC:R37
+    @Test fun `R37 equal totals 3 days after the receipt match EXACT`() =
+        assertEquals(Match.EXACT, Pairing.match(day, cents("42.30"), row("42.30", on(13))))
+
+    // SPEC:R37
+    @Test fun `R37 a bank row 2 days before the receipt does not match`() =
+        assertNull(Pairing.match(day, cents("42.30"), row("42.30", on(8))))
+
+    // SPEC:R37
+    @Test fun `R37 a bank row 4 days after the receipt does not match`() =
+        assertNull(Pairing.match(day, cents("42.30"), row("42.30", on(14))))
+
+    // SPEC:R37 SPEC:R39
+    @Test fun `R37 totals 0_50 apart match WITH_DIFFERENCE`() {
+        assertEquals(Match.WITH_DIFFERENCE, Pairing.match(day, cents("42.30"), row("42.80", on(11))))
+        assertEquals(Match.WITH_DIFFERENCE, Pairing.match(day, cents("42.30"), row("41.80", on(11))))
+    }
+
+    // SPEC:R37
+    @Test fun `R37 totals 0_51 apart do not match`() {
+        assertNull(Pairing.match(day, cents("42.30"), row("42.81", on(11))))
+        assertNull(Pairing.match(day, cents("42.30"), row("41.79", on(11))))
+    }
+
+    // SPEC:R118
+    @Test fun `R118 a row of money in never matches`() =
+        assertNull(Pairing.match(day, cents("42.30"), BankRow(on(11), cents("42.30"), "ESSELUNGA RIMBORSO", null)))
+
+    // --- R38: whichever arrives first ---
+
+    // SPEC:R38 SPEC:R118 SPEC:R119
+    @Test fun `R38 a 42_30 receipt then its bank row leaves one payment of 42_30 with bankKeys`() {
+        val d1 = recordReceipt(world(), shop())
+        val bank = row("42.30", on(12))
+        val review = reviewOf(d1, bank)
+        val rr = review.single()
+        assertEquals(RowStatus.PAIR, rr.status)
+        assertFalse(rr.include)
+        assertEquals("pay-r", rr.pairPaymentId)
+        // the import's Confirm records nothing for it
+        val imported = StatementImport.confirm(d1, review, clock) { "imp-1" }
+        assertEquals(1, imported.payments.size)
+        assertEquals(d1.savings, imported.savings)
+
+        assertTrue(Pairing.canConfirmPair(Pairing.differencePart(cents("42.30"), cents("42.30")), null))
+        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", rr, null, clock, "tx-1")
+        val p = d2.payments.single()
+        assertEquals(cents("42.30"), p.total)
+        assertEquals(day, p.date)
+        assertEquals(PaymentSource.Savings, p.source)
+        assertEquals(StatementImport.keys(bank), p.bankKeys)
+        assertEquals("rc-1", p.receiptId)
+        assertEquals(listOf(Part("groc", cents("30.00")), Part("home", cents("12.30"))), p.parts)
+        assertEquals(cents("957.70"), d2.savings.amount)
+        // the row is recorded now: a later import of it is a duplicate
+        assertEquals(RowStatus.DUPLICATE, reviewOf(d2, bank).single().status)
+        assertTrue(StatementImport.keyStrings(StatementImport.keys(bank)).all { it in d2.importState.importedKeys })
+    }
+
+    // SPEC:R38 SPEC:R119 SPEC:R35
+    @Test fun `R38 a bank row filed under Groceries then its receipt leaves one payment with Groceries 30_00 and Household 12_30, dated the receipt's day, keeping bankKeys`() {
+        val d0 = world()
+        val bank = row("42.30", on(12))
+        val filed = reviewOf(d0, bank).map { it.copy(draft = StatementImport.draft(it.row, listOf(Part("groc", cents("42.30"))))) }
+        val d1 = StatementImport.confirm(d0, filed, clock) { "pay-b" }
+        assertEquals(cents("957.70"), d1.savings.amount)
+
+        val review = Receipts.setSource(Receipts.open(d1, shop(date = on(10))), PaymentSource.Account("card"))
+        assertEquals(listOf("pay-b" to Match.EXACT), Pairing.paymentCandidates(d1, review.file))
+        val d2 = Pairing.pairReceiptWithPayment(d1, "pay-b", review, null, clock, "tx-1")
+        val p = d2.payments.single()
+        assertEquals(listOf(Part("groc", cents("30.00")), Part("home", cents("12.30"))), p.parts)
+        assertEquals(on(10), p.date)
+        assertEquals(StatementImport.keys(bank), p.bankKeys)
+        assertEquals("rc-1", p.receiptId)
+        assertEquals(2, p.receiptLines.size)
+        assertEquals(store, p.payee)
+        assertEquals(PaymentSource.Account("card"), p.source)
+        assertEquals(cents("1,000.00"), d2.savings.amount)
+        assertEquals(cents("42.30"), d2.accounts.single().balance)
+        assertEquals(listOf("rc-1"), d2.receiptSettings!!.recordedReceiptIds)
+        assertEquals(mapOf("ch-groc" to "groc", "ch-home" to "home"), d2.receiptSettings.categoryLinks)
+        assertEquals("account:card", d2.receiptSettings.storeSources[store])
+        assertEquals("esselunga mi", d2.receiptSettings.storeLinks[store])
+        assertEquals(cents("30.00"), Spent.of(d2, "groc", "2026-03"))
+        assertEquals(cents("12.30"), Spent.of(d2, "home", "2026-03"))
+    }
+
+    // --- R39: difference part ---
+
+    // SPEC:R39 SPEC:R119
+    @Test fun `R39 a 42_10 receipt with a 42_30 bank row records 42_30 with a 0_20 part, confirm off until filed`() {
+        val d1 = recordReceipt(world(), shop(home = "12.10"))
+        val rr = reviewOf(d1, row("42.30", on(11))).single()
+        assertEquals("pay-r", rr.pairPaymentId)
+        val diff = Pairing.differencePart(cents("42.10"), cents("42.30"))
+        assertEquals(cents("0.20"), diff)
+        assertFalse(Pairing.canConfirmPair(diff, null))
+        assertEquals(PairProblem.DIFFERENCE_UNFILED, Pairing.bankPairProblem(d1, "pay-r", rr, null))
+        assertFailsWith<IllegalArgumentException> { Pairing.pairBankWithPayment(d1, "pay-r", rr, null, clock, "tx-1") }
+        assertTrue(Pairing.canConfirmPair(diff, "fun"))
+        val p = Pairing.pairBankWithPayment(d1, "pay-r", rr, "fun", clock, "tx-1").payments.single()
+        assertEquals(cents("42.30"), p.total)
+        assertEquals(listOf(Part("groc", cents("30.00")), Part("home", cents("12.10")), Part("fun", cents("0.20"), difference = true)), p.parts)
+    }
+
+    // SPEC:R39 SPEC:R23
+    @Test fun `R39 a bank amount 0_20 below the receipt gives a -0_20 part`() {
+        val d1 = recordReceipt(world(), shop())
+        val rr = reviewOf(d1, row("42.10", on(11))).single()
+        assertEquals(cents("-0.20"), Pairing.differencePart(cents("42.30"), cents("42.10")))
+        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", rr, "fun", clock, "tx-1")
+        val p = d2.payments.single()
+        assertEquals(cents("42.10"), p.total)
+        assertEquals(Part("fun", cents("-0.20"), difference = true), p.parts.last())
+        assertEquals(cents("957.90"), d2.savings.amount)
+        assertEquals(cents("-0.20"), Spent.of(d2, "fun", "2026-03"))
+    }
+
+    // --- R40: by hand ---
+
+    // SPEC:R40 SPEC:R119
+    @Test fun `R40 a 40_00 receipt and a 41_20 bank row paired by hand give 41_20 with a 1_20 part`() {
+        val d1 = recordReceipt(world(), shop(groc = "27.70"))
+        val bank = row("41.20", on(11))
+        assertNull(Pairing.match(day, cents("40.00"), bank))
+        val rr = reviewOf(d1, bank).single()
+        assertEquals(RowStatus.READY, rr.status)
+        assertNull(rr.pairPaymentId)
+        val p = Pairing.pairBankWithPayment(d1, "pay-r", rr, "home", clock, "tx-1").payments.single()
+        assertEquals(cents("41.20"), p.total)
+        assertEquals(Part("home", cents("1.20"), difference = true), p.parts.last())
+    }
+
+    // SPEC:R40 SPEC:R119
+    @Test fun `R40 a bank row paired by hand with a 40_00 receipt from the other side gives 41_20 with a 1_20 part`() {
+        val d0 = world()
+        val bank = row("41.20", on(15))
+        val filed = reviewOf(d0, bank).map { it.copy(draft = StatementImport.draft(it.row, listOf(Part("groc", cents("41.20"))))) }
+        val d1 = StatementImport.confirm(d0, filed, clock) { "pay-b" }
+        val review = Receipts.open(d1, shop(groc = "27.70"))
+        assertEquals(emptyList(), Pairing.paymentCandidates(d1, review.file))
+        val p = Pairing.pairReceiptWithPayment(d1, "pay-b", review, "fun", clock, "tx-1").payments.single()
+        assertEquals(cents("41.20"), p.total)
+        assertEquals(listOf(Part("groc", cents("27.70")), Part("home", cents("12.30")), Part("fun", cents("1.20"), difference = true)), p.parts)
+    }
+
+    // --- R36 and R120: store links ---
+
+    // SPEC:R36 SPEC:R120 SPEC:R118
+    @Test fun `R36 after pairing Esselunga with POS ESSELUNGA MI 0423, the next Esselunga receipt is suggested only with rows matching that payee`() {
+        val d0 = recordReceipt(world(), shop())
+        val first = row("42.30", on(11), "POS ESSELUNGA MI 0423")
+        val d1 = Pairing.pairBankWithPayment(d0, "pay-r", reviewOf(d0, first).single(), null, clock, "tx-1")
+        assertEquals("esselunga mi", d1.receiptSettings!!.storeLinks[store])
+
+        val next = on(20)
+        val rows = listOf(
+            row("18.00", on(21), "POS ESSELUNGA MI 0611", "FIT-A"),
+            row("18.00", on(21), "POS ESSELUNGA TO 0611", "FIT-B"),
+            row("18.00", on(21), "BAR CENTRALE", "FIT-C"),
+        )
+        assertEquals(listOf(rows[0] to Match.EXACT), Pairing.candidates(d1, store, next, cents("18.00"), rows))
+        // a store with no link yet is suggested with every row that meets R37
+        assertEquals(3, Pairing.candidates(d1, "Bottega Faro", next, cents("18.00"), rows).size)
+    }
+
+    // SPEC:R120 SPEC:R40
+    @Test fun `R120 a later pair by hand with ESSELUNGA SPA keeps the link esselunga mi`() {
+        val d0 = recordReceipt(world(), shop())
+        val d1 = Pairing.pairBankWithPayment(d0, "pay-r", reviewOf(d0, row("42.30", on(11))).single(), null, clock, "tx-1")
+        val d2 = recordReceipt(d1, shop("rc-2", on(20)), id = "pay-r2")
+        val other = reviewOf(d2, row("42.30", on(21), "ESSELUNGA SPA", "FIT-X")).single()
+        assertEquals(RowStatus.READY, other.status)
+        val d3 = Pairing.pairBankWithPayment(d2, "pay-r2", other, null, clock, "tx-2")
+        assertEquals("esselunga mi", d3.receiptSettings!!.storeLinks[store])
+    }
+
+    // --- R37 and R118: suggestions record nothing ---
+
+    // SPEC:R37 SPEC:R118
+    @Test fun `R37 no pair is recorded without a pair call`() {
+        val d1 = recordReceipt(world(), shop())
+        val review = reviewOf(d1, row("42.30", on(12)))
+        assertEquals(recordReceipt(world(), shop()), d1)
+        // even ticked by hand, a row that names a pair is not recorded by the import's Confirm
+        val ticked = review.map { it.copy(include = true, draft = StatementImport.draft(it.row, listOf(Part("groc", cents("42.30"))))) }
+        val imported = StatementImport.confirm(d1, ticked, clock) { "imp-1" }
+        assertEquals(d1.payments, imported.payments)
+        assertEquals(d1.savings, imported.savings)
+        assertEquals(0, StatementImport.confirmSummary(ticked).count)
+        // the user turns the suggestion down: the row is recorded as its own payment
+        val declined = ticked.map { it.copy(pairPaymentId = null) }
+        assertEquals(2, StatementImport.confirm(d1, declined, clock) { "imp-1" }.payments.size)
+    }
+
+    // SPEC:R118
+    @Test fun `R118 a refund or a payment with bank keys is never named, and of rows on 11 and 12 March only the first names the receipt`() {
+        val d0 = world()
+        val refund = Payments.record(d0, com.hazia.tesoriere.payments.PaymentDraft(day, cents("-42.30"), PaymentSource.Savings, store, listOf(Part("groc", cents("-42.30")))), clock, "pay-x")
+        assertEquals(RowStatus.READY, reviewOf(refund, row("42.30", on(11))).single().status)
+
+        val d1 = recordReceipt(d0, shop())
+        val two = reviewOf(d1, row("42.30", on(12), fitid = "F-12"), row("42.30", on(11), fitid = "F-11"))
+        assertEquals(listOf(on(12) to null, on(11) to "pay-r"), two.map { it.row.date to it.pairPaymentId })
+        assertEquals(RowStatus.READY, two.first().status)
+        assertEquals(RowStatus.READY, reviewOf(d1, row("42.30", on(14))).single().status)
+        assertEquals(RowStatus.INCOMING, reviewOf(d1, BankRow(on(11), cents("42.30"), "POS ESSELUNGA MI 0423", "F-IN")).single().status)
+
+        val paired = Pairing.pairBankWithPayment(d1, "pay-r", two[1], null, clock, "tx-1")
+        assertEquals(RowStatus.READY, reviewOf(paired, row("42.30", on(12), fitid = "F-12b", description = "POS ESSELUNGA MI 0424")).single().status)
+        assertEquals(PairProblem.PAYMENT_NOT_PAIRABLE, Pairing.bankPairProblem(paired, "pay-r", two[0], null))
+    }
+
+    // SPEC:R118 SPEC:R38
+    @Test fun `R118 an exact total is named before one within the tolerance`() {
+        val d1 = recordReceipt(recordReceipt(world(), shop("rc-1"), id = "pay-near"), shop("rc-2", home = "12.10"), id = "pay-off")
+        val named = reviewOf(d1, row("42.10", on(11), fitid = "F-1")).single()
+        assertEquals("pay-off", named.pairPaymentId)
+    }
+
+    // --- R119: what cannot pair, and the payment path ---
+
+    // SPEC:R119 SPEC:R54
+    @Test fun `R119 a 42_10 receipt from a Goal holding 42_10 paired with a 42_30 row warns and takes 0_20 from Savings`() {
+        val d1 = recordReceipt(world(), shop(home = "12.10"), PaymentSource.Goal("trip"))
+        assertEquals(0L, d1.goals.single().saved)
+        val rr = reviewOf(d1, row("42.30", on(11))).single()
+        assertEquals(PaymentNotice.GOAL_SHORT, Pairing.bankPairNotice(d1, "pay-r", rr, "fun"))
+        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", rr, "fun", clock, "tx-1")
+        assertEquals(0L, d2.goals.single().saved)
+        assertEquals(cents("999.80"), d2.savings.amount)
+        assertEquals(cents("0.20"), d2.payments.single().fromSavings)
+    }
+
+    // SPEC:R119
+    @Test fun `R119 a row of money in, a recorded row or a difference under a category that does not exist cannot pair`() {
+        val d1 = recordReceipt(world(), shop())
+        val moneyIn = reviewOf(d1, BankRow(on(11), cents("42.30"), "ESSELUNGA", "F-IN")).single()
+        assertEquals(PairProblem.ROW_NOT_PAIRABLE, Pairing.bankPairProblem(d1, "pay-r", moneyIn, null))
+        val other = row("42.30", on(11), fitid = "F-O")
+        val recorded = StatementImport.confirm(d1, reviewOf(d1, other).map { it.copy(pairPaymentId = null, include = true, draft = StatementImport.draft(it.row, listOf(Part("groc", cents("42.30"))))) }, clock) { "pay-o" }
+        assertEquals(PairProblem.ROW_RECORDED, Pairing.bankPairProblem(recorded, "pay-r", reviewOf(d1, other).single(), null))
+        val off = reviewOf(d1, row("42.40", on(11))).single()
+        assertEquals(PairProblem.CANNOT_SAVE, Pairing.bankPairProblem(d1, "pay-r", off, "nowhere"))
+        // a bank payment holds no receipt: it is paired from the receipt's side, not this one
+        assertEquals(PairProblem.PAYMENT_NOT_PAIRABLE, Pairing.bankPairProblem(recorded, "pay-o", off, null))
+    }
+
+    // SPEC:R119 SPEC:R115
+    @Test fun `R119 a receipt with an unlinked category cannot pair with a bank payment until it is linked`() {
+        val d0 = world()
+        val bank = row("16.00", on(12), "POS VIVAIO VERDE 0001")
+        val d1 = StatementImport.confirm(d0, reviewOf(d0, bank).map { it.copy(draft = StatementImport.draft(it.row, listOf(Part("groc", cents("16.00"))))) }, clock) { "pay-b" }
+        val r = Receipts.open(d1, receipt("rc-g", "Vivaio Verde", on(11), line("seeds", "16.00", "ch-garden", "Garden")))
+        assertEquals(PairProblem.RECEIPT_PROBLEM, Pairing.receiptPairProblem(d1, "pay-b", r, null))
+        val added = Receipts.addAsNew(r, "ch-garden", "c-new", Fixture.PROFILE)
+        assertNull(Pairing.receiptPairProblem(d1, "pay-b", added, null))
+        val d2 = Pairing.pairReceiptWithPayment(d1, "pay-b", added, null, clock, "tx-1")
+        assertEquals("Garden", d2.categories.single { it.id == "c-new" }.name)
+        assertEquals("c-new", d2.receiptSettings!!.categoryLinks["ch-garden"])
+        assertEquals(listOf(Part("c-new", cents("16.00"))), d2.payments.single().parts)
+        // paired once, it is no candidate for a second receipt
+        assertEquals(emptyList(), Pairing.paymentCandidates(d2, receipt("rc-h", "Vivaio Verde", on(11), line("seeds", "16.00", "ch-garden", "Garden"))))
+        assertEquals(PairProblem.PAYMENT_NOT_PAIRABLE, Pairing.receiptPairProblem(d2, "pay-b", Receipts.open(d2, receipt("rc-h", "Vivaio Verde", on(11), line("seeds", "16.00", "ch-garden", "Garden"))), null))
+    }
+}
