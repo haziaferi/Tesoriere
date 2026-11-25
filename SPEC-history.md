@@ -246,3 +246,7 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R115 · added · Confirm records through the payment path, keeps every line and the receipt id; when Confirm stays off · builder
 - 2026-11-25 · R116 · added · a scan reads only names ending in .json, writes nothing, sorts each file; one id twice is offered once · builder
 - 2026-11-25 · R117 · added · a receipt file read as rule 123's JSON, format first; unknown keys passed over; anything else wrong is unreadable · builder
+- 2026-11-25 · R32 · changed · an unlinked category whose lines are all moved by hand does not block Confirm; the next receipt asks again · owner
+- 2026-11-25 · R33 · changed · a moved line or a changed source also counts as a change that warns before close · owner
+- 2026-11-25 · R114 · changed · any move, source change, link or added category holds changes; an answer files every line not moved by hand · owner
+- 2026-11-25 · R115 · changed · Confirm stays off only while a line of an unlinked category is in no category · owner

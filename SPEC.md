@@ -1740,7 +1740,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R32 · Category links
 
-**Rule:** The user gives categories equal names in both apps, and Tesoriere links them by name, ignoring capitals, the first time a Chatelaine category id appears; from then on the link is by id, so renaming the category in Chatelaine keeps it. A Chatelaine category with no equal name asks, in the review, to add it as a new Tesoriere category or to link it to an existing one. The review cannot be confirmed until every line's category is linked.
+**Rule:** The user gives categories equal names in both apps, and Tesoriere links them by name, ignoring capitals, the first time a Chatelaine category id appears; from then on the link is by id, so renaming the category in Chatelaine keeps it. A Chatelaine category with no equal name asks, in the review, to add it as a new Tesoriere category or to link it to an existing one. The review cannot be confirmed while a line of a Chatelaine category with no link is in no category; once the user has moved each such line by hand to a Tesoriere category it can be, nothing is linked for that Chatelaine category, and the next receipt with it asks again.
 
 **Values:**
 
@@ -1752,21 +1752,21 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 | New id, no equal name, user links an existing one | linked; the review reminds the user to rename the Chatelaine category to the Tesoriere name |
 | Known id whose name differs from the linked category's | linked as before, with a note that the names differ |
 
-**Acceptance:** A receipt with category Pulizia links to Tesoriere's pulizia; a later receipt with the same id named Pulizie stays linked and shows the names-differ note; a new category with no equal name keeps Confirm off until it is added or linked.
+**Acceptance:** A receipt with category Pulizia links to Tesoriere's pulizia; a later receipt with the same id named Pulizie stays linked and shows the names-differ note; a new category with no equal name keeps Confirm off until it is added or linked, or until each of its lines is moved by hand to a Tesoriere category, after which the next receipt with it asks again.
 
 **Not:** Linking by name on every receipt: a rename in Chatelaine would read as a new category. Renaming the Tesoriere category to the Chatelaine name: the owner keeps Tesoriere's names.
 
-**Since:** 2026-11-24 · owner · agreed rewording
+**Since:** 2026-11-25 · owner · agreed rewording
 
 ### D-R33 · Closing a review
 
-**Rule:** Category links, and categories added in a review, are kept only when the review is confirmed. Closing a review that holds changes first shows a prompt warning that they will be lost; the user can dismiss it and stay in the review, or close and lose them.
+**Rule:** Category links, and categories added in a review, are kept only when the review is confirmed. Closing a review that holds changes, a line moved, the source changed, a link made or a category added, first shows a prompt warning that they will be lost; the user can dismiss it and stay in the review, or close and lose them.
 
-**Acceptance:** Adding a category in a review and closing it shows the warning; dismissing it returns to the review with the change intact; closing anyway leaves no new category and no new link.
+**Acceptance:** Adding a category in a review and closing it shows the warning; dismissing it returns to the review with the change intact; closing anyway leaves no new category and no new link. Moving one line, or changing the source, and closing shows the same warning.
 
 **Not:** Keeping links from a closed review: a link would exist with no recorded receipt behind it.
 
-**Since:** 2026-11-24 · owner · agreed rewording
+**Since:** 2026-11-25 · owner · agreed rewording
 
 ### D-R34 · Changing a link
 
@@ -1810,21 +1810,21 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R114 · Answering a receipt review
 
-**Rule:** In the review the user can move one line to another category, for this receipt only and changing no link (R31); link a Chatelaine category to an existing Tesoriere category; or add it as a new Tesoriere category with its Chatelaine name and 0.00 planned (R32). Linking or adding files that Chatelaine category's lines that hold no category, or the one an earlier answer in this review gave, under the answer, so a line moved by hand keeps its move, and a later answer for the same Chatelaine category replaces the earlier one, dropping a category the earlier one added when no line holds it. The review holds changes, for R33's warning, while it holds a link or a category the user added; the notes below say what still waits for the user, one per Chatelaine category, in the order the lines first name them.
+**Rule:** In the review the user can move one line to another category, for this receipt only and changing no link (R31); link a Chatelaine category to an existing Tesoriere category; or add it as a new Tesoriere category with its Chatelaine name and 0.00 planned (R32). Linking or adding files every line of that Chatelaine category the user has not moved by hand under the answer, whatever category it opened in, and a later answer for the same Chatelaine category replaces the earlier one, dropping a category the earlier one added when no line holds it. The review holds changes, for R33's warning, once a line is moved, the source changed, a link made or a category added; the notes below say what still waits for the user, one per Chatelaine category, in the order the lines first name them.
 
 **Values:**
 
 | Note | For a Chatelaine category |
 |---|---|
-| unlinked | with no link, no equal name and no answer in this review; Confirm stays off (R32) |
+| unlinked | with no link, no equal name and no answer in this review; Confirm stays off while a line of it is in no category (R32) |
 | names differ | linked before, whose name differs from its Tesoriere category's ignoring capitals |
 | rename in Chatelaine | linked by the user in this review to an existing category whose name differs from it ignoring capitals |
 
-**Acceptance:** A line under Garden, with no Garden in Tesoriere, is noted unlinked; linked to Household it is filed under Household with a rename-in-Chatelaine note; added instead, it is filed under a new category named Garden with 0.00 planned, and the review holds changes. A Garden line moved to Fun before the answer stays under Fun. A review whose categories all link by name holds no changes, and moving a line changes no link.
+**Acceptance:** A line under Garden, with no Garden in Tesoriere, is noted unlinked; linked to Household it is filed under Household with a rename-in-Chatelaine note; added instead, it is filed under a new category named Garden with 0.00 planned, and the review holds changes. A Garden line moved to Fun before the answer stays under Fun. Snack, opened under Eating out by its link and linked in the review to Groceries, files its lines under Groceries. A review whose categories all link by name holds no changes until a line is moved or the source changed, and moving a line changes no link.
 
 **Not:** Counting a link made by name as a change: the next open makes it again, so closing loses nothing.
 
-**Since:** 2026-11-25 · builder · own words
+**Since:** 2026-11-25 · owner · agreed rewording
 
 ### D-R115 · Confirming a receipt
 
@@ -1837,7 +1837,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 | the Profile is not the receipt Profile (R112) |
 | the receipt id is recorded already (R30) |
 | the receipt's currency is not the Profile's (R30, R47) |
-| a Chatelaine category on it is unlinked (R32, R114) |
+| a line of a Chatelaine category with no link is in no category (R32, R114) |
 | a line has no category, or one that does not exist |
 | the payment could not be saved: its parts do not meet R23, or its source does not exist |
 
@@ -1847,7 +1847,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Not:** A part of 0.00: R23 has no zero part. Building the payment apart from the payment path: a short Goal, a card whose charges are not logged (R109) or a deleted source would be handled twice, two ways.
 
-**Since:** 2026-11-25 · builder · own words
+**Since:** 2026-11-25 · owner · agreed rewording
 
 ## 15. One payment, two sources
 
@@ -2074,12 +2074,12 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R116 · Scanning the receipt folder: Three new files give three receipts ready, a count of 3, and the Profile unchanged; a file whose receipt id is recorded is not listed; a format-2 file is refused naming 2; a USD file in a EUR Profile is refused naming USD and EUR; a file that is not JSON is refused as unreadable; two files holding one receipt id give one receipt; a file named `chatelaine-receipt-rc-9.part` is not read. Each leaves the Profile unchanged.
 - R117 · Reading a receipt file: The example file of Chatelaine's spec, rule 123, reads as a receipt of 10.99 at Supermarket A on 2026-11-24 in EUR with three lines, the batteries with no pack; the same file with `format` 2 and a key of its own, or with `format` 2 and no `lines`, gives newer format 2; with any one key of rule 123 other than `pack` taken out, with `totalPaid` 11.00, or with a `quantity` of 1.5, it is unreadable; with a key `note` added it reads as before.
 - R31 · Receipt review: A receipt of five lines in two categories records one payment of the receipt's total with two parts; moving one line to a third category gives three parts and changes no category link; closing the review leaves no payment.
-- R32 · Category links: A receipt with category Pulizia links to Tesoriere's pulizia; a later receipt with the same id named Pulizie stays linked and shows the names-differ note; a new category with no equal name keeps Confirm off until it is added or linked.
-- R33 · Closing a review: Adding a category in a review and closing it shows the warning; dismissing it returns to the review with the change intact; closing anyway leaves no new category and no new link.
+- R32 · Category links: A receipt with category Pulizia links to Tesoriere's pulizia; a later receipt with the same id named Pulizie stays linked and shows the names-differ note; a new category with no equal name keeps Confirm off until it is added or linked, or until each of its lines is moved by hand to a Tesoriere category, after which the next receipt with it asks again.
+- R33 · Closing a review: Adding a category in a review and closing it shows the warning; dismissing it returns to the review with the change intact; closing anyway leaves no new category and no new link. Moving one line, or changing the source, and closing shows the same warning.
 - R34 · Changing a link: After relinking Snack from Eating out to Groceries, last month's Eating out spent figure is unchanged and the next receipt's Snack lines go to Groceries.
 - R35 · A receipt's source: The first receipt from a store shows Savings; after it is confirmed with a card as source, the next receipt from that store shows the card.
 - R113 · Opening a receipt review: With Tesoriere categories Groceries and pulizia, a first receipt with lines under Chatelaine's Groceries and Pulizia opens them in Groceries and pulizia, from Savings, and a line under Garden in no category. A store last confirmed with a card opens with the card, and with Savings once the card is deleted.
-- R114 · Answering a receipt review: A line under Garden, with no Garden in Tesoriere, is noted unlinked; linked to Household it is filed under Household with a rename-in-Chatelaine note; added instead, it is filed under a new category named Garden with 0.00 planned, and the review holds changes. A Garden line moved to Fun before the answer stays under Fun. A review whose categories all link by name holds no changes, and moving a line changes no link.
+- R114 · Answering a receipt review: A line under Garden, with no Garden in Tesoriere, is noted unlinked; linked to Household it is filed under Household with a rename-in-Chatelaine note; added instead, it is filed under a new category named Garden with 0.00 planned, and the review holds changes. A Garden line moved to Fun before the answer stays under Fun. Snack, opened under Eating out by its link and linked in the review to Groceries, files its lines under Groceries. A review whose categories all link by name holds no changes until a line is moved or the source changed, and moving a line changes no link.
 - R115 · Confirming a receipt: A 16.50 receipt with Groceries lines of 1.89, 2.40 and 3.15 and Household lines of 6.90 and 2.16, from Savings at 1,000.00, records one payment of 16.50 with parts Groceries 7.44 and Household 9.06 and all five lines, records its receipt id, and leaves Savings at 983.50; a 0.00 line under Gifts adds no part and is kept among the lines. The same receipt from a Goal holding 10.00 carries R54's warning, and confirmed leaves the Goal at 0.00 and Savings at 993.50. A receipt id recorded once cannot be confirmed again.
 - R36 · Store links: After pairing an Esselunga receipt with POS ESSELUNGA MI 0423, the next Esselunga receipt is suggested only with bank rows whose payee matches that link, when one exists.
 - R37 · Pairing rule: Each row of the table, as a receipt and a bank row, gives the suggestion its row says; no pair is recorded without the user's confirm.
