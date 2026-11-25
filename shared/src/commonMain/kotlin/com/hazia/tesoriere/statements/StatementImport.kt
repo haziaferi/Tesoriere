@@ -498,10 +498,12 @@ object StatementImport {
         val notices = MutableList<PaymentNotice?>(rows.size) { null }
         var rules = d.importState.payeeRules
         val keys = d.importState.importedKeys.toMutableList()
+        val onPayments = paymentKeys(d)
         for (i in recordOrder(rows)) {
             val rr = rows[i]
-            // a row named as a receipt's pair is recorded by pairing, never as new spending (SPEC R118, R119)
-            if (!rr.include || rr.pairPaymentId != null) continue
+            // a row named as a receipt's pair is recorded by pairing, never as new spending, and a row
+            // a payment holds the keys of since the review was built, paired by hand, is recorded already (SPEC R107, R118, R119)
+            if (!rr.include || rr.pairPaymentId != null || keyStrings(rr.keys).any { it in onPayments }) continue
             val r = rr.row
             val amt = abs(r.amount)
             val payoff = rr.payoffAccountId
@@ -557,6 +559,19 @@ object StatementImport {
         }
         val state = next.copy(importState = next.importState.copy(importedKeys = keys, payeeRules = rules, lastImportDate = clock.today()))
         return Run(ok, notices, state)
+    }
+
+    /** Every key a payment holds (SPEC R26): a row with one of them is recorded already. */
+    private fun paymentKeys(d: ProfileData): Set<String> =
+        d.payments.flatMapTo(HashSet()) { p -> p.bankKeys?.let { keyStrings(it) } ?: emptyList() }
+
+    /**
+     * What the Confirm names against [d] as it stands (SPEC R107): as [confirmSummary], leaving out
+     * too a row whose keys a payment holds since the review was built, paired by hand (SPEC R119).
+     */
+    fun confirmSummary(d: ProfileData, rows: List<ReviewRow>): ConfirmSummary {
+        val onPayments = paymentKeys(d)
+        return confirmSummary(rows.filter { rr -> keyStrings(rr.keys).none { it in onPayments } })
     }
 
     /** What the Confirm names (SPEC R107): the ticked rows' count, the money out and the money in, each positive; a row naming a pair is not counted (SPEC R118). */

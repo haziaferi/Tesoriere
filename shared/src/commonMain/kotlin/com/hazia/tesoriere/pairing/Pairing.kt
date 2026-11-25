@@ -74,41 +74,48 @@ object Pairing {
     }
 
     /**
-     * The rows of [rows] a receipt of [store] would be suggested with (SPEC R37, R118), best first:
-     * those [match] finds and, once the store has a link, that match it (SPEC R36, R120).
+     * The rows of [rows] a receipt of [store] would be suggested with (SPEC R37, R118), best first in
+     * R118's order: a row matching the store's link, then equal totals, then the closest day, then
+     * the statement's order. A link ranks and never hides (SPEC R36, R120).
      */
     fun candidates(d: ProfileData, store: String, receiptDate: LocalDate, receiptTotal: Money, rows: List<BankRow>): List<Pair<BankRow, Match>> =
-        rows.mapNotNull { r -> match(receiptDate, receiptTotal, r)?.takeIf { linked(d, store, r.description) }?.let { r to it } }
-            .sortedWith(compareBy({ it.second.ordinal }, { abs(receiptDate.daysTo(it.first.date)) }))
+        rows.mapNotNull { r -> match(receiptDate, receiptTotal, r)?.let { r to it } }
+            .sortedWith(compareBy({ rank(d, store, it.first.description) }, { it.second.ordinal }, { abs(receiptDate.daysTo(it.first.date)) }))
 
     /**
      * The payments recorded from a bank row, holding no receipt, that receipt [file] would be
      * suggested with (SPEC R118), best first: each read as its bank row, its day and its total.
      */
     fun paymentCandidates(d: ProfileData, file: ReceiptFile): List<Pair<String, Match>> =
-        d.payments.filter { bankSide(it) }
-            .mapNotNull { p ->
-                val asRow = BankRow(p.date, -p.total, p.payee ?: "", p.bankKeys?.fitid)
-                match(file.date, file.totalPaid, asRow)?.takeIf { linked(d, file.store, asRow.description) }?.let { p to it }
-            }
-            .sortedWith(compareBy({ it.second.ordinal }, { abs(file.date.daysTo(it.first.date)) }, { it.first.loggedAt }))
-            .map { it.first.id to it.second }
+        d.payments.withIndex().filter { bankSide(it.value) }
+            .mapNotNull { (i, p) -> match(file.date, file.totalPaid, BankRow(p.date, -p.total, p.payee ?: "", p.bankKeys?.fitid))?.let { Triple(i, p, it) } }
+            .sortedWith(compareBy({ rank(d, file.store, it.second.payee ?: "") }, { it.third.ordinal }, { abs(file.date.daysTo(it.second.date)) }, { it.first }))
+            .map { it.second.id to it.third }
 
     /**
-     * Which payment each row of [rows] names in the import review (SPEC R118): rows in [eligible]
-     * (money out, not recorded yet) taken oldest first, each naming the best receipt payment no
-     * earlier row named. Indices into [rows] to payment ids.
+     * Which payment each row of [rows] names in the import review (SPEC R118): every pair of a row
+     * in [eligible] (money out, not recorded yet) and a receipt payment that [match] finds, taken
+     * across the whole statement in R118's order (the store's link, equal totals, the closest day,
+     * the earlier row, the row listed first, the payment recorded first), each row and each payment
+     * named once at most. Indices into [rows] to payment ids.
      */
     internal fun suggest(d: ProfileData, rows: List<BankRow>, eligible: Set<Int>): Map<Int, String> {
-        val free = d.payments.filter { receiptSide(it) }.toMutableList()
+        class Option(val row: Int, val payment: Int, val match: Match)
+        val payments = d.payments
+        val options = eligible.flatMap { i ->
+            payments.indices.filter { receiptSide(payments[it]) }.mapNotNull { j ->
+                match(payments[j].date, payments[j].total, rows[i])?.let { Option(i, j, it) }
+            }
+        }.sortedWith(compareBy(
+            { rank(d, payments[it.payment].payee ?: "", rows[it.row].description) }, { it.match.ordinal },
+            { abs(payments[it.payment].date.daysTo(rows[it.row].date)) }, { rows[it.row].date }, { it.row }, { it.payment },
+        ))
         val named = HashMap<Int, String>()
-        for (i in eligible.sortedWith(compareBy({ rows[it].date }, { it }))) {
-            val r = rows[i]
-            val best = free.mapNotNull { p -> match(p.date, p.total, r)?.takeIf { linked(d, p.payee ?: "", r.description) }?.let { p to it } }
-                .minWithOrNull(compareBy({ it.second.ordinal }, { abs(it.first.date.daysTo(r.date)) }, { it.first.loggedAt }))
-                ?: continue
-            named[i] = best.first.id
-            free.remove(best.first)
+        val taken = HashSet<Int>()
+        for (o in options) {
+            if (o.row in named || o.payment in taken) continue
+            named[o.row] = payments[o.payment].id
+            taken += o.payment
         }
         return named
     }
@@ -207,10 +214,10 @@ object Pairing {
     /** A payment a receipt can complete: from a bank row, with no receipt, a purchase. */
     private fun bankSide(p: Payment) = p.bankKeys != null && p.receiptId == null && p.total > 0
 
-    /** Whether [description] meets [store]'s link, or the store has none yet (SPEC R36, R120). */
-    private fun linked(d: ProfileData, store: String, description: String): Boolean {
-        val link = d.receiptSettings?.storeLinks?.get(store) ?: return true
-        return StatementImport.payeeRuleName(description) == link
+    /** 0 for a bank text that matches [store]'s link, 1 otherwise: a link ranks, never hides (SPEC R36, R120). */
+    private fun rank(d: ProfileData, store: String, description: String): Int {
+        val link = d.receiptSettings?.storeLinks?.get(store) ?: return 1
+        return if (StatementImport.payeeRuleName(description) == link) 0 else 1
     }
 
     private fun recorded(d: ProfileData, row: ReviewRow): Boolean {

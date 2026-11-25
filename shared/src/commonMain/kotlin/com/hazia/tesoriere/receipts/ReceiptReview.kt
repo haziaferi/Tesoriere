@@ -5,6 +5,7 @@ import com.hazia.tesoriere.model.AppState
 import com.hazia.tesoriere.model.Category
 import com.hazia.tesoriere.model.Money
 import com.hazia.tesoriere.model.ProfileData
+import com.hazia.tesoriere.pairing.Pairing
 import com.hazia.tesoriere.payments.Part
 import com.hazia.tesoriere.payments.PaymentDraft
 import com.hazia.tesoriere.payments.PaymentNotice
@@ -50,6 +51,12 @@ sealed interface ReviewNote {
 
     /** No link, no equal name, no answer yet: Confirm stays off while a line of it is in no category (SPEC R32). */
     data class Unlinked(val chatelaineId: String) : ReviewNote
+
+    /**
+     * The receipt meets R37 with [paymentId], recorded from a bank row with no receipt: a screen can
+     * offer the pair before Confirm, which stays on (SPEC R114, R118). Not a Chatelaine category's note.
+     */
+    data class PairAvailable(val paymentId: String) : ReviewNote
 }
 
 /** Why a review's Confirm is off, as a code, first match in this order (SPEC R115). */
@@ -120,9 +127,12 @@ object Receipts {
 
     /**
      * What waits for the user, one note per Chatelaine category in the order the lines first name
-     * them (SPEC R114): unlinked, names differ, or rename in Chatelaine.
+     * them (SPEC R114): unlinked, names differ, or rename in Chatelaine; then a pair available, when the receipt meets R37 with a payment recorded from a bank row (SPEC R118).
      */
-    fun notes(d: ProfileData, r: ReceiptReview): List<ReviewNote> = chatelaineCategories(r).mapNotNull { (id, name) ->
+    fun notes(d: ProfileData, r: ReceiptReview): List<ReviewNote> =
+        categoryNotes(d, r) + listOfNotNull(Pairing.paymentCandidates(d, r.file).firstOrNull()?.let { ReviewNote.PairAvailable(it.first) })
+
+    private fun categoryNotes(d: ProfileData, r: ReceiptReview): List<ReviewNote> = chatelaineCategories(r).mapNotNull { (id, name) ->
         val answered = r.newLinks[id]
         val kept = keptLink(d, id)
         when {
