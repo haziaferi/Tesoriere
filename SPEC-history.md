@@ -252,3 +252,5 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R115 · changed · Confirm stays off only while a line of an unlinked category is in no category · owner
 - 2026-11-25 · R116 · changed · a file whose reading fails in any way is refused as unreadable and the scan goes on · builder
 - 2026-11-25 · R117 · changed · size and depth caps; numbers only as JSON numbers; total above zero, no negative price, quantity 1 or more; blanks refused · builder
+- 2026-11-25 · R114 · changed · a line moved back to the category it would hold unmoved counts as not moved · builder
+- 2026-11-25 · R117 · changed · the order is size and depth, then format, then the rest; an empty pack is none; currency read in capitals · builder
