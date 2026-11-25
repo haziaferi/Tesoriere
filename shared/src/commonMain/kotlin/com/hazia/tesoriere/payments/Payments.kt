@@ -158,8 +158,12 @@ object Payments {
         return next
     }
 
-    /** The warning a restore of [p] carries, or null (SPEC R125): its source deleted since, or a Goal short of its share (SPEC R54). */
-    fun reinstateNotice(d: ProfileData, p: Payment): PaymentNotice? = when (val s = p.source) {
+    /**
+     * The warning a restore of [p] carries, or null (SPEC R125): its source deleted since its
+     * removal, or a Goal short of its share (SPEC R54). None when [settled]: the source was deleted
+     * before the removal, and undoing the removal's row moves Savings back as it was.
+     */
+    fun reinstateNotice(d: ProfileData, p: Payment, settled: Boolean): PaymentNotice? = if (settled) null else when (val s = p.source) {
         is PaymentSource.Goal -> when {
             d.goals.none { it.id == s.id } -> PaymentNotice.SOURCE_GOAL_DELETED
             reinstated(d, p, settled = false).fromSavings > p.fromSavings -> PaymentNotice.GOAL_SHORT

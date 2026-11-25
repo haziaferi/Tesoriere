@@ -15,6 +15,7 @@ import com.hazia.tesoriere.engine.Movement
 import com.hazia.tesoriere.engine.NewMonth
 import com.hazia.tesoriere.engine.Recurring
 import com.hazia.tesoriere.engine.Reports
+import com.hazia.tesoriere.engine.RestoreNotice
 import com.hazia.tesoriere.engine.RestoreProblem
 import com.hazia.tesoriere.engine.Slice
 import com.hazia.tesoriere.engine.SliceKind
@@ -416,11 +417,11 @@ class TrashTest {
         val inTrash = Reports.spendingComposition(after, sep14, trashed)
         assertEquals(listOf(Slice(SliceKind.DELETED_CATEGORY, "fun", cents("40.00")), Slice(SliceKind.CATEGORY, "groc", cents("30.00"))), inTrash.slices)
         assertEquals(cents("70.00"), inTrash.net)
-        val gone = Reports.spendingComposition(after, sep14)
+        val gone = Reports.spendingComposition(after, sep14, emptySet())
         assertEquals(listOf(Slice(SliceKind.UNCATEGORISED, null, cents("40.00")), Slice(SliceKind.CATEGORY, "groc", cents("30.00"))), gone.slices)
         assertEquals(cents("70.00"), gone.net)
         val back = Trash.restore(after, p, clock, ids)
-        assertEquals(listOf(Slice(SliceKind.CATEGORY, "fun", cents("40.00")), Slice(SliceKind.CATEGORY, "groc", cents("30.00"))), Reports.spendingComposition(back, sep14).slices)
+        assertEquals(listOf(Slice(SliceKind.CATEGORY, "fun", cents("40.00")), Slice(SliceKind.CATEGORY, "groc", cents("30.00"))), Reports.spendingComposition(back, sep14, emptySet()).slices)
         for (x in listOf(d0, after, back)) assertEquals(cents("70.00"), Reports.incomeVsExpenses(x, sep14, 1).single().expenses)
     }
 
@@ -478,7 +479,7 @@ class TrashTest {
         val (after, p) = assertNotNull(Trash.deletePayment(d0, "p1", clock, ids))
         assertEquals(cents("1,000.00"), after.savingsAmount)
         assertEquals(0L, Spent.of(after, "groc", "2026-09"))
-        assertNull(Trash.restoreNotice(after, p))
+        assertEquals(emptyList(), Trash.restoreNotices(after, p))
         clock.setDay(oct2)
         val back = Trash.restore(after, p, clock, ids)
         assertEquals(d0.payments, back.payments)
@@ -492,7 +493,7 @@ class TrashTest {
         val (after, p) = assertNotNull(Trash.deletePayment(d0, "p1", clock, ids))
         assertEquals(cents("80.00"), after.goals.single().saved)
         val spent = pay(after, "p2", "70.00", PaymentSource.Goal("trip"), "groc" to "70.00")
-        assertEquals(PaymentNotice.GOAL_SHORT, Trash.restoreNotice(spent, p))
+        assertEquals(listOf<RestoreNotice>(RestoreNotice.Source(PaymentNotice.GOAL_SHORT)), Trash.restoreNotices(spent, p))
         val back = Trash.restore(spent, p, clock, ids)
         assertEquals(0L, back.goals.single().saved)
         assertEquals(cents("980.00"), back.savingsAmount)
@@ -506,7 +507,7 @@ class TrashTest {
         val (after, p) = assertNotNull(Trash.deletePayment(d0, "p1", clock, ids))
         val (noGoal, pg) = assertNotNull(Trash.deleteGoal(after, "trip", returnSaved = true, clock, ids))
         assertEquals(cents("1,080.00"), noGoal.savingsAmount)
-        assertEquals(PaymentNotice.SOURCE_GOAL_DELETED, Trash.restoreNotice(noGoal, p))
+        assertEquals(listOf<RestoreNotice>(RestoreNotice.Source(PaymentNotice.SOURCE_GOAL_DELETED)), Trash.restoreNotices(noGoal, p))
         val back = Trash.restore(noGoal, p, clock, ids)
         assertEquals(cents("1,050.00"), back.savingsAmount)
         val row = back.transactions.last()
@@ -522,7 +523,7 @@ class TrashTest {
         val d0 = pay(opened, "p1", "40.00", PaymentSource.Account("card"), "groc" to "40.00")
         val (after, p) = assertNotNull(Trash.deletePayment(d0, "p1", clock, ids))
         val (noCard, pc) = assertNotNull(Trash.deleteAccount(after, "card", reverse = false, clock, ids))
-        assertEquals(PaymentNotice.SOURCE_ACCOUNT_DELETED, Trash.restoreNotice(noCard, p))
+        assertEquals(listOf<RestoreNotice>(RestoreNotice.Source(PaymentNotice.SOURCE_ACCOUNT_DELETED)), Trash.restoreNotices(noCard, p))
         val back = Trash.restore(noCard, p, clock, ids)
         assertEquals(d0.savingsAmount, back.savingsAmount)
         val row = back.transactions.last()
@@ -542,6 +543,7 @@ class TrashTest {
         assertEquals(1, p.written.size)
         assertEquals(cents("1,080.00"), after.savingsAmount)
         assertEquals(RestoreProblem.WRITTEN_SINCE, Trash.restoreProblem(after, pg))
+        assertEquals(emptyList(), Trash.restoreNotices(after, p), "no warning: Savings moves back as it was before the payment's delete")
         clock.setDay(oct2)
         val back = Trash.restore(after, p, clock, ids)
         assertEquals(figures(noGoal, "2026-09", "2026-10"), figures(back, "2026-09", "2026-10"))
@@ -611,5 +613,139 @@ class TrashTest {
         assertEquals(cents("60.00"), Spent.of(back, "phone", "2026-08"), "its past rows keep Phone")
         // Phone is gone from the categories, but its spent is read by id, so every month matches
         assertEquals(figures(d0, "2026-08", "2026-09"), figures(back, "2026-08", "2026-09"))
+    }
+
+    // ---- after review of Task 18 ---------------------------------------------------------------
+
+    /**
+     * The 42.30 receipt payment of 10 March, Groceries 30.00 and Household 12.30, deleted; then its
+     * bank row of 12 March, of [amount], recorded under Groceries as a payment of its own. Returns
+     * the Profile, the Trash payload and the bank row's payment id.
+     */
+    private fun receiptThenRow(amount: String = "42.30"): Triple<ProfileData, TrashPayload, String> {
+        clock.setDay(mar10)
+        val (after, p) = assertNotNull(Trash.deletePayment(recordReceipt(receiptWorld(), shop()), "pay-r", clock, ids))
+        val row = BankRow(LocalDate(2026, 3, 12), -cents(amount), "POS MERCATO LUME 0423", "FIT-12")
+        val rr = StatementImport.review(after, listOf(row), mar10).single()
+        assertEquals(RowStatus.READY, rr.status, "nothing to pair with while the receipt is in the Trash")
+        val ticked = rr.copy(include = true, draft = PaymentDraft(row.date, cents(amount), PaymentSource.Savings, rr.payee, listOf(Part("groc", cents(amount)))))
+        val withRow = StatementImport.confirm(after, listOf(ticked), clock, ids)
+        return Triple(withRow, p, withRow.payments.single().id)
+    }
+
+    // SPEC:R125 SPEC:R41 SPEC:R118 SPEC:R119 SPEC:R122
+    @Test fun `R125 a deleted 42_30 receipt whose row was recorded since is noted, and comes back alone at 915_40 or as the pair at 957_70`() {
+        val (d, p, bankId) = receiptThenRow()
+        assertEquals(cents("957.70"), d.savingsAmount)
+        assertEquals(listOf<RestoreNotice>(RestoreNotice.PairAvailable(bankId)), Trash.restoreNotices(d, p))
+
+        val alone = Trash.restore(d, p, clock, ids)
+        assertEquals(2, alone.payments.size)
+        assertEquals(cents("915.40"), alone.savingsAmount)
+        assertEquals(cents("72.30"), Spent.of(alone, "groc", "2026-03"))
+
+        assertEquals(RestoreProblem.CANNOT_PAIR, Trash.restoreProblem(d, p, pairWith = "nope"))
+        val paired = Trash.restore(d, p, clock, ids, pairWith = bankId)
+        val one = paired.payments.single()
+        val receipt = p.payments.single()
+        assertEquals(bankId, one.id)
+        assertEquals(cents("42.30"), one.total)
+        assertEquals(receipt.parts, one.parts)
+        assertEquals(receipt.receiptLines, one.receiptLines)
+        assertEquals("rc-1", one.receiptId)
+        assertEquals(mar10, one.date)
+        assertEquals(d.payments.single().bankKeys, one.bankKeys)
+        assertEquals(PaymentSource.Savings, one.source)
+        assertEquals(cents("957.70"), paired.savingsAmount)
+        assertEquals(cents("30.00"), Spent.of(paired, "groc", "2026-03"))
+        assertEquals(cents("12.30"), Spent.of(paired, "home", "2026-03"))
+        assertEquals(listOf("rc-1"), paired.receiptSettings?.recordedReceiptIds)
+        assertNotNull(paired.receiptSettings?.storeLinks?.get("Mercato Lume"), "the store is linked, as pairing links it")
+        assertEquals(RestoreProblem.RECORDED_AGAIN, Trash.restoreProblem(paired, p), "the receipt id is held by the pair now")
+    }
+
+    // SPEC:R125 SPEC:R39 SPEC:R122
+    @Test fun `R125 restored as the pair of a 42_50 row, the 0_20 difference refuses with CANNOT_PAIR until it is filed`() {
+        val (d, p, bankId) = receiptThenRow("42.50")
+        assertEquals(listOf<RestoreNotice>(RestoreNotice.PairAvailable(bankId)), Trash.restoreNotices(d, p))
+        assertEquals(RestoreProblem.CANNOT_PAIR, Trash.restoreProblem(d, p, pairWith = bankId))
+        assertFailsWith<IllegalArgumentException> { Trash.restore(d, p, clock, ids, pairWith = bankId) }
+        val paired = Trash.restore(d, p, clock, ids, pairWith = bankId, differenceCategoryId = "fun")
+        val one = paired.payments.single()
+        assertEquals(cents("42.50"), one.total)
+        assertEquals(Part("fun", cents("0.20"), difference = true), one.parts.last())
+        assertEquals(cents("957.50"), paired.savingsAmount)
+        assertEquals(cents("0.20"), Spent.of(paired, "fun", "2026-03"))
+        assertEquals(cents("30.00"), Spent.of(paired, "groc", "2026-03"))
+    }
+
+    // SPEC:R122 SPEC:R87 SPEC:R66
+    @Test fun `R122 a Loan deleted with its payment's 260_00 returned comes back with Savings at 4,740_00 and Car's September at 260_00`() {
+        val d0 = loanWorld()
+        val (after, p) = assertNotNull(Trash.deleteAccount(d0, "loan", reverse = true, clock, ids))
+        assertEquals(cents("5,000.00"), after.savingsAmount)
+        assertEquals(0L, Spent.of(after, "car", "2026-09"))
+        clock.setDay(oct2)
+        val back = Trash.restore(after, p, clock, ids)
+        assertEquals(cents("4,740.00"), back.savingsAmount)
+        assertEquals(cents("260.00"), Spent.of(back, "car", "2026-09"))
+        assertEquals(figures(d0, "2026-09", "2026-10"), figures(back, "2026-09", "2026-10"))
+        assertEquals(d0.accounts, back.accounts)
+    }
+
+    // SPEC:R123 SPEC:R110 SPEC:R89
+    @Test fun `R123 a card's fees category and a Loan's own category named Phone move to Internet, and a finished expense under Phone needs another too`() {
+        val loan = Account("loan", Fixture.PROFILE, "Car loan", type = AccountType.LOAN, loanCategoryId = "phone")
+        val d = world().copy(accounts = listOf(card().copy(feesCategoryId = "phone"), loan))
+        assertEquals(CategoryEditing.DeleteProblem.REPLACEMENT_NEEDED, CategoryEditing.deleteProblem(d, "phone", null))
+        val (after, _) = assertNotNull(Trash.deleteCategory(d, "phone", replacementId = "net"))
+        assertEquals("net", after.accounts.single { it.id == "card" }.feesCategoryId)
+        assertEquals("net", after.accounts.single { it.id == "loan" }.loanCategoryId)
+        val finished = world().copy(recurringExpenses = listOf(
+            recurring("old", "10.00", Cadence.MONTHLY, LocalDate(2026, 1, 5), categoryId = "phone", finishedAt = LocalDate(2026, 3, 5)),
+        ))
+        assertEquals(CategoryEditing.DeleteProblem.REPLACEMENT_NEEDED, CategoryEditing.deleteProblem(finished, "phone", null))
+    }
+
+    // SPEC:R125 SPEC:R21
+    @Test fun `R125 a 15_00 refund to Savings under Fun, deleted and restored, leaves Savings at 975_00 and Fun's September at 25_00`() {
+        val d0 = pay(pay(world(), "p1", "40.00", PaymentSource.Savings, "fun" to "40.00"), "r1", "-15.00", PaymentSource.Savings, "fun" to "-15.00")
+        assertEquals(cents("975.00"), d0.savingsAmount)
+        val (after, p) = assertNotNull(Trash.deletePayment(d0, "r1", clock, ids))
+        assertEquals(cents("960.00"), after.savingsAmount)
+        assertEquals(cents("40.00"), Spent.of(after, "fun", "2026-09"))
+        assertEquals(-cents("15.00"), Trash.moneyMoved(p))
+        val back = Trash.restore(after, p, clock, ids)
+        assertEquals(d0.payments, back.payments)
+        assertEquals(cents("25.00"), Spent.of(back, "fun", "2026-09"))
+        assertEquals(figures(d0, "2026-09"), figures(back, "2026-09"))
+    }
+
+    // SPEC:R125 SPEC:R54
+    @Test fun `R125 a 60_00 payment from a Goal holding 50_00, deleted and restored, takes 10_00 from Savings again`() {
+        val d0 = pay(world(goals = listOf(goal("trip", "Trip", saved = "50.00"))), "p1", "60.00", PaymentSource.Goal("trip"), "fun" to "60.00")
+        assertEquals(cents("10.00"), d0.payments.single().fromSavings)
+        assertEquals(cents("990.00"), d0.savingsAmount)
+        val (after, p) = assertNotNull(Trash.deletePayment(d0, "p1", clock, ids))
+        assertEquals(cents("50.00"), after.goals.single().saved)
+        assertEquals(cents("1,000.00"), after.savingsAmount)
+        assertEquals(cents("10.00"), Trash.moneyMoved(p))
+        assertEquals(emptyList(), Trash.restoreNotices(after, p))
+        val back = Trash.restore(after, p, clock, ids)
+        assertEquals(d0.payments, back.payments)
+        assertEquals(figures(d0, "2026-09"), figures(back, "2026-09"))
+    }
+
+    // SPEC:R122 SPEC:R54
+    @Test fun `R122 a Goal whose 60_00 payment took 10_00 from Savings comes back at 0_00, and that payment edited to 55_00 since refuses it`() {
+        val d0 = pay(world(goals = listOf(goal("trip", "Trip", saved = "50.00"))), "p1", "60.00", PaymentSource.Goal("trip"), "fun" to "60.00")
+        val (after, p) = assertNotNull(Trash.deleteGoal(d0, "trip", returnSaved = true, clock, ids))
+        assertEquals(mapOf("p1" to cents("50.00")), p.charged)
+        assertNull(Trash.restoreProblem(after, p))
+        val back = Trash.restore(after, p, clock, ids)
+        assertEquals(figures(d0, "2026-09"), figures(back, "2026-09"))
+        val edited = Payments.edit(after, "p1", PaymentDraft(sep14, cents("55.00"), PaymentSource.Goal("trip"), null, listOf(Part("fun", cents("55.00")))), clock, "tx-e")
+        assertTrue(edited.transactions.size > after.transactions.size, "the edit logged a savings row in the Goal's place")
+        assertEquals(RestoreProblem.WRITTEN_SINCE, Trash.restoreProblem(edited, p))
     }
 }

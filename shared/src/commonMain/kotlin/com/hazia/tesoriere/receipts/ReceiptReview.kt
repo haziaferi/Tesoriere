@@ -7,6 +7,7 @@ import com.hazia.tesoriere.model.Money
 import com.hazia.tesoriere.model.ProfileData
 import com.hazia.tesoriere.pairing.Pairing
 import com.hazia.tesoriere.payments.Part
+import com.hazia.tesoriere.payments.Payment
 import com.hazia.tesoriere.payments.PaymentDraft
 import com.hazia.tesoriere.payments.PaymentNotice
 import com.hazia.tesoriere.payments.PaymentSource
@@ -217,6 +218,20 @@ object Receipts {
                 storeSources = s.storeSources + (r.file.store to r.source.stored),
             ),
         )
+    }
+
+    /**
+     * Recorded receipt payment [p] read back as its receipt under review, so it can be paired on a
+     * restore from the Trash (SPEC R125): the file from its receipt id, store, day and lines, in the
+     * Profile's currency, its total the sum of the lines (Chatelaine's spec, rule 123); each line in
+     * the category it was filed under; the payment's source. Null for a payment with no receipt.
+     */
+    fun reopen(d: ProfileData, p: Payment): ReceiptReview? {
+        val id = p.receiptId ?: return null
+        if (p.receiptLines.isEmpty()) return null
+        val lines = p.receiptLines.map { ReceiptFileLine(it.name, it.pack, it.quantity, it.pricePaid, it.chatelaineCategoryId, it.chatelaineCategoryName) }
+        val file = ReceiptFile(ReceiptPickup.HIGHEST_FORMAT, id, p.payee ?: "", p.date, d.settings.currency, lines.sumOf { it.pricePaid }, lines)
+        return ReceiptReview(file, p.source, p.receiptLines.map { it.categoryId }, emptyMap(), emptyList())
     }
 
     /** Changes a link for the receipts recorded after it; recorded lines stay where they were filed (SPEC R34). */

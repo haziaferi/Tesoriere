@@ -50,7 +50,7 @@ class CardFeesTest {
         val d = world().increased("12.50")
         assertEquals(cents("312.50"), d.accounts.single().balance)
         assertEquals(cents("12.50"), fees(d))
-        assertEquals(listOf(Slice(SliceKind.CATEGORY, "fees", cents("12.50"))), Reports.spendingComposition(d, day).slices)
+        assertEquals(listOf(Slice(SliceKind.CATEGORY, "fees", cents("12.50"))), Reports.spendingComposition(d, day, emptySet()).slices)
         assertEquals(cents("12.50"), Reports.incomeVsExpenses(d, day).last().expenses)
         assertEquals(cents("1,000.00"), d.savings.amount)
         val row = d.transactions.single()
@@ -85,7 +85,7 @@ class CardFeesTest {
         val notLogged = world(card(fees = null, notLogged = true)).increased("12.50").edited("320.00")
         assertEquals(cents("320.00"), notLogged.accounts.single().balance)
         assertTrue(notLogged.transactions.all { it.categoryId == null })
-        assertTrue(Reports.spendingComposition(notLogged, day).slices.isEmpty())
+        assertTrue(Reports.spendingComposition(notLogged, day, emptySet()).slices.isEmpty())
         // a fees category that does not exist is not saved
         assertFalse(AccountEditing.canSave(bare, bare.accounts.single().copy(feesCategoryId = "nowhere")))
     }
@@ -118,7 +118,7 @@ class CardFeesTest {
         val saved = d.edited("320.00", rise = null)
         assertEquals(cents("320.00"), saved.accounts.single().balance)
         assertNull(saved.transactions.single().categoryId)
-        assertTrue(Reports.spendingComposition(saved, day).slices.isEmpty())
+        assertTrue(Reports.spendingComposition(saved, day, emptySet()).slices.isEmpty())
         // every other card still asks
         val logged = world(card())
         assertEquals(AccountEditing.AccountProblem.RISE_CHOICE_MISSING, AccountEditing.problem(logged, logged.accounts.single().copy(balance = cents("320.00"))))
@@ -139,7 +139,7 @@ class CardFeesTest {
         val paid = Accounts.quickAdd(d, "cc", cents("320.00"), Accounts.Direction.PAYMENT, null, Accounts.PayoffFrom.Savings, clock) { ids.next() }
         assertEquals(0L, paid.accounts.single().balance)
         assertEquals(cents("20.00"), fees(paid))
-        assertEquals(cents("20.00"), Reports.spendingComposition(paid, day).net)
+        assertEquals(cents("20.00"), Reports.spendingComposition(paid, day, emptySet()).net)
         assertEquals(cents("680.00"), paid.savings.amount)
     }
 

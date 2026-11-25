@@ -192,9 +192,10 @@ object Reports {
      * one filed under a category counts there (SPEC R89, R109, R110). Zero slices are left out; the rest
      * go largest first, ties in the categories' order. [trashed] holds the ids of the Profile's
      * categories in the Trash (Trash.trashedCategories): their spending is a slice marked deleted,
-     * and a category neither in the Profile nor in it counts in Uncategorised (SPEC R124).
+     * and a category neither in the Profile nor in it counts in Uncategorised (SPEC R124). It has no
+     * default, so no caller reads a category in the Trash as gone for good.
      */
-    fun spendingComposition(d: ProfileData, today: LocalDate, trashed: Set<String> = emptySet()): SpendingComposition {
+    fun spendingComposition(d: ProfileData, today: LocalDate, trashed: Set<String>): SpendingComposition {
         val shown = spendingSlices(d, today.ymKey(), trashed).filter { it.amount != 0L }.sortedByDescending { it.amount }
         return SpendingComposition(shown, shown.sumOf { it.amount })
     }
@@ -203,7 +204,7 @@ object Reports {
      * What was spent in [ym] (`YYYY-MM`), one slice per category seen and one for Uncategorised
      * (SPEC R99): a category in [trashed] marked deleted, one deleted for good in Uncategorised (SPEC R124).
      */
-    private fun spendingSlices(d: ProfileData, ym: String, trashed: Set<String> = emptySet()): List<Slice> {
+    private fun spendingSlices(d: ProfileData, ym: String, trashed: Set<String>): List<Slice> {
         val payments = d.payments.filter { it.date.ymKey() == ym }
         val rows = d.transactions.filter { it.date.ymKey() == ym }
 
@@ -264,6 +265,6 @@ object Reports {
             val p = today.plusMonthsClamped(-i, 1)
             val ym = p.ymKey()
             val income = d.transactions.filter { it.date.ymKey() == ym && it.isIncome }.sumOf { it.amount }
-            IncomeExpensePoint(p, income, spendingSlices(d, ym).sumOf { it.amount })
+            IncomeExpensePoint(p, income, spendingSlices(d, ym, emptySet()).sumOf { it.amount })
         }
 }
