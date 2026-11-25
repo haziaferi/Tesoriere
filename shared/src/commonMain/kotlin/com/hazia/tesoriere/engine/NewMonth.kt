@@ -16,14 +16,17 @@ import kotlin.math.roundToLong
  * Ported from Sci-Fin native/shared/src/commonMain/kotlin/app/scifin/engine/NewMonth.kt at 2892110.
  *
  * The month cycle (SPEC R70): on each open, move the due dates on, then process every month
- * between the oldest month the recurring expenses have swept and the current one, in order and
- * with real dates; a month already processed is left alone. The automatic deposits catch up on
- * their own payday clock in the same open (SPEC R71); neither depends on the other.
+ * between the last month processed (or an older month a recurring expense last swept) and the
+ * current one, in order and with real dates; a month already processed is left alone. The
+ * automatic deposits catch up on their own payday clock in the same open (SPEC R71); neither
+ * depends on the other.
  *
  * Changed from Sci-Fin:
  * - No category reset: spent is worked out per month (SPEC R25), so a new month writes nothing
- *   for categories. Categories also carry no month marker, so the months to process are found
- *   from the recurring expenses' `lastSweptMonth` alone; a Profile with none processes no month.
+ *   for categories. Categories carry no month marker; the Profile's `Settings.lastMonthProcessed`
+ *   stands for Sci-Fin's `Category.lastResetMonth` beside the expenses' `lastSweptMonth`, so a
+ *   Profile with no recurring expense still processes the months of an absence. Each open sets
+ *   it to the current month; a Profile with no mark yet (none given at creation) gets one.
  * - An ended expense gives a code ([EndedKind]) in place of Sci-Fin's sentence, and the kept
  *   summary stores `expenseId<TAB>code` per line in place of `name<TAB>note` (SPEC R72, R74).
  * - `completionNoticeFor` is `endedKind`; the closing row's note comes from StoredLabels.
@@ -147,10 +150,10 @@ object NewMonth {
         val today = clock.today()
         var next = Recurring.advanceDueDates(d, today)
         val nowYm = today.ymKey()
-        val marks = next.recurringExpenses.mapNotNull { it.lastSweptMonth }.sorted()
+        val marks = (listOfNotNull(next.settings.lastMonthProcessed) + next.recurringExpenses.mapNotNull { it.lastSweptMonth }).sorted()
         if (marks.isEmpty() || marks.first() >= nowYm) {
             // the payday clock still runs: a payday may have passed inside the month
-            val (afterIncome, _) = Income.runCatchUp(next, clock, ids)
+            val (afterIncome, _) = Income.runCatchUp(markProcessed(next, nowYm), clock, ids)
             return afterIncome to null
         }
         val months = ArrayList<LocalDate>()
@@ -163,13 +166,17 @@ object NewMonth {
             val (after, r) = processMonth(next, m, clock, ids)
             next = after; swept += r.sweptTotal; ended.addAll(r.endedNow)
         }
-        val (afterIncome, deposits) = Income.runCatchUp(next, clock, ids)
+        val (afterIncome, deposits) = Income.runCatchUp(markProcessed(next, nowYm), clock, ids)
         val summary = CatchUpSummary(months.size, swept, ended, deposits)
         // Kept until dismissed, so a restart cannot lose it; a summary not yet read grows, and
         // only the user's dismissal clears it (SPEC R74).
         next = if (months.size > 1 || ended.isNotEmpty()) afterIncome.copy(settings = record(afterIncome.settings, summary)) else afterIncome
         return next to summary
     }
+
+    /** The Profile marked processed up to [ym]; a later mark already kept stays (SPEC R70). */
+    private fun markProcessed(d: ProfileData, ym: String): ProfileData =
+        if ((d.settings.lastMonthProcessed ?: "") >= ym) d else d.copy(settings = d.settings.copy(lastMonthProcessed = ym))
 
     private const val FIELD = '\t'
 

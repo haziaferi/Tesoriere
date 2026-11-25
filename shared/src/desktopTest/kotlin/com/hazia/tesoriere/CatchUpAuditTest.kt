@@ -11,7 +11,13 @@ import com.hazia.tesoriere.model.Account
 import com.hazia.tesoriere.model.AccountType
 import com.hazia.tesoriere.model.Cadence
 import com.hazia.tesoriere.model.IncomeCadence
+import com.hazia.tesoriere.model.ProfileData
 import com.hazia.tesoriere.model.RateType
+import com.hazia.tesoriere.payments.Part
+import com.hazia.tesoriere.payments.PaymentDraft
+import com.hazia.tesoriere.payments.PaymentSource
+import com.hazia.tesoriere.payments.Payments
+import com.hazia.tesoriere.payments.Spent
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -21,9 +27,9 @@ import kotlin.test.assertNull
 /**
  * Ported from Sci-Fin native/shared/src/desktopTest/kotlin/app/scifin/CatchUpAuditTest.kt at
  * 2892110. Changed: the restart test runs on the engine (the stored summary read back with
- * `persistedSummary`), since the app store is not ported. Not ported here: switching to a Profile
- * last open months ago (the app store, and a Profile with only categories has no month to
- * process, SPEC R70).
+ * `persistedSummary`), since the app store is not ported; switching to a Profile last open months
+ * ago runs on the engine too, the Profile's own month marker standing for Sci-Fin's category
+ * `lastResetMonth` (SPEC R70).
  */
 class CatchUpAuditTest {
     private val ids = Ids("cu")
@@ -45,6 +51,31 @@ class CatchUpAuditTest {
         assertNull(NewMonth.persistedSummary(dismissed))
         assertFalse(dismissed.catchUpSummaryPending)
         assertEquals(0, dismissed.catchUpMonths); assertEquals(0L, dismissed.catchUpSwept); assertEquals("", dismissed.catchUpEnded)
+    }
+
+    // SPEC:R70 SPEC:R74 SPEC:R25
+    @Test fun `R70 a Profile with no recurring expense last processed in June 2026 and opened on 14 September processes 3 months and keeps its summary`() {
+        val base = ProfileData.fresh("p-2", "Household", createdOn = LocalDate(2026, 6, 10))
+        assertEquals("2026-06", base.settings.lastMonthProcessed)
+        val stale = Payments.record(base.copy(categories = listOf(category("h1").copy(profileId = "p-2"))),
+            PaymentDraft(LocalDate(2026, 6, 12), cents("80.00"), PaymentSource.Savings, null, listOf(Part("h1", cents("80.00")))), TestClock(LocalDate(2026, 6, 12)), "pay-1")
+        val (d, s) = NewMonth.runCatchUp(stale, TestClock(LocalDate(2026, 9, 14))) { ids.next() }
+        assertEquals(3, s!!.monthsReplayed); assertEquals(0L, s.sweptTotal)
+        assertEquals(3, NewMonth.persistedSummary(d.settings)!!.monthsReplayed)       // its own summary
+        assertEquals("2026-09", d.settings.lastMonthProcessed)
+        assertEquals(0L, Spent.of(d, "h1", "2026-09")); assertEquals(stale.categories, d.categories)
+        assertNull(NewMonth.runCatchUp(d, TestClock(LocalDate(2026, 9, 14))) { ids.next() }.second)
+    }
+
+    // SPEC:R70
+    @Test fun `R70 a Profile created on 14 September 2026 is marked processed for September and processes no month that day`() {
+        val d = ProfileData.fresh("p-3", "Main", createdOn = LocalDate(2026, 9, 14))
+        assertEquals("2026-09", d.settings.lastMonthProcessed)
+        val (after, s) = NewMonth.runCatchUp(d, TestClock(LocalDate(2026, 9, 14))) { ids.next() }
+        assertNull(s); assertEquals(d, after)
+        val (october, s2) = NewMonth.runCatchUp(after, TestClock(LocalDate(2026, 10, 2))) { ids.next() }
+        assertEquals(1, s2!!.monthsReplayed); assertEquals("2026-10", october.settings.lastMonthProcessed)
+        assertNull(NewMonth.persistedSummary(october.settings))
     }
 
     // SPEC:R74

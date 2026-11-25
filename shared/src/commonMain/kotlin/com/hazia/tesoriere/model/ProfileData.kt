@@ -1,6 +1,7 @@
 package com.hazia.tesoriere.model
 
 import com.hazia.tesoriere.payments.Payment
+import kotlinx.datetime.LocalDate
 
 /*
  * Ported from Sci-Fin native/shared/src/commonMain/kotlin/app/scifin/model/ProfileData.kt at 2892110.
@@ -31,12 +32,18 @@ data class ProfileData(
     companion object {
         /**
          * A new Profile with the app's defaults: Savings unset (SPEC R49) and every piece that
-         * starts off switched off (SPEC R18). `onboardingComplete` is the caller's to say.
+         * starts off switched off (SPEC R18). `onboardingComplete` is the caller's to say. Created
+         * on [createdOn], its month is the last month processed (SPEC R70); without it, the first
+         * open sets the mark.
          */
-        fun fresh(id: String, name: String, onboardingComplete: Boolean = true): ProfileData = ProfileData(
+        fun fresh(id: String, name: String, onboardingComplete: Boolean = true, createdOn: LocalDate? = null): ProfileData = ProfileData(
             profile = Profile(id, name),
             savings = Savings(id, null),
-            settings = Settings(profileId = id, onboardingComplete = onboardingComplete),
+            settings = Settings(
+                profileId = id, onboardingComplete = onboardingComplete,
+                // `YYYY-MM-DD` cut to `YYYY-MM`, the month key the cycle compares
+                lastMonthProcessed = createdOn?.toString()?.substring(0, 7),
+            ),
             importState = ImportState(profileId = id),
         )
     }

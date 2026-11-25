@@ -182,6 +182,12 @@ data class Settings(
     val onboardingComplete: Boolean = false,
     val onboardingStep: Int? = null,
     val goalPromptDismissed: Boolean = false,
+    /**
+     * The last month the month cycle processed, `YYYY-MM` (SPEC R70): the Profile's creation month
+     * on a fresh Profile, then the current month after each open. It stands for Sci-Fin's
+     * `Category.lastResetMonth`, which Tesoriere drops with the stored spent figure (SPEC R25).
+     */
+    val lastMonthProcessed: String? = null,
     val catchUpSummaryPending: Boolean = false,
     /** The catch-up summary, kept until dismissed: deposits, months replayed, what they swept, notices. */
     val catchUpDepositCount: Int = 0,
