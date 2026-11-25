@@ -122,6 +122,26 @@ class StatementImportTest {
         assertEquals(listOf("fit:TSRM0001", "syn:2026-03-03|-12.40|pos mercato verde 0412"), StatementImport.keyStrings(k))
     }
 
+    // SPEC:R26
+    @Test fun `R26 a -12_40 row spaced with two spaces, a tab or a non-breaking space keys as syn_2026-03-03 -12_40 pos mercato verde 0412`() {
+        val key = "syn:2026-03-03|-12.40|pos mercato verde 0412"
+        for (desc in listOf("POS  MERCATO VERDE 0412", "POS\tMERCATO VERDE 0412", "POS MERCATO VERDE 0412", " POS MERCATO VERDE 0412  ", "POS \t MERCATO VERDE 0412"))
+            assertEquals(key, StatementImport.keys(BankRow(LocalDate(2026, 3, 3), -1240, desc, null)).synKey, desc)
+        // 40 characters are taken after the spacing is made one
+        val long = StatementImport.keys(BankRow(LocalDate(2026, 3, 3), -1240, "A    B C D E F G H I J K L M N O P Q R S T U V", null)).synKey
+        assertEquals("syn:2026-03-03|-12.40|a b c d e f g h i j k l m n o p q r s t ", long)
+    }
+
+    // SPEC:R26, R107
+    @Test fun `R26 a CSV row spaced differently from the recorded OFX row arrives as already recorded`() {
+        val d = world()
+        val after = StatementImport.confirm(d, marchFiled(d), clock, ids::next)
+        val csv = StatementImport.parseCsv("Date;Description;Amount\n03/03/2026;POS  MERCATO VERDE\t0412;-12,40\n")
+        val review = StatementImport.review(after, csv, clock.today)
+        assertEquals(RowStatus.DUPLICATE, review.single().status)
+        assertFalse(review.single().include)
+    }
+
     // SPEC:R26, R107
     @Test fun `R26 the same OFX statement twice records nothing the second time`() {
         val d = world()

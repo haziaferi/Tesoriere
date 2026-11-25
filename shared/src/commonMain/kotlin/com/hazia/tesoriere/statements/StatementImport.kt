@@ -41,7 +41,8 @@ import kotlin.math.abs
  *   Sci-Fin's `goal:<id>` target did: a `savings` row, then a goal quick-add of the same amount on
  *   the same day; a Goal deleted before Confirm leaves the money in Savings (SPEC R107).
  * - Keys are a BankKeys (SPEC R26), and duplicates are also found against every payment's
- *   bankKeys, so a bank row recorded through a pair is not offered again.
+ *   bankKeys, so a bank row recorded through a pair is not offered again. The synthetic key makes
+ *   the description's spacing one space and trims it first; Sci-Fin took it as written.
  * - A payee rule is learned from a row filed under one category, from any source; a split row
  *   teaches nothing (SPEC R108). Sci-Fin learned from a `cat:` target only. A rule pre-fills a
  *   one-part draft from Savings.
@@ -286,9 +287,19 @@ object StatementImport {
         }
     }
 
-    /** Both keys where the format allows (SPEC R26): the FITID is identity, the synthetic key catches a CSV and an OFX of one period. */
-    fun keys(r: BankRow): BankKeys =
-        BankKeys(r.fitid, "syn:${r.date}|${r.amount.toMajor2()}|${r.description.take(40).lowercase()}")
+    /** Spaces, tabs, non-breaking and other Unicode spaces, in runs. */
+    private val SPACING = Regex("[\\s\\u00A0\\u2007\\u202F]+")
+
+    /**
+     * Both keys where the format allows (SPEC R26): the FITID is identity, the synthetic key catches a
+     * CSV and an OFX of one period. The description's spacing is made one space and trimmed before
+     * its first 40 characters are taken, so two exports that space one payee differently key alike;
+     * a description with single spaces keys as it always did.
+     */
+    fun keys(r: BankRow): BankKeys {
+        val desc = r.description.replace(SPACING, " ").trim()
+        return BankKeys(r.fitid, "syn:${r.date}|${r.amount.toMajor2()}|${desc.take(40).lowercase()}")
+    }
 
     /** [k] as the strings kept in `ImportState.importedKeys`: `fit:<FITID>` when there is one, then the synthetic key. */
     fun keyStrings(k: BankKeys): List<String> = listOfNotNull(k.fitid?.let { "fit:$it" }, k.synKey)
