@@ -39,9 +39,9 @@ import kotlin.math.abs
  *   target becomes a PaymentDraft with a source and parts. `cat:` is a draft from Savings,
  *   `spend:` a draft from a Goal, `charge:` a draft from an Account (SPEC R22, R54), and any of
  *   them may be split (SPEC R24). `payoff:` becomes [ReviewRow.payoffAccountId], written as
- *   Sci-Fin did through Accounts.quickAdd, but with R89's default for the Savings pair, off for an
- *   Account linked to a recurring expense, and [ReviewRow.payoffPairSavings] to change it per row
- *   (SPEC R89, R107); Sci-Fin always paired.
+ *   Sci-Fin did through Accounts.quickAdd, but with R89's default, Savings, or nowhere for an
+ *   Account linked to a recurring expense, and [ReviewRow.payoffFrom] to pick Savings, a Goal or
+ *   nowhere per row (SPEC R89, R107); Sci-Fin always took it from Savings.
  * - Money in goes to Savings, and on into a Goal when [ReviewRow.incomingGoalId] names one, as
  *   Sci-Fin's `goal:<id>` target did: a `savings` row, then a goal quick-add of the same amount on
  *   the same day; a Goal deleted before Confirm leaves the money in Savings (SPEC R107). Money in
@@ -98,10 +98,11 @@ data class ReviewRow(
     val pairPaymentId: String?,
     val incomingGoalId: String? = null,
     /**
-     * Whether a payoff of [payoffAccountId] also lowers Savings (SPEC R89, R107): null takes R89's
-     * default, on unless the Account is linked to a recurring expense; the user can set it per row.
+     * Where a payoff of [payoffAccountId] takes its money from (SPEC R89, R107): Savings, a Goal or
+     * nowhere; null takes R89's default, Savings unless the Account is linked to a recurring
+     * expense; the user can set it per row.
      */
-    val payoffPairSavings: Boolean? = null,
+    val payoffFrom: Accounts.PayoffFrom? = null,
 )
 
 /**
@@ -461,7 +462,14 @@ object StatementImport {
                         else if (goal != null) take(goal, draft.total)
                     }
                     rr.incomingGoalId != null -> ok = false
-                    payoff != null && draft == null -> if (d.accounts.none { it.id == payoff }) ok = false
+                    payoff != null && draft == null -> {
+                        if (d.accounts.none { it.id == payoff }) ok = false
+                        // a payoff from a Goal takes at most what it holds after the rows before it (SPEC R89)
+                        (rr.payoffFrom as? Accounts.PayoffFrom.Goal)?.let { f ->
+                            val left = holds[f.id]
+                            if (left == null || -rr.row.amount > left) ok = false else holds[f.id] = left + rr.row.amount
+                        }
+                    }
                     draft != null && payoff == null -> {
                         if (!Payments.canSave(d, draft)) ok = false
                         else if (goal != null && take(goal, draft.total)) notice = PaymentNotice.GOAL_SHORT
@@ -486,9 +494,10 @@ object StatementImport {
 
     /**
      * Records every ticked row with the statement's day (SPEC R107): money in to Savings and on
-     * into the Goal it was sent to, if that Goal still exists (SPEC R50), an outflow as its payment with the row's keys (SPEC R21, R26) or as a payoff with the Savings
-     * pair by R89's default unless the row sets it (SPEC R89, R107). A row filed under one category teaches its payee that category (SPEC R108);
-     * every recorded row's keys are kept.
+     * into the Goal it was sent to, if that Goal still exists (SPEC R50), or as a refund; an
+     * outflow as its payment with the row's keys (SPEC R21, R26) or as a payoff taking its money
+     * from where the row says, else R89's default (SPEC R89, R107). A row filed under one category
+     * teaches its payee that category (SPEC R108); every recorded row's keys are kept.
      */
     fun confirm(d: ProfileData, rows: List<ReviewRow>, clock: Clock, ids: () -> String): ProfileData {
         require(canConfirm(d, rows)) { "every ticked outflow needs a payment that adds up or a payoff (SPEC R107)" }
@@ -514,8 +523,8 @@ object StatementImport {
                 }
                 payoff != null -> {
                     // R89's default: a linked Account's sweep already took the money from Savings
-                    val pair = rr.payoffPairSavings ?: Accounts.pairedOutflowDefault(next.accounts.first { it.id == payoff })
-                    Accounts.quickAdd(next, payoff, amt, Accounts.Direction.PAYMENT, r.description, pair, clock, r.date, ids = ids)
+                    val from = rr.payoffFrom ?: Accounts.payoffFromDefault(next.accounts.first { it.id == payoff })
+                    Accounts.quickAdd(next, payoff, amt, Accounts.Direction.PAYMENT, r.description, from, clock, r.date, ids = ids)
                 }
                 else -> {
                     val draft = requireNotNull(recorded(rr))

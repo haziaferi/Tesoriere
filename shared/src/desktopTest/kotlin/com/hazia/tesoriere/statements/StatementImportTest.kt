@@ -5,6 +5,7 @@ import com.hazia.tesoriere.Fixture.category
 import com.hazia.tesoriere.Fixture.goal
 import com.hazia.tesoriere.Fixture.profile
 import com.hazia.tesoriere.Ids
+import com.hazia.tesoriere.engine.Accounts
 import com.hazia.tesoriere.TestClock
 import com.hazia.tesoriere.cents
 import com.hazia.tesoriere.model.Account
@@ -331,14 +332,28 @@ class StatementImportTest {
         assertEquals(cents("240.00"), byDefault.accounts.single().balance)
         assertEquals(cents("2,395.30"), byDefault.savings.amount)                     // the sweep moves Savings, not the payoff
         assertTrue(byDefault.transactions.none { it.key == "savings" && it.amount == cents("-60.00") })
-        val paired = filed.map { if (it.row.description == "PAGAMENTO CARTA ORBITA") it.copy(payoffPairSavings = true) else it }
+        val paired = filed.map { if (it.row.description == "PAGAMENTO CARTA ORBITA") it.copy(payoffFrom = Accounts.PayoffFrom.Savings) else it }
         val after = StatementImport.confirm(linked, paired, clock, ids::next)
         assertEquals(cents("240.00"), after.accounts.single().balance)
         assertEquals(cents("2,335.30"), after.savings.amount)
         // a card linked to nothing pairs by default, and the pair can be turned off for the row
         assertEquals(cents("2,335.30"), StatementImport.confirm(world(), marchFiled(world()), clock, ids::next).savings.amount)
-        val off = marchFiled(world()).map { if (it.row.description == "PAGAMENTO CARTA ORBITA") it.copy(payoffPairSavings = false) else it }
+        val off = marchFiled(world()).map { if (it.row.description == "PAGAMENTO CARTA ORBITA") it.copy(payoffFrom = Accounts.PayoffFrom.None) else it }
         assertEquals(cents("2,395.30"), StatementImport.confirm(world(), off, clock, ids::next).savings.amount)
+    }
+
+    // SPEC:R107 SPEC:R89
+    @Test fun `R107 the -60_00 payoff of the card at 300_00 from a Goal holding 110_00 leaves the card 240_00, the Goal 50_00, and from 50_00 Confirm is off`() {
+        val d = world()
+        val fromGoal = marchFiled(d).map { if (it.row.description == "PAGAMENTO CARTA ORBITA") it.copy(payoffFrom = Accounts.PayoffFrom.Goal("cash")) else it }
+        assertTrue(StatementImport.canConfirm(d, fromGoal))
+        val after = StatementImport.confirm(d, fromGoal, clock, ids::next)
+        assertEquals(cents("240.00"), after.accounts.single().balance)
+        assertEquals(cents("50.00"), after.goals.single().saved)
+        assertEquals(cents("2,395.30"), after.savings.amount)                        // 1,000.00 + 1,450.00 - 12.40 - 42.30
+        val poorer = d.copy(goals = d.goals.map { it.copy(saved = cents("50.00")) })
+        assertFalse(StatementImport.canConfirm(poorer, fromGoal))
+        assertFalse(StatementImport.canConfirm(d, fromGoal.map { if (it.payoffFrom != null) it.copy(payoffFrom = Accounts.PayoffFrom.Goal("gone")) else it }))
     }
 
     // SPEC:R107 SPEC:R61

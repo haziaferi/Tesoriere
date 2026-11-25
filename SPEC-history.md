@@ -174,3 +174,7 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R54 · changed · a Goal short of a payment's total pays all it holds and Savings the rest, after a warning; the payment keeps that share · owner
 - 2026-11-25 · R95 · changed · the share a Goal's payment took from Savings is money out of Savings · owner
 - 2026-11-25 · R107 · changed · a row from a Goal short of it takes the rest from Savings after a warning, instead of keeping Confirm off · owner
+- 2026-11-25 · R89 · changed · a payment off an Account takes its money from Savings, a Goal (at most what it holds) or nowhere · owner
+- 2026-11-25 · R51 · changed · a spend row also logs a payment off an Account from a Goal · owner
+- 2026-11-25 · R85 · changed · an Account moves Savings through a payment off it from Savings · owner
+- 2026-11-25 · R107 · changed · a statement payoff takes its money from Savings, a Goal or nowhere, as R89 · owner

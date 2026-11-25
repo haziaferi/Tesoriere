@@ -194,29 +194,49 @@ class AccountsTest {
     @Test fun `R89 a card at 100_00 paid 60_00 with the pair on reads 40_00 and Savings 940_00, with the pair off 1,000_00`() {
         val clock = TestClock(today); val ids = Ids()
         val a = card(balance = "100.00")
-        var d = Accounts.quickAdd(world(accounts = listOf(a)), "cc", cents("60.00"), Accounts.Direction.PAYMENT, null, pairSavings = true, clock = clock) { ids.next() }
+        var d = Accounts.quickAdd(world(accounts = listOf(a)), "cc", cents("60.00"), Accounts.Direction.PAYMENT, null, from = Accounts.PayoffFrom.Savings, clock = clock) { ids.next() }
         assertEquals(cents("40.00"), d.accounts.single().balance); assertEquals(cents("940.00"), d.savingsAmount)
         val (acct, sav) = d.transactions
         assertEquals("acct:cc", acct.key); assertEquals(cents("-60.00"), acct.amount); assertEquals(StoredLabels.PAID_OFF, acct.payee)
         assertEquals("savings", sav.key); assertEquals(cents("-60.00"), sav.amount)
         assertEquals(StoredLabels.fill(StoredLabels.PAYMENT_TO, "Card"), sav.payee)
-        d = Accounts.quickAdd(d, "cc", cents("10.00"), Accounts.Direction.PAYMENT, "Bank transfer", pairSavings = false, clock = clock) { ids.next() }
+        d = Accounts.quickAdd(d, "cc", cents("10.00"), Accounts.Direction.PAYMENT, "Bank transfer", from = Accounts.PayoffFrom.None, clock = clock) { ids.next() }
         assertEquals(cents("30.00"), d.accounts.single().balance); assertEquals(cents("940.00"), d.savingsAmount)
         assertEquals("Bank transfer", d.transactions.last().payee)
         assertTrue(Accounts.pairedOutflowDefault(a))
         assertFalse(Accounts.pairedOutflowDefault(a.copy(linkedRecurringExpenseId = "e")))
+        assertEquals(Accounts.PayoffFrom.Savings, Accounts.payoffFromDefault(a))
+        assertEquals(Accounts.PayoffFrom.None, Accounts.payoffFromDefault(a.copy(linkedRecurringExpenseId = "e")))
+    }
+
+    // SPEC:R89 SPEC:R51
+    @Test fun `R89 a card at 100_00 paid 60_00 from a Goal holding 80_00 reads 40_00, the Goal 20_00 and Savings 1,000_00, and 90_00 is refused`() {
+        val clock = TestClock(today); val ids = Ids()
+        val d0 = world(accounts = listOf(card(balance = "100.00"))).copy(goals = listOf(Fixture.goal("trip", "Trip", saved = "80.00")))
+        val d = Accounts.quickAdd(d0, "cc", cents("60.00"), Accounts.Direction.PAYMENT, null, from = Accounts.PayoffFrom.Goal("trip"), clock = clock) { ids.next() }
+        assertEquals(cents("40.00"), d.accounts.single().balance)
+        assertEquals(cents("20.00"), d.goals.single().saved)
+        assertEquals(cents("1,000.00"), d.savingsAmount)
+        val (acct, spend) = d.transactions
+        assertEquals("acct:cc" to cents("-60.00"), acct.key to acct.amount)
+        assertEquals("spend:trip" to cents("-60.00"), spend.key to spend.amount)
+        assertEquals(StoredLabels.fill(StoredLabels.PAYMENT_TO, "Card"), spend.payee)
+        assertEquals(0L, com.hazia.tesoriere.engine.Ledger.savingsEffect(spend))
+        assertFailsWith<IllegalArgumentException> {
+            Accounts.quickAdd(d0, "cc", cents("90.00"), Accounts.Direction.PAYMENT, null, from = Accounts.PayoffFrom.Goal("trip"), clock = clock) { ids.next() }
+        }
     }
 
     // SPEC:R89 SPEC:R22
     @Test fun `R89 a Loan of 4,000_00 increased by 500_00 reads 4,500_00 and an increase on a card is refused`() {
         val clock = TestClock(today); val ids = Ids()
         val loan = Account("l", Fixture.PROFILE, "Loan", type = AccountType.LOAN, balance = cents("4,000.00"))
-        val d = Accounts.quickAdd(world(accounts = listOf(loan, card())), "l", cents("500.00"), Accounts.Direction.INCREASE, null, pairSavings = true, clock = clock) { ids.next() }
+        val d = Accounts.quickAdd(world(accounts = listOf(loan, card())), "l", cents("500.00"), Accounts.Direction.INCREASE, null, from = Accounts.PayoffFrom.Savings, clock = clock) { ids.next() }
         assertEquals(cents("4,500.00"), d.accounts.first { it.id == "l" }.balance)
         assertEquals(cents("1,000.00"), d.savingsAmount)                          // an increase is never paired
         assertEquals(StoredLabels.INCREASED, d.transactions.single().payee)
         assertFailsWith<IllegalArgumentException> {
-            Accounts.quickAdd(d, "cc", cents("40.00"), Accounts.Direction.INCREASE, "Shoes", pairSavings = false, clock = clock) { ids.next() }
+            Accounts.quickAdd(d, "cc", cents("40.00"), Accounts.Direction.INCREASE, "Shoes", from = Accounts.PayoffFrom.None, clock = clock) { ids.next() }
         }
     }
 

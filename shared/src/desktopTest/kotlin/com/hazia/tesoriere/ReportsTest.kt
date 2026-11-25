@@ -217,7 +217,7 @@ class ReportsTest {
         val ids = Ids("pay")
         val cardPaidOff = Accounts.quickAdd(
             d.copy(accounts = listOf(Account("cc", Fixture.PROFILE, "Card", type = AccountType.CREDIT, balance = cents("100.00")))),
-            "cc", cents("60.00"), Accounts.Direction.PAYMENT, null, pairSavings = true, clock = TestClock(today),
+            "cc", cents("60.00"), Accounts.Direction.PAYMENT, null, from = Accounts.PayoffFrom.Savings, clock = TestClock(today),
         ) { ids.next() }
         val s = Reports.spendingComposition(cardPaidOff, today)
         assertEquals(listOf(Triple(SliceKind.CATEGORY, "c", cents("30.00"))), keyed(s.slices))
@@ -423,7 +423,7 @@ class ReportsTest {
         assertEquals(cents("110.00"), Reports.incomeVsExpenses(d, today).last().expenses)   // the contribution still is not
         d = d.paid("40.00", PaymentSource.Account("cc"))
         assertEquals(cents("150.00"), Reports.incomeVsExpenses(d, today).last().expenses)
-        d = Accounts.quickAdd(d, "cc", cents("60.00"), Accounts.Direction.PAYMENT, null, pairSavings = true, clock = clock) { ids.next() }
+        d = Accounts.quickAdd(d, "cc", cents("60.00"), Accounts.Direction.PAYMENT, null, from = Accounts.PayoffFrom.Savings, clock = clock) { ids.next() }
         assertEquals(cents("150.00"), Reports.incomeVsExpenses(d, today).last().expenses)   // paying the card off is a transfer
         assertEquals(Reports.spendingComposition(d, today).net, Reports.incomeVsExpenses(d, today).last().expenses)
         d = d.paid("-15.00", PaymentSource.Savings)                                          // a refund (SPEC R21)

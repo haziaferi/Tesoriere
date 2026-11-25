@@ -29,6 +29,9 @@ import kotlin.math.roundToLong
  *   on a card (SPEC R89).
  * - quickAdd writes its own row note when the user gave none (`Paid off`, `Increased`, Sci-Fin's
  *   stored words), where Sci-Fin took it from its entry sentence's `rowLabel`.
+ * - A payment off an Account takes its money from Savings, a Goal or nowhere ([PayoffFrom]), where
+ *   Sci-Fin had a Savings pair on or off; from a Goal it logs a `spend:` row, at most what the
+ *   Goal holds (SPEC R51, R89, owner answer I of 2026-11-25).
  * - Every recurring expense has a category (SPEC R67): getLoan and commitFixedPayment take one and
  *   refuse a category that does not exist.
  * - Money stays in Long cents (SPEC R20). Rates are Double; each product of money and a rate is
@@ -190,24 +193,50 @@ object Accounts {
     /** A quick-add's direction: PAYMENT lowers the balance, INCREASE (a Loan only) raises it. A charge is a payment (SPEC R22). */
     enum class Direction { PAYMENT, INCREASE }
 
+    /** Where a payment off an Account takes its money from (SPEC R89). An increase takes it from nowhere. */
+    sealed interface PayoffFrom {
+        /** A `savings` row of minus the amount. */
+        data object Savings : PayoffFrom
+        /** A `spend:<goalId>` row of minus the amount: the Goal goes down, Savings does not move (SPEC R51). */
+        data class Goal(val id: String) : PayoffFrom
+        /** Nothing besides the `acct:` row, as when a linked expense's sweep already moved Savings. */
+        data object None : PayoffFrom
+    }
+
     /** The paired Savings row is on by default unless a linked expense's sweep already moved Savings (SPEC R89). */
     fun pairedOutflowDefault(a: Account): Boolean = a.linkedRecurringExpenseId == null
 
+    /** Where a payment off [a] takes its money from unless the user picks another: Savings, or nowhere for a linked Account (SPEC R89). */
+    fun payoffFromDefault(a: Account): PayoffFrom = if (pairedOutflowDefault(a)) PayoffFrom.Savings else PayoffFrom.None
+
     /**
-     * Account quick-add (SPEC R89): one `acct:` row; on a payment with [pairSavings], the matching
-     * `savings` row too, since the `acct:` row moved the balance and no Savings.
+     * Account quick-add (SPEC R89): one `acct:` row; on a payment, the row of where its money
+     * came from [from] too, since the `acct:` row moved the balance and nothing else: a `savings`
+     * row, or a `spend:` row that lowers a Goal, which must hold the amount.
      */
     fun quickAdd(
-        d: ProfileData, accountId: String, amount: Money, direction: Direction, payee: String?, pairSavings: Boolean,
+        d: ProfileData, accountId: String, amount: Money, direction: Direction, payee: String?, from: PayoffFrom,
         clock: Clock, date: LocalDate? = null, ids: () -> String,
     ): ProfileData {
         val a = d.accounts.first { it.id == accountId }
         require(direction == Direction.PAYMENT || a.type == AccountType.LOAN) { "only a Loan takes an increase; a charge is a payment (SPEC R22)" }
+        val goal = (from as? PayoffFrom.Goal)?.takeIf { direction == Direction.PAYMENT }?.let { f -> d.goals.firstOrNull { it.id == f.id } }
+        if (direction == Direction.PAYMENT && from is PayoffFrom.Goal) {
+            require(goal != null && amount <= goal.saved) { "a payoff from a Goal takes at most what it holds (SPEC R89)" }
+        }
         val signed = if (direction == Direction.PAYMENT) -amount else amount
         val note = payee ?: if (direction == Direction.PAYMENT) StoredLabels.PAID_OFF else StoredLabels.INCREASED
         var next = balanceEdit(d, accountId, a.balance + signed, note, clock, ids(), date)
-        if (direction == Direction.PAYMENT && pairSavings) {
-            next = Writes.savingsQuickAdd(next, -amount, payee ?: StoredLabels.fill(StoredLabels.PAYMENT_TO, a.name), false, clock, ids(), date)
+        if (direction != Direction.PAYMENT) return next
+        val fromNote = payee ?: StoredLabels.fill(StoredLabels.PAYMENT_TO, a.name)
+        when (from) {
+            PayoffFrom.Savings -> next = Writes.savingsQuickAdd(next, -amount, fromNote, false, clock, ids(), date)
+            is PayoffFrom.Goal -> {
+                val g = requireNotNull(goal)
+                next = next.copy(goals = next.goals.map { if (it.id == g.id) it.copy(saved = it.saved - amount) else it })
+                next = Ledger.logAndMove(next, Movement(-amount, TransactionKey.GoalSpendKey(g.id), g.name, fromNote, date = date), clock, ids()).first
+            }
+            PayoffFrom.None -> Unit
         }
         return next
     }
