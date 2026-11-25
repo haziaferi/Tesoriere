@@ -14,10 +14,16 @@ import com.hazia.tesoriere.engine.Slice
 import com.hazia.tesoriere.engine.SliceKind
 import com.hazia.tesoriere.engine.Writes
 import com.hazia.tesoriere.engine.daysTo
+import com.hazia.tesoriere.engine.firstOfNextMonth
+import com.hazia.tesoriere.engine.plusDays
 import com.hazia.tesoriere.engine.savingsAmount
 import com.hazia.tesoriere.engine.ymKey
 import com.hazia.tesoriere.model.Account
 import com.hazia.tesoriere.model.AccountType
+import com.hazia.tesoriere.model.Cadence
+import com.hazia.tesoriere.statements.BankRow
+import com.hazia.tesoriere.statements.RowStatus
+import com.hazia.tesoriere.statements.StatementImport
 import com.hazia.tesoriere.model.ProfileData
 import com.hazia.tesoriere.model.RateType
 import com.hazia.tesoriere.model.StoredLabels
@@ -238,6 +244,37 @@ class ReportsTest {
             pay("p", "15.00", today, PaymentSource.Goal("g"), listOf(Part(null, cents("15.00")))),
         )
         assertEquals(listOf(Triple(SliceKind.UNCATEGORISED, null, cents("24.00"))), keyed(Reports.spendingComposition(d, today).slices))
+    }
+
+    // SPEC:R62 SPEC:R99 SPEC:R107 SPEC:R67
+    @Test fun `R62 a 600_00 yearly expense counts 50_00 in spent and Spending each month, the month its bill is paid included`() {
+        val clock = TestClock(LocalDate(2026, 7, 15)); val ids = Ids()
+        var d = Recurring.create(
+            profile(savings = "2,000.00", categories = listOf(category("ins", "Insurance"))),
+            Fixture.recurring("ins", "600.00", Cadence.YEARLY, LocalDate(2027, 7, 15), categoryId = "ins", name = "Insurance"),
+            clock,
+        ) { ids.next() }
+        assertEquals(cents("50.00"), d.recurringExpenses.single().apportionedShare)
+        var month = LocalDate(2026, 8, 1)
+        while (month <= LocalDate(2027, 7, 1)) {
+            d = Recurring.sweepOccurrences(d, "ins", month, clock) { ids.next() }.first
+            month = month.firstOfNextMonth()
+        }
+        // the bank pays the whole 600.00 on the due date; its row arrives as already swept
+        val bill = StatementImport.review(d, listOf(BankRow(LocalDate(2027, 7, 15), cents("-600.00"), "ASSICURAZIONE CASA POLIZZA 0099", null)), LocalDate(2027, 7, 31))
+        assertEquals(RowStatus.RECURRING, bill.single().status)
+        clock.setDay(LocalDate(2027, 7, 31))
+        d = StatementImport.confirm(d, bill, clock) { ids.next() }
+        month = LocalDate(2026, 8, 1)
+        while (month <= LocalDate(2027, 7, 1)) {
+            assertEquals(cents("50.00"), Spent.of(d, "ins", month.ymKey()), month.toString())
+            assertEquals(
+                listOf(Triple(SliceKind.CATEGORY, "ins", cents("50.00"))),
+                keyed(Reports.spendingComposition(d, month.plusDays(14)).slices), month.toString(),
+            )
+            month = month.firstOfNextMonth()
+        }
+        assertTrue(d.payments.isEmpty())
     }
 
     // SPEC:R99
