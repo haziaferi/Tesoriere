@@ -11,9 +11,11 @@ import com.hazia.tesoriere.model.StoredLabels
 /*
  * Tesoriere's own: recording, editing and removing a payment (SPEC R21-R25, R54). A payment is
  * its own record and writes no ledger row; its source moves Savings, a Goal or an Account at
- * once, and its parts count in their categories' spent when read (SPEC R25). The one row: what
+ * once, and its parts count in their categories' spent when read (SPEC R25). The two rows: what
  * a payment from a Goal deleted since moves in Savings, when edited or removed, is logged as a
- * `savings` row, so the reports' replay of Savings (SPEC R95) still adds up to it.
+ * `savings` row, so the reports' replay of Savings (SPEC R95) still adds up to it; and a change to
+ * what is charged to an Account deleted since is logged as an `acct:` row, so its rows and its
+ * payments still add up to zero and Savings vs Owed's trend matches its figure (SPEC R88, R100).
  */
 object Payments {
 
@@ -68,19 +70,40 @@ object Payments {
         val old = d.payments.first { it.id == paymentId }
         require(canSave(d, draft, editing = paymentId)) { "the payment cannot be saved" }
         val new = old.copy(date = draft.date, total = draft.total, source = draft.source, payee = draft.payee?.takeIf { it.isNotBlank() }, parts = draft.parts)
-        val next = apply(undo(d, old), new)
+        var next = apply(undo(d, old), new)
         val shift = deletedGoalShift(d, old.source, old.total) - deletedGoalShift(d, new.source, new.total)
-        return logDeletedGoalShift(next, shift, clock, txId).copy(payments = d.payments.map { if (it.id == paymentId) new else it })
+        next = logDeletedGoalShift(next, shift, clock, txId)
+        // canSave admits a deleted Goal or Account only as the payment's own source, so at most one row is logged
+        next = logDeletedAccountShift(d, next, old, new, clock, txId)
+        return next.copy(payments = d.payments.map { if (it.id == paymentId) new else it })
     }
 
     /**
      * Removes a payment and undoes its source's effect (SPEC R54); for a Goal deleted since, the
-     * money returned to Savings is logged as one `savings` row [txId], dated today.
+     * money returned to Savings is logged as one `savings` row [txId], dated today, and for an
+     * Account deleted since, the charge taken off it as one `acct:` row [txId].
      */
     fun remove(d: ProfileData, paymentId: String, clock: Clock, txId: String): ProfileData {
         val p = d.payments.firstOrNull { it.id == paymentId } ?: return d
-        val next = logDeletedGoalShift(undo(d, p), deletedGoalShift(d, p.source, p.total), clock, txId)
+        var next = logDeletedGoalShift(undo(d, p), deletedGoalShift(d, p.source, p.total), clock, txId)
+        next = logDeletedAccountShift(d, next, p, null, clock, txId)
         return next.copy(payments = d.payments.filter { it.id != paymentId })
+    }
+
+    /**
+     * What is charged to an Account deleted since must stay matched by its `acct:` rows, so that
+     * they add up to zero together, as the closing row left them (SPEC R54, R88, R100): when [old]
+     * was charged to such an Account and [new] (null on removal) charges it less, or nothing, the
+     * difference is logged as one `acct:` row of the opposite sign, dated today. It moves no balance.
+     */
+    private fun logDeletedAccountShift(before: ProfileData, d: ProfileData, old: Payment, new: Payment?, clock: Clock, txId: String): ProfileData {
+        val s = old.source as? PaymentSource.Account ?: return d
+        if (before.accounts.any { it.id == s.id }) return d
+        val change = (if (new?.source == s) new.total else 0L) - old.total
+        if (change == 0L) return d
+        val key = TransactionKey.AccountKey(s.id)
+        val label = before.transactions.lastOrNull { it.key == key.stored }?.targetLabel ?: s.id
+        return Ledger.logAndMove(d, Movement(-change, key, label, StoredLabels.DELETED_ACCOUNT_PAYMENT), clock, txId).first
     }
 
     /** What undoing [total] from [source] returns to Savings when the source is a Goal deleted since, else 0. */

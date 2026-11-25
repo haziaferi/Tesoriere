@@ -215,7 +215,12 @@ class PaymentsTest {
         val d2 = Payments.remove(d1, "pay-1", clock, "t-remove")
         assertTrue(d2.payments.isEmpty())
         assertEquals(cents("1,000.00"), d2.savings.amount)
-        assertEquals(d0.transactions, d2.transactions)
+        // re-filing logs nothing; the removal logs +40.00 on the card, so its rows and payments add up to zero
+        assertEquals(d0.transactions, d1.transactions)
+        val row = d2.transactions.last()
+        assertEquals(d0.transactions, d2.transactions.dropLast(1))
+        assertEquals("acct:card", row.key); assertEquals(cents("40.00"), row.amount)
+        assertEquals(0L, d2.transactions.filter { it.key == "acct:card" }.sumOf { it.amount })
     }
 
     // SPEC:R21

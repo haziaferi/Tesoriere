@@ -47,6 +47,11 @@ object StoredLabels {
      * Savings when it is edited or removed (SPEC R54). Tesoriere's own: Sci-Fin had no such row.
      */
     const val DELETED_GOAL_PAYMENT = "Payment from a deleted goal"
+    /**
+     * The note of the `acct:` row that logs a change to what is charged to an Account deleted
+     * since, when one of its payments is edited or removed (SPEC R54, R88). Tesoriere's own.
+     */
+    const val DELETED_ACCOUNT_PAYMENT = "Payment to a deleted account"
     /** The description of a statement row that carries none (SPEC R103). */
     const val STATEMENT_ENTRY = "Statement entry"
 

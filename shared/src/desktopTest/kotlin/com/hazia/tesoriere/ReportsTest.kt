@@ -12,10 +12,12 @@ import com.hazia.tesoriere.engine.Slice
 import com.hazia.tesoriere.engine.SliceKind
 import com.hazia.tesoriere.engine.Writes
 import com.hazia.tesoriere.engine.daysTo
+import com.hazia.tesoriere.engine.savingsAmount
 import com.hazia.tesoriere.engine.ymKey
 import com.hazia.tesoriere.model.Account
 import com.hazia.tesoriere.model.AccountType
 import com.hazia.tesoriere.model.ProfileData
+import com.hazia.tesoriere.model.StoredLabels
 import com.hazia.tesoriere.model.Transaction
 import com.hazia.tesoriere.payments.Part
 import com.hazia.tesoriere.payments.Payment
@@ -255,6 +257,50 @@ class ReportsTest {
         val trend = Reports.savingsVsOwedTrend(d, today, 3)
         assertEquals(listOf(cents("1,000.00"), cents("1,000.00"), cents("320.00")), trend.map { it.value })
         assertEquals(Reports.savingsVsOwedNow(d), Reports.savingsVsOwedTrend(d, today).last().value)
+    }
+
+    /** 1,000.00 in Savings, a card at 0.00 with a 40.00 charge under Food, then the card deleted (SPEC R88). */
+    private fun deletedCardWithCharge(clock: TestClock, ids: Ids): ProfileData {
+        var d = profile(savings = null, categories = listOf(category("c", "Food")))
+        d = Writes.savingsQuickAdd(d, cents("1,000.00"), null, false, clock, ids.next(), LocalDate(2026, 7, 10))
+        d = AccountEditing.save(d, Account("cc", Fixture.PROFILE, "Card", type = AccountType.CREDIT), clock) { ids.next() }
+        d = AccountEditing.save(d, Account("cc2", Fixture.PROFILE, "Second card", type = AccountType.CREDIT), clock) { ids.next() }
+        d = Payments.record(d, PaymentDraft(clock.today, cents("40.00"), PaymentSource.Account("cc"), null, listOf(Part("c", cents("40.00")))), clock, "pay")
+        d = Accounts.deleteCascade(d, "cc", clock) { ids.next() }
+        assertEquals(Reports.savingsVsOwedNow(d), Reports.savingsVsOwedTrend(d, clock.today).last().value)
+        return d
+    }
+
+    // SPEC:R100 SPEC:R54 SPEC:R88
+    @Test fun `R100 a 40_00 charge to a card at 0_00 deleted since, removed, logs a 40_00 acct row and the trend still equals 1,000_00`() {
+        val clock = TestClock(LocalDate(2026, 9, 5)); val ids = Ids()
+        var d = deletedCardWithCharge(clock, ids)
+        clock.setDay(today)
+        d = Payments.remove(d, "pay", clock, ids.next())
+        val row = d.transactions.last()
+        assertEquals("acct:cc", row.key); assertEquals(cents("40.00"), row.amount); assertEquals(today, row.date)
+        assertEquals(StoredLabels.DELETED_ACCOUNT_PAYMENT, row.payee)
+        assertEquals(cents("1,000.00"), d.savingsAmount)
+        assertEquals(cents("1,000.00"), Reports.savingsVsOwedNow(d))
+        assertEquals(Reports.savingsVsOwedNow(d), Reports.savingsVsOwedTrend(d, today).last().value)
+        assertEquals(0L, d.transactions.filter { it.key == "acct:cc" }.sumOf { it.amount })
+    }
+
+    // SPEC:R100 SPEC:R54 SPEC:R88
+    @Test fun `R100 a 40_00 charge to a deleted card re-filed to a second card leaves it at 40_00, the trend 960_00 as live`() {
+        val clock = TestClock(LocalDate(2026, 9, 5)); val ids = Ids()
+        var d = deletedCardWithCharge(clock, ids)
+        clock.setDay(today)
+        d = Payments.edit(d, "pay", PaymentDraft(LocalDate(2026, 9, 5), cents("40.00"), PaymentSource.Account("cc2"), null, listOf(Part("c", cents("40.00")))), clock, ids.next())
+        assertEquals(cents("40.00"), d.accounts.single { it.id == "cc2" }.balance)
+        assertEquals(cents("40.00"), d.transactions.last { it.key == "acct:cc" }.amount)
+        assertEquals(cents("960.00"), Reports.savingsVsOwedNow(d))
+        assertEquals(Reports.savingsVsOwedNow(d), Reports.savingsVsOwedTrend(d, today).last().value)
+        // a new total on the deleted card: 40.00 lowered to 25.00 logs +15.00
+        val d2 = Payments.edit(deletedCardWithCharge(TestClock(LocalDate(2026, 9, 5)), Ids("b")), "pay",
+            PaymentDraft(LocalDate(2026, 9, 5), cents("25.00"), PaymentSource.Account("cc"), null, listOf(Part("c", cents("25.00")))), clock, "tx-e")
+        assertEquals(cents("15.00"), d2.transactions.last().amount)
+        assertEquals(Reports.savingsVsOwedNow(d2), Reports.savingsVsOwedTrend(d2, today).last().value)
     }
 
     // SPEC:R100 SPEC:R50
