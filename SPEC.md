@@ -100,6 +100,7 @@ Kinds: O owner rule · D decided · I inherited · A assumed · Q open.
 | D-R108 | Payee rules | 13. Statement import |
 | D-R27 | The receipt contract | 14. Chatelaine receipts |
 | D-R28 | Receipt folder | 14. Chatelaine receipts |
+| D-R112 | The receipt Profile | 14. Chatelaine receipts |
 | D-R29 | Picking up receipts | 14. Chatelaine receipts |
 | D-R30 | Receipt files Tesoriere cannot take | 14. Chatelaine receipts |
 | D-R31 | Receipt review | 14. Chatelaine receipts |
@@ -107,6 +108,9 @@ Kinds: O owner rule · D decided · I inherited · A assumed · Q open.
 | D-R33 | Closing a review | 14. Chatelaine receipts |
 | D-R34 | Changing a link | 14. Chatelaine receipts |
 | D-R35 | A receipt's source | 14. Chatelaine receipts |
+| D-R113 | Opening a receipt review | 14. Chatelaine receipts |
+| D-R114 | Answering a receipt review | 14. Chatelaine receipts |
+| D-R115 | Confirming a receipt | 14. Chatelaine receipts |
 | D-R36 | Store links | 15. One payment, two sources |
 | D-R37 | Pairing rule | 15. One payment, two sources |
 | D-R38 | Whichever arrives first | 15. One payment, two sources |
@@ -1625,6 +1629,16 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
+### D-R112 · The receipt Profile
+
+**Rule:** The app keeps which Profile holds the receipt folder, and that Profile alone keeps the receipt settings: the folder, how new files are found (R29), the recorded receipt ids, the category links (R32) and each store's last source (R35). A folder can be chosen in a Profile only while no other Profile holds one, and only the Profile that holds it scans the folder and confirms receipts (R115).
+
+**Acceptance:** With the folder chosen in Profile A, Profile B is offered no folder and choosing one there is refused; a receipt opened for review in B cannot be confirmed, and the same receipt in A records one payment in A and none in B.
+
+**Not:** Receipt settings in every Profile: a second Profile's links and recorded ids would wait for receipts that never reach it.
+
+**Since:** 2026-11-25 · builder · own words
+
 ### D-R29 · Picking up receipts
 
 **Rule:** The user chooses how new receipt files are found, from the rows below; the first is the default. Nothing is recorded without the user's Confirm (R31).
@@ -1724,6 +1738,65 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 **Not:** Asking for the source on every receipt: one more choice per receipt.
 
 **Since:** 2026-11-24 · owner · agreed rewording
+
+### D-R113 · Opening a receipt review
+
+**Rule:** A receipt review opens each line in the Tesoriere category its Chatelaine category gives, as below, and with the source last confirmed for the store, named as the receipt file writes it (R35). A store with no source kept, or whose kept Goal or Account does not exist, opens with Savings.
+
+**Values:**
+
+| The line's Chatelaine category | Opens in |
+|---|---|
+| linked before, to a category that exists | the linked category, whatever either name (R32) |
+| not linked, or linked to a category that does not exist, with a Tesoriere category of equal name ignoring capitals | that category, linked by name on Confirm |
+| not linked, with no equal name | no category |
+
+**Evidence:** Savings in place of a store's Goal or Account that no longer exists: builder, 2026-11-25.
+
+**Acceptance:** With Tesoriere categories Groceries and pulizia, a first receipt with lines under Chatelaine's Groceries and Pulizia opens them in Groceries and pulizia, from Savings, and a line under Garden in no category. A store last confirmed with a card opens with the card, and with Savings once the card is deleted.
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R114 · Answering a receipt review
+
+**Rule:** In the review the user can move one line to another category, for this receipt only and changing no link (R31); link a Chatelaine category to an existing Tesoriere category; or add it as a new Tesoriere category with its Chatelaine name and 0.00 planned (R32). Linking or adding files that Chatelaine category's lines that hold no category, or the one an earlier answer in this review gave, under the answer, so a line moved by hand keeps its move, and a later answer for the same Chatelaine category replaces the earlier one, dropping a category the earlier one added when no line holds it. The review holds changes, for R33's warning, while it holds a link or a category the user added; the notes below say what still waits for the user, one per Chatelaine category, in the order the lines first name them.
+
+**Values:**
+
+| Note | For a Chatelaine category |
+|---|---|
+| unlinked | with no link, no equal name and no answer in this review; Confirm stays off (R32) |
+| names differ | linked before, whose name differs from its Tesoriere category's ignoring capitals |
+| rename in Chatelaine | linked by the user in this review to an existing category whose name differs from it ignoring capitals |
+
+**Acceptance:** A line under Garden, with no Garden in Tesoriere, is noted unlinked; linked to Household it is filed under Household with a rename-in-Chatelaine note; added instead, it is filed under a new category named Garden with 0.00 planned, and the review holds changes. A Garden line moved to Fun before the answer stays under Fun. A review whose categories all link by name holds no changes, and moving a line changes no link.
+
+**Not:** Counting a link made by name as a change: the next open makes it again, so closing loses nothing.
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R115 · Confirming a receipt
+
+**Rule:** Confirm records the receipt as one payment, the way every payment is recorded (R21, R54): on the receipt's day, of its total paid, with the store as payee, the review's source, and one part per Tesoriere category whose lines add up to other than zero, in the order the lines first name them. The payment keeps the receipt id and every line with the category it was filed under, a line whose category adds up to zero too; the receipt id joins the Profile's recorded ids (R30), and the review's links, by name or by the user, its added categories and the store's source (R35) are kept. Confirm stays off while a row below holds.
+
+**Values:**
+
+| Confirm stays off while |
+|---|
+| the Profile is not the receipt Profile (R112) |
+| the receipt id is recorded already (R30) |
+| the receipt's currency is not the Profile's (R30, R47) |
+| a Chatelaine category on it is unlinked (R32, R114) |
+| a line has no category, or one that does not exist |
+| the payment could not be saved: its parts do not meet R23, or its source does not exist |
+
+**Evidence:** A line whose category adds up to zero kept among the lines but given no part: builder, 2026-11-25 (R23 allows no zero part).
+
+**Acceptance:** A 16.50 receipt with Groceries lines of 1.89, 2.40 and 3.15 and Household lines of 6.90 and 2.16, from Savings at 1,000.00, records one payment of 16.50 with parts Groceries 7.44 and Household 9.06 and all five lines, records its receipt id, and leaves Savings at 983.50; a 0.00 line under Gifts adds no part and is kept among the lines. The same receipt from a Goal holding 10.00 carries R54's warning, and confirmed leaves the Goal at 0.00 and Savings at 993.50. A receipt id recorded once cannot be confirmed again.
+
+**Not:** A part of 0.00: R23 has no zero part. Building the payment apart from the payment path: a short Goal, a card whose charges are not logged (R109) or a deleted source would be handled twice, two ways.
+
+**Since:** 2026-11-25 · builder · own words
 
 ## 15. One payment, two sources
 
@@ -1944,6 +2017,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R108 · Payee rules: `POS MERCATO VERDE 0412` filed under Groceries in March arrives in April's review with one part of 18.75 in Groceries, from Savings; `FARMACIA SAN LORENZO` split into Pharmacy and Household teaches no rule; the payee of `POS*MERCATO-VERDE  0412` is `pos mercato verde 0412`. `POS 03/03 MERCATO VERDE 0412` and `PAGAMENTO POS 12/03/2026 ORE 10:22 MERCATO VERDE CARTA ****1234` both have the rule name `mercato verde`, and the first filed under Groceries pre-fills the second; `POS 0412` keeps the rule name `pos 0412`. A rule kept under the payee `pos mercato verde 0412` still pre-fills `POS MERCATO VERDE 0412`.
 - R27 · The receipt contract: The receipt parser's tests cite Chatelaine's rule 123 field by field; no Tesoriere code opens the receipt folder for writing.
 - R28 · Receipt folder: With the folder set in Profile A, receipts are reviewed and recorded only in Profile A; Profile B offers no receipt folder while A has one.
+- R112 · The receipt Profile: With the folder chosen in Profile A, Profile B is offered no folder and choosing one there is refused; a receipt opened for review in B cannot be confirmed, and the same receipt in A records one payment in A and none in B.
 - R29 · Picking up receipts: With the default, opening the app with three new files offers three receipts and runs no background work; with the daily check on, three new files give one notification that day; no receipt is recorded before its Confirm.
 - R30 · Receipt files Tesoriere cannot take: One file per row, put in the receipt folder, is listed with its reason (or, for a recorded id, not at all) and changes no figure.
 - R31 · Receipt review: A receipt of five lines in two categories records one payment of the receipt's total with two parts; moving one line to a third category gives three parts and changes no category link; closing the review leaves no payment.
@@ -1951,6 +2025,9 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R33 · Closing a review: Adding a category in a review and closing it shows the warning; dismissing it returns to the review with the change intact; closing anyway leaves no new category and no new link.
 - R34 · Changing a link: After relinking Snack from Eating out to Groceries, last month's Eating out spent figure is unchanged and the next receipt's Snack lines go to Groceries.
 - R35 · A receipt's source: The first receipt from a store shows Savings; after it is confirmed with a card as source, the next receipt from that store shows the card.
+- R113 · Opening a receipt review: With Tesoriere categories Groceries and pulizia, a first receipt with lines under Chatelaine's Groceries and Pulizia opens them in Groceries and pulizia, from Savings, and a line under Garden in no category. A store last confirmed with a card opens with the card, and with Savings once the card is deleted.
+- R114 · Answering a receipt review: A line under Garden, with no Garden in Tesoriere, is noted unlinked; linked to Household it is filed under Household with a rename-in-Chatelaine note; added instead, it is filed under a new category named Garden with 0.00 planned, and the review holds changes. A Garden line moved to Fun before the answer stays under Fun. A review whose categories all link by name holds no changes, and moving a line changes no link.
+- R115 · Confirming a receipt: A 16.50 receipt with Groceries lines of 1.89, 2.40 and 3.15 and Household lines of 6.90 and 2.16, from Savings at 1,000.00, records one payment of 16.50 with parts Groceries 7.44 and Household 9.06 and all five lines, records its receipt id, and leaves Savings at 983.50; a 0.00 line under Gifts adds no part and is kept among the lines. The same receipt from a Goal holding 10.00 carries R54's warning, and confirmed leaves the Goal at 0.00 and Savings at 993.50. A receipt id recorded once cannot be confirmed again.
 - R36 · Store links: After pairing an Esselunga receipt with POS ESSELUNGA MI 0423, the next Esselunga receipt is suggested only with bank rows whose payee matches that link, when one exists.
 - R37 · Pairing rule: Each row of the table, as a receipt and a bank row, gives the suggestion its row says; no pair is recorded without the user's confirm.
 - R38 · Whichever arrives first: Recording a EUR 42.30 receipt and then importing its bank row leaves one payment of EUR 42.30; importing the bank row first under Groceries and then its receipt with Groceries 30.00 and Household 12.30 leaves one payment with those two parts.

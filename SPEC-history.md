@@ -240,3 +240,7 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R109 · changed · a statement refund to a card whose charges are not logged carries the same warning as a payment · builder
 - 2026-11-25 · R111 · changed · undoing a statement payoff keeps its keys; the row returns unticked as already recorded and can be ticked · builder
 - 2026-11-25 · R111 · changed · undoing a quick-add on unset Savings leaves Savings at 0.00, not unset · builder
+- 2026-11-25 · R112 · added · one Profile holds the receipt folder and the receipt settings; only it scans and confirms receipts · builder
+- 2026-11-25 · R113 · added · how a review opens each line's category and the store's source, Savings when the kept source is gone · builder
+- 2026-11-25 · R114 · added · moving a line, linking or adding a Chatelaine category in the review; the notes; what counts as changes · builder
+- 2026-11-25 · R115 · added · Confirm records through the payment path, keeps every line and the receipt id; when Confirm stays off · builder
