@@ -250,3 +250,5 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R33 · changed · a moved line or a changed source also counts as a change that warns before close · owner
 - 2026-11-25 · R114 · changed · any move, source change, link or added category holds changes; an answer files every line not moved by hand · owner
 - 2026-11-25 · R115 · changed · Confirm stays off only while a line of an unlinked category is in no category · owner
+- 2026-11-25 · R116 · changed · a file whose reading fails in any way is refused as unreadable and the scan goes on · builder
+- 2026-11-25 · R117 · changed · size and depth caps; numbers only as JSON numbers; total above zero, no negative price, quantity 1 or more; blanks refused · builder
