@@ -149,6 +149,26 @@ class ReceiptPickupTest {
         assertEquals(listOf<Pair<String, Refusal>>("chatelaine-receipt-rc-1.json" to Refusal.Unreadable), p.refused)
     }
 
+    // SPEC:R117 SPEC:R116
+    @Test fun `R117 FileReceiptFolder does not read a file over 1 MiB`() {
+        val base = File("build/tmp").apply { mkdirs() }
+        val dir = Files.createTempDirectory(base.toPath(), "receipt-folder").toFile()
+        try {
+            File(dir, "chatelaine-receipt-rc-big.json").writeBytes(ByteArray(ReceiptFileFormat.MAX_BYTES + 1) { ' '.code.toByte() })
+            File(dir, "chatelaine-receipt-rc-cap.json").writeBytes(ByteArray(ReceiptFileFormat.MAX_BYTES) { ' '.code.toByte() })
+            val folder = FileReceiptFolder(dir)
+            assertNull(folder.read("chatelaine-receipt-rc-big.json"))
+            assertEquals(ReceiptFileFormat.MAX_BYTES, folder.read("chatelaine-receipt-rc-cap.json")!!.size)
+            val p = ReceiptPickup.scan(world(), folder, ReceiptFileFormat::parse)
+            assertEquals(
+                listOf<Pair<String, Refusal>>("chatelaine-receipt-rc-big.json" to Refusal.Unreadable, "chatelaine-receipt-rc-cap.json" to Refusal.Unreadable),
+                p.refused,
+            )
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
     // SPEC:R27
     @Test fun `R27 the receipt folder offers no way to write`() {
         assertEquals(setOf("names", "read"), ReceiptFolder::class.java.declaredMethods.map { it.name }.toSet())

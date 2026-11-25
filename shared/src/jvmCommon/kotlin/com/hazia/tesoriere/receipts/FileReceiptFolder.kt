@@ -20,6 +20,8 @@ class FileReceiptFolder(private val dir: File) : ReceiptFolder {
         if (name.isEmpty() || name.contains('/') || name.contains('\\') || name == "." || name == "..") return null
         val f = File(dir, name)
         if (!f.isFile) return null
+        // a file over the parser's cap is never read into memory: null, which a scan refuses as unreadable (SPEC R117)
+        if (f.length() > ReceiptFileFormat.MAX_BYTES) return null
         return try { f.readBytes() } catch (_: IOException) { null } catch (_: SecurityException) { null }
     }
 }
