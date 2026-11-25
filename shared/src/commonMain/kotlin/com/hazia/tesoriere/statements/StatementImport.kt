@@ -443,57 +443,104 @@ object StatementImport {
     fun canConfirm(d: ProfileData, rows: List<ReviewRow>): Boolean = walk(d, rows).first
 
     /**
-     * The warning code of each row, in the order given, or null: [PaymentNotice.GOAL_SHORT] for a
-     * ticked row paid from a Goal that holds less than it once the ticked rows before it are
-     * taken, in the order [confirm] writes them (SPEC R54, R107).
+     * The warning code of each row, in the order given, or null: the payment editor's warning
+     * (Payments.draftNotice) for a ticked row filed as a payment, worked out against what the
+     * ticked rows recorded before it hold, in the order [confirm] records them: [PaymentNotice.GOAL_SHORT]
+     * for a Goal that holds less than it (SPEC R54, R107), [PaymentNotice.CHARGES_NOT_LOGGED] for a
+     * card whose charges are not logged (SPEC R109).
      */
     fun rowNotices(d: ProfileData, rows: List<ReviewRow>): List<PaymentNotice?> = walk(d, rows).second
 
-    /** Walks the rows as [confirm] writes them, keeping what each Goal holds: whether all can be recorded, and each row's notice. */
+    /** Checks the rows by recording them on a copy, as [confirm] does, with a fixed clock and throwaway ids; the copy is dropped. */
     private fun walk(d: ProfileData, rows: List<ReviewRow>): Pair<Boolean, List<PaymentNotice?>> {
-        val holds = d.goals.associate { it.id to it.saved }.toMutableMap()
+        var n = 0
+        val run = run(d, rows, SIMULATION_CLOCK) { "check-${++n}" }
+        return run.ok to run.notices
+    }
+
+    /** The clock a check records with: what it writes is dropped, so its instant never reaches the data. */
+    private object SIMULATION_CLOCK : Clock {
+        override fun today(): LocalDate = LocalDate(1970, 1, 1)
+        @OptIn(kotlin.time.ExperimentalTime::class)
+        override fun now() = kotlin.time.Instant.fromEpochMilliseconds(0)
+    }
+
+    /** What a run of the ticked rows came to: whether every row could be recorded, each row's notice, and the state written. */
+    private class Run(val ok: Boolean, val notices: List<PaymentNotice?>, val state: ProfileData)
+
+    /**
+     * The order Confirm records the rows in (SPEC R107): oldest first, rows of one day in the
+     * order the review lists them, so a charge is recorded before a later payoff that depends on
+     * it (SPEC R89) and a Goal is filled before a later row takes from it. Indices into [rows].
+     */
+    private fun recordOrder(rows: List<ReviewRow>): List<Int> = rows.indices.sortedBy { rows[it].row.date }
+
+    /**
+     * Records every ticked row in [recordOrder] against the state as it builds, checking each
+     * against what the rows before it recorded: [confirm] keeps the state, [canConfirm] and
+     * [rowNotices] only the verdict and the notices, so the three never disagree. A row that
+     * cannot be recorded is skipped and the run marked not ok.
+     */
+    private fun run(d: ProfileData, rows: List<ReviewRow>, clock: Clock, ids: () -> String): Run {
+        var next = d
         var ok = true
-        val notices = ArrayList<PaymentNotice?>(rows.size)
-        /** Takes [total] from Goal [id] as a payment does: all it holds at most; true when it held less. */
-        fun take(id: String, total: Money): Boolean {
-            val left = holds[id] ?: return false
-            holds[id] = maxOf(0L, left - total)
-            return total > left
-        }
-        for (rr in rows) {
-            var notice: PaymentNotice? = null
-            if (rr.include) {
-                val payoff = rr.payoffAccountId
-                val draft = recorded(rr)
-                val goal = (draft?.source as? PaymentSource.Goal)?.id
-                when {
-                    // money in is Savings, a Goal, or a refund: a payment whose parts add up (SPEC R21, R23, R107)
-                    rr.row.amount > 0 -> if (draft != null) {
-                        if (rr.incomingGoalId != null || payoff != null || !Payments.canSave(d, draft)) ok = false
-                        else if (goal != null) take(goal, draft.total)
-                    }
-                    rr.incomingGoalId != null -> ok = false
-                    payoff != null && draft == null -> {
-                        val acct = d.accounts.firstOrNull { it.id == payoff }
-                        if (acct == null) ok = false
-                        // a Loan's payoff that counts as spending needs a category (SPEC R89, R107)
-                        else if (!Accounts.canPayOff(d, acct, rr.payoffFrom ?: Accounts.payoffFromDefault(acct), rr.payoffCategoryId)) ok = false
-                        // a payoff from a Goal takes at most what it holds after the rows before it (SPEC R89)
-                        (rr.payoffFrom as? Accounts.PayoffFrom.Goal)?.let { f ->
-                            val left = holds[f.id]
-                            if (left == null || -rr.row.amount > left) ok = false else holds[f.id] = left + rr.row.amount
-                        }
-                    }
-                    draft != null && payoff == null -> {
-                        if (!Payments.canSave(d, draft)) ok = false
-                        else if (goal != null && take(goal, draft.total)) notice = PaymentNotice.GOAL_SHORT
-                    }
-                    else -> ok = false
-                }
+        val notices = MutableList<PaymentNotice?>(rows.size) { null }
+        var rules = d.importState.payeeRules
+        val keys = d.importState.importedKeys.toMutableList()
+        for (i in recordOrder(rows)) {
+            val rr = rows[i]
+            if (!rr.include) continue
+            val r = rr.row
+            val amt = abs(r.amount)
+            val payoff = rr.payoffAccountId
+            val draft = recorded(rr)
+            /** Records [draft] as a payment with the row's keys. */
+            fun pay(dr: PaymentDraft): ProfileData {
+                val id = ids()
+                val written = Payments.record(next, dr, clock, id)
+                return written.copy(payments = written.payments.map { if (it.id == id) it.copy(bankKeys = rr.keys) else it })
             }
-            notices.add(notice)
+            val written: ProfileData? = when {
+                // a refund: a payment of minus the row's amount, with its keys; it teaches no rule (SPEC R21, R107, R108)
+                r.amount > 0 && draft != null ->
+                    if (rr.incomingGoalId != null || payoff != null || !Payments.canSave(next, draft)) null else pay(draft)
+                r.amount > 0 -> {
+                    val saved = Writes.savingsQuickAdd(next, amt, r.description, false, clock, ids(), r.date)
+                    // a Goal deleted while the review was open leaves the money in Savings
+                    val goal = rr.incomingGoalId?.takeIf { id -> saved.goals.any { it.id == id } }
+                    if (goal == null) saved else Writes.goalQuickAdd(saved, goal, amt, r.description, clock, ids(), r.date)
+                }
+                rr.incomingGoalId != null -> null
+                payoff != null && draft == null -> {
+                    val acct = next.accounts.firstOrNull { it.id == payoff }
+                    // R89's default: a linked Account's sweep already took the money from Savings
+                    val from = acct?.let { rr.payoffFrom ?: Accounts.payoffFromDefault(it) }
+                    val goalHolds = (from as? Accounts.PayoffFrom.Goal)?.let { f -> next.goals.firstOrNull { it.id == f.id }?.saved }
+                    when {
+                        acct == null || from == null -> null
+                        // a Loan's payoff that counts as spending needs a category (SPEC R89)
+                        !Accounts.canPayOff(next, acct, from, rr.payoffCategoryId) -> null
+                        // a payoff from a Goal takes at most what it holds after the rows before it (SPEC R89)
+                        from is Accounts.PayoffFrom.Goal && (goalHolds == null || amt > goalHolds) -> null
+                        else -> Accounts.quickAdd(next, payoff, amt, Accounts.Direction.PAYMENT, r.description, from, clock, r.date, rr.payoffCategoryId, ids = ids)
+                    }
+                }
+                draft != null && payoff == null -> if (!Payments.canSave(next, draft)) null else {
+                    // a Goal short of it warns, Savings paying the rest (SPEC R54)
+                    notices[i] = Payments.draftNotice(next, draft)
+                    val categories = draft.parts.mapNotNull { it.categoryId }.distinct()
+                    val name = payeeRuleName(r.description)
+                    if (categories.size == 1 && name.isNotEmpty()) rules = rules + (name to categories.single())
+                    pay(draft)
+                }
+                else -> null
+            }
+            if (written == null) { ok = false; continue }
+            next = written
+            for (k in keyStrings(rr.keys)) if (k !in keys) keys.add(k)
         }
-        return ok to notices
+        val state = next.copy(importState = next.importState.copy(importedKeys = keys, payeeRules = rules, lastImportDate = clock.today()))
+        return Run(ok, notices, state)
     }
 
     /** What the Confirm names (SPEC R107): the ticked rows' count, the money out and the money in, each positive. */
@@ -511,47 +558,13 @@ object StatementImport {
      * into the Goal it was sent to, if that Goal still exists (SPEC R50), or as a refund; an
      * outflow as its payment with the row's keys (SPEC R21, R26) or as a payoff taking its money
      * from where the row says, else R89's default (SPEC R89, R107). A row filed under one category
-     * teaches its payee that category (SPEC R108); every recorded row's keys are kept.
+     * teaches its payee that category (SPEC R108); every recorded row's keys are kept. Rows are
+     * recorded oldest first, one day's in the review's order (SPEC R107).
      */
     fun confirm(d: ProfileData, rows: List<ReviewRow>, clock: Clock, ids: () -> String): ProfileData {
         require(canConfirm(d, rows)) { "every ticked outflow needs a payment that adds up or a payoff (SPEC R107)" }
-        var next = d
-        var rules = d.importState.payeeRules
-        val keys = d.importState.importedKeys.toMutableList()
-        for (rr in rows.filter { it.include }) {
-            val r = rr.row
-            val amt = abs(r.amount)
-            val payoff = rr.payoffAccountId
-            next = when {
-                r.amount > 0 && rr.draft != null -> {
-                    // a refund: a payment of minus the row's amount, with its keys; it teaches no rule (SPEC R21, R107, R108)
-                    val id = ids()
-                    val written = Payments.record(next, requireNotNull(recorded(rr)), clock, id)
-                    written.copy(payments = written.payments.map { if (it.id == id) it.copy(bankKeys = rr.keys) else it })
-                }
-                r.amount > 0 -> {
-                    val saved = Writes.savingsQuickAdd(next, amt, r.description, false, clock, ids(), r.date)
-                    // a Goal deleted while the review was open leaves the money in Savings
-                    val goal = rr.incomingGoalId?.takeIf { id -> saved.goals.any { it.id == id } }
-                    if (goal == null) saved else Writes.goalQuickAdd(saved, goal, amt, r.description, clock, ids(), r.date)
-                }
-                payoff != null -> {
-                    // R89's default: a linked Account's sweep already took the money from Savings
-                    val from = rr.payoffFrom ?: Accounts.payoffFromDefault(next.accounts.first { it.id == payoff })
-                    Accounts.quickAdd(next, payoff, amt, Accounts.Direction.PAYMENT, r.description, from, clock, r.date, rr.payoffCategoryId, ids = ids)
-                }
-                else -> {
-                    val draft = requireNotNull(recorded(rr))
-                    val categories = draft.parts.mapNotNull { it.categoryId }.distinct()
-                    val name = payeeRuleName(r.description)
-                    if (categories.size == 1 && name.isNotEmpty()) rules = rules + (name to categories.single())
-                    val id = ids()
-                    val written = Payments.record(next, draft, clock, id)
-                    written.copy(payments = written.payments.map { if (it.id == id) it.copy(bankKeys = rr.keys) else it })
-                }
-            }
-            for (k in keyStrings(rr.keys)) if (k !in keys) keys.add(k)
-        }
-        return next.copy(importState = next.importState.copy(importedKeys = keys, payeeRules = rules, lastImportDate = clock.today()))
+        val run = run(d, rows, clock, ids)
+        check(run.ok) { "a row the check let through could not be recorded" }
+        return run.state
     }
 }

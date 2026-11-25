@@ -520,6 +520,24 @@ class StatementImportTest {
         assertEquals(cents("60.00"), Spent.of(StatementImport.confirm(own, review, clock, ids::next), "books", "2026-03"))
     }
 
+    // SPEC:R107 SPEC:R89 SPEC:R67
+    @Test fun `R107 a -500_00 charge to a Loan on 1 March is recorded before its -100_00 payoff of 20 March, so the payoff is a transfer and Confirm is on with no category`() {
+        val d = world().let { w -> w.copy(accounts = w.accounts + Account("loan", Fixture.PROFILE, "Bike loan", type = AccountType.LOAN, balance = cents("900.00"))) }
+        val rows = listOf(
+            BankRow(LocalDate(2026, 3, 1), -50000, "NEGOZIO BICI ORSA", null),
+            BankRow(LocalDate(2026, 3, 20), -10000, "RATA PRESTITO", null),
+        )
+        val review = StatementImport.review(d, rows, clock.today)
+            .file("NEGOZIO BICI ORSA", "books" to "500.00", source = PaymentSource.Account("loan"))
+            .payoff("RATA PRESTITO", "loan")
+        assertEquals(listOf(20, 1), review.map { it.row.date.day })                          // the review lists the payoff first
+        assertTrue(StatementImport.canConfirm(d, review))
+        val after = StatementImport.confirm(d, review, clock, ids::next)
+        assertEquals(cents("1,300.00"), after.accounts.single { it.id == "loan" }.balance)
+        assertEquals(cents("500.00"), Spent.of(after, "books", "2026-03"))                    // the charge only
+        assertNull(after.transactions.single { it.key == "savings" && it.amount == cents("-100.00") }.categoryId)
+    }
+
     // SPEC:R107, R50
     @Test fun `R107 the 1,450_00 salary sent on into a Goal holding 110_00 leaves it 1,560_00 and Savings 885_30`() {
         val d = world()
@@ -574,22 +592,22 @@ class StatementImportTest {
     }
 
     // SPEC:R107, R54
-    @Test fun `R107 rows of 100_00 and 14_00 from a Goal holding 110_00 warn on the second and leave the Goal 0_00 and Savings 996_00, the first alone 10_00`() {
+    @Test fun `R107 rows of 14_00 on 7 March and 100_00 on 8 March from a Goal holding 110_00 warn on the later and leave the Goal 0_00 and Savings 996_00, the 100_00 alone 10_00`() {
         val d = world()
         val rows = listOf(
             BankRow(LocalDate(2026, 3, 8), -10000, "PRELIEVO SPORTELLO 0412", null),
             BankRow(LocalDate(2026, 3, 7), -1400, "POS EDICOLA CENTRALE", null),
         )
-        // the review is newest first, so the 8 March row is taken first, as confirm writes them
+        // the review lists the 8 March row first; confirm takes the 7 March row first, oldest first
         val both = StatementImport.review(d, rows, clock.today)
             .file("PRELIEVO SPORTELLO 0412", "groc" to "100.00", source = PaymentSource.Goal("cash"))
             .file("POS EDICOLA CENTRALE", "books" to "14.00", source = PaymentSource.Goal("cash"))
         assertTrue(StatementImport.canConfirm(d, both))
-        assertEquals(listOf(null, PaymentNotice.GOAL_SHORT), StatementImport.rowNotices(d, both))
+        assertEquals(listOf(PaymentNotice.GOAL_SHORT, null), StatementImport.rowNotices(d, both))
         val paidBoth = StatementImport.confirm(d, both, clock, ids::next)
         assertEquals(0L, paidBoth.goals.single().saved)
         assertEquals(cents("996.00"), paidBoth.savings.amount)
-        assertEquals(cents("4.00"), paidBoth.payments.single { it.payee == "POS EDICOLA CENTRALE" }.fromSavings)
+        assertEquals(cents("4.00"), paidBoth.payments.single { it.payee == "PRELIEVO SPORTELLO 0412" }.fromSavings)
         val first = both.tick("POS EDICOLA CENTRALE", false)
         assertEquals(listOf<PaymentNotice?>(null, null), StatementImport.rowNotices(d, first))
         val after = StatementImport.confirm(d, first, clock, ids::next)
