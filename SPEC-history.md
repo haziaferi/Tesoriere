@@ -149,3 +149,4 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R93 · changed · a card's committed payment sweeps as a card payoff · owner
 - 2026-11-25 · R99 · changed · a card's payment's sweeps are in no slice · owner
 - 2026-11-25 · R101 · changed · a card's payment's sweeps are no expense · owner
+- 2026-11-25 · R107 · changed · a statement payoff pairs Savings by R89's default, off for an Account linked to a recurring expense · builder
