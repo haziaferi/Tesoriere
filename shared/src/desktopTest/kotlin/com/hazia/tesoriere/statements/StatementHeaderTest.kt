@@ -34,6 +34,39 @@ class StatementHeaderTest {
     }
 
     // SPEC:R105
+    @Test fun `R105 a Value date column before the Booking date column is not the date, so the row is on 2026-09-01`() {
+        val rows = StatementImport.parseCsv("Value date,Booking date,Description,Amount\n02/09/2026,01/09/2026,POS CAFFE DEL MOLO,-3.50\n")
+        assertEquals(listOf(LocalDate(2026, 9, 1)), rows.map { it.date })
+        assertEquals(listOf(-350L), rows.map { it.amount })
+    }
+
+    // SPEC:R105 SPEC:R104
+    @Test fun `R105 Data contabile, Data valuta, Causale, Descrizione operazione, Dare and Avere give -1,234_56 on 2026-03-03 and 1,450_00`() {
+        val rows = StatementImport.parseCsv(
+            "Data contabile;Data valuta;Causale;Descrizione operazione;Dare;Avere\n" +
+                "03/03/2026;05/03/2026;PAGAMENTO POS;MERCATO VERDE;1.234,56;\n" +
+                "07/03/2026;06/03/2026;BONIFICO;STIPENDIO MARZO;;1.450,00\n",
+        )
+        assertEquals(listOf(LocalDate(2026, 3, 3), LocalDate(2026, 3, 7)), rows.map { it.date })
+        assertEquals(listOf(-123456L, 145000L), rows.map { it.amount })
+        assertEquals(listOf("MERCATO VERDE", "STIPENDIO MARZO"), rows.map { it.description })
+        // the value date is the date only when there is no other
+        val valueOnly = StatementImport.parseCsv("Data valuta;Causale;Addebito;Accredito\n05/03/2026;PAGAMENTO POS;12,40;\n")
+        assertEquals(listOf(Triple(LocalDate(2026, 3, 5), -1240L, "PAGAMENTO POS")), valueOnly.map { Triple(it.date, it.amount, it.description) })
+    }
+
+    // SPEC:R105 SPEC:R104
+    @Test fun `R105 Data, Descrizione, Addebiti and Accrediti give -12_40 and 1,450_00`() {
+        val rows = StatementImport.parseCsv("Data;Descrizione;Addebiti;Accrediti\n03/03/2026;MERCATO VERDE;12,40;\n07/03/2026;STIPENDIO MARZO;;1.450,00\n")
+        assertEquals(listOf(-1240L, 145000L), rows.map { it.amount })
+        assertEquals(listOf("MERCATO VERDE", "STIPENDIO MARZO"), rows.map { it.description })
+        assertEquals(LocalDate(2026, 3, 3), rows[0].date)
+        // Uscita, Entrata, Data operazione and Dettagli are read too
+        val other = StatementImport.parseCsv("Data operazione;Dettagli;Uscita;Entrata\n04/03/2026;EDICOLA CENTRALE;2,50;\n")
+        assertEquals(listOf(Triple(LocalDate(2026, 3, 4), -250L, "EDICOLA CENTRALE")), other.map { Triple(it.date, it.amount, it.description) })
+    }
+
+    // SPEC:R105
     @Test fun `R105 a Credit card number column is not the credit column, debit 800_00 and credit 12_00`() {
         val rows = StatementImport.parseCsv(
             "Date,Credit card number,Description,Debit,Credit\n2026-09-01,0000 1111,AFFITTO STUDIO,800.00,\n2026-09-02,0000 1111,RIMBORSO NEGOZIO,,12.00\n",

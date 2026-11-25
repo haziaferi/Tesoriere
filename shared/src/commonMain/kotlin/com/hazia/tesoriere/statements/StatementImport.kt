@@ -27,7 +27,9 @@ import kotlin.math.abs
  *   text holding `/`, `:` or a letter (other than a trailing DR or CR) is no amount, where
  *   Sci-Fin read a day's digits as one; the Unicode minus, the en dash and DR read as minus.
  * - The amount keyword "value" never takes a header holding "date" (SPEC R105): Sci-Fin let a
- *   Value date column become the amount of a Debit/Credit statement.
+ *   Value date column become the amount of a Debit/Credit statement. Italian bank headers (Data
+ *   contabile, Data valuta, Causale, Descrizione operazione, Dare, Avere, Addebiti, Accrediti and
+ *   others) are keywords, and the booking date wins over the value date; Sci-Fin took the first.
  * - An outflow becomes a payment (SPEC R21) with the row's keys in its bankKeys: Sci-Fin's string
  *   target becomes a PaymentDraft with a source and parts. `cat:` is a draft from Savings,
  *   `spend:` a draft from a Goal, `charge:` a draft from an Account (SPEC R22, R54), and any of
@@ -182,11 +184,16 @@ object StatementImport {
         }.toList()
     }
 
-    private val DATE_KEYS = listOf("date", "data", "datum", "booking date", "transaction date", "value date", "fecha")
-    private val DESC_KEYS = listOf("description", "descrizione", "payee", "merchant", "details", "beschreibung", "verwendungszweck", "concepto", "narrative", "reference")
+    // booking dates first, value dates last (SPEC R105)
+    private val VALUE_DATE_KEYS = listOf("value date", "data valuta")
+    private val DATE_KEYS = listOf("data contabile", "data operazione", "booking date", "transaction date", "date", "data", "datum", "fecha") + VALUE_DATE_KEYS
+    private val DESC_KEYS = listOf(
+        "description", "descrizione operazione", "descrizione", "payee", "merchant", "details", "dettagli",
+        "beschreibung", "verwendungszweck", "concepto", "narrative", "reference", "causale",
+    )
     private val AMOUNT_KEYS = listOf("amount", "importo", "betrag", "value", "importe", "bedrag")
-    private val DEBIT_KEYS = listOf("debit", "uscite", "soll", "withdrawal", "paid out")
-    private val CREDIT_KEYS = listOf("credit", "entrate", "haben", "deposit", "paid in")
+    private val DEBIT_KEYS = listOf("debit", "dare", "addebiti", "addebito", "uscite", "uscita", "soll", "withdrawal", "paid out")
+    private val CREDIT_KEYS = listOf("credit", "avere", "accrediti", "accredito", "entrate", "entrata", "haben", "deposit", "paid in")
 
     /** The text's records: a newline ends one only outside quotes, so a quoted multi-line memo stays one field. */
     private fun csvRecords(text: String): List<String> {
@@ -233,8 +240,13 @@ object StatementImport {
      */
     private fun find(header: List<String>, keys: List<String>, claimed: Set<Int>): Int {
         val free = header.indices.filter { it !in claimed }
-        // the amount keyword "value" never takes "Value date" (SPEC R105)
-        fun fits(k: String, i: Int) = k != "value" || "date" !in words(header[i])
+        // the amount keyword "value" never takes "Value date", and a date keyword before the value
+        // dates never takes a value-date column, so the booking date wins (SPEC R105)
+        fun fits(k: String, i: Int) = when {
+            k == "value" -> "date" !in words(header[i])
+            k in DATE_KEYS && k !in VALUE_DATE_KEYS -> "value" !in header[i] && "valuta" !in header[i]
+            else -> true
+        }
         for (k in keys) free.firstOrNull { header[it].trim() == k }?.let { return it }
         for (k in keys) {
             val kw = words(k)

@@ -154,3 +154,4 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R73 · changed · a Loan its payments take to 0 gives its expense the loanPaidOff notice · builder
 - 2026-11-25 · R74 · changed · a notice kept with an empty name reads with no name · builder
 - 2026-11-25 · R104 · changed · a three-letter currency code before or after the figure is ignored · builder
+- 2026-11-25 · R105 · changed · Italian headers (Data contabile, Data valuta, Causale, Dare, Avere and others) are read, and the booking date wins over the value date · builder
