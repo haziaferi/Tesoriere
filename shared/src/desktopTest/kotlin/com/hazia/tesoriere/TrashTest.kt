@@ -748,4 +748,112 @@ class TrashTest {
         assertTrue(edited.transactions.size > after.transactions.size, "the edit logged a savings row in the Goal's place")
         assertEquals(RestoreProblem.WRITTEN_SINCE, Trash.restoreProblem(edited, p))
     }
+
+    // ---- after review of the receipts and pairs pull request: R127 --------------------------------
+
+    private fun foodWorld(): ProfileData = receiptWorld().let { it.copy(categories = it.categories + category("food", "Food")) }
+
+    /** A 4.50 coffee of 10 March, its Chatelaine category Food. */
+    private fun coffee() = receipt("rc-1", "Bar Centrale", mar10, line("caffe", "4.50", "ch-food", "Food"))
+
+    private val coffeeRow = BankRow(LocalDate(2026, 3, 11), -cents("4.50"), "BAR CENTRALE", "FIT-11")
+
+    /** [row] ticked under [category] from Savings and confirmed; the Profile and the new payment's id. */
+    private fun recordRow(d: ProfileData, row: BankRow, category: String): Pair<ProfileData, String> {
+        val rr = StatementImport.review(d, listOf(row), mar10).single()
+        val amount = -row.amount
+        val ticked = rr.copy(include = true, draft = PaymentDraft(row.date, amount, PaymentSource.Savings, rr.payee, listOf(Part(category, amount))))
+        val after = StatementImport.confirm(d, listOf(ticked), clock, ids)
+        return after to after.payments.single { p -> d.payments.none { it.id == p.id } }.id
+    }
+
+    // SPEC:R127 SPEC:R24
+    @Test fun `R127 a 4_50 receipt moved by hand from Food to Groceries, deleted and restored as its row's pair, keeps Groceries 4_50`() {
+        clock.setDay(mar10)
+        var d = recordReceipt(foodWorld(), coffee())
+        val r = d.payments.single()
+        d = Payments.edit(d, "pay-r", PaymentDraft(r.date, r.total, r.source, r.payee, listOf(Part("groc", r.total))), clock, "tx-e")
+        val (after, p) = assertNotNull(Trash.deletePayment(d, "pay-r", clock, ids))
+        val (withRow, bankId) = recordRow(after, coffeeRow, "food")
+        val paired = Trash.restore(withRow, p, clock, ids, pairWith = bankId)
+        assertEquals(listOf(Part("groc", cents("4.50"))), paired.payments.single().parts)
+        assertEquals(cents("4.50"), Spent.of(paired, "groc", "2026-03"))
+        assertEquals(0L, Spent.of(paired, "food", "2026-03"))
+        assertEquals(cents("995.50"), paired.savingsAmount)
+    }
+
+    // SPEC:R127 SPEC:R119 SPEC:R118
+    @Test fun `R127 a 4_50 bank payment deleted, then its receipt recorded, comes back as the receipt's pair at 995_50 with Food at 4_50`() {
+        clock.setDay(mar10)
+        val (d1, bankId) = recordRow(foodWorld(), coffeeRow, "food")
+        val bank = d1.payments.single()
+        val (after, p) = assertNotNull(Trash.deletePayment(d1, bankId, clock, ids))
+        val d2 = recordReceipt(after, coffee())
+        assertEquals(listOf<RestoreNotice>(RestoreNotice.PairAvailable("pay-r")), Trash.restoreNotices(d2, p))
+
+        val alone = Trash.restore(d2, p, clock, ids)
+        assertEquals(2, alone.payments.size)
+        assertEquals(cents("991.00"), alone.savingsAmount)
+
+        val paired = Trash.restore(d2, p, clock, ids, pairWith = "pay-r")
+        val one = paired.payments.single()
+        assertEquals("pay-r", one.id)
+        assertEquals(bank.bankKeys, one.bankKeys)
+        assertEquals("rc-1", one.receiptId)
+        assertEquals(cents("4.50"), one.total)
+        assertEquals(cents("995.50"), paired.savingsAmount)
+        assertEquals(cents("4.50"), Spent.of(paired, "food", "2026-03"))
+        assertEquals(d2.importState.importedKeys, paired.importState.importedKeys)
+        assertEquals(RowStatus.DUPLICATE, StatementImport.review(paired, listOf(coffeeRow), mar10).single().status)
+    }
+
+    // SPEC:R127 SPEC:R107 SPEC:R122
+    @Test fun `R127 a paired 42_30 receipt deleted, its row then ticked as DUPLICATE, is refused alone and comes back as that payment's pair at 957_70`() {
+        clock.setDay(mar10)
+        val d1 = recordReceipt(receiptWorld(), shop())
+        val row = BankRow(LocalDate(2026, 3, 12), -cents("42.30"), "POS MERCATO LUME 0423", "FIT-12")
+        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", StatementImport.review(d1, listOf(row), mar10).single(), null, clock, "tx-pair")
+        val (after, p) = assertNotNull(Trash.deletePayment(d2, "pay-r", clock, ids))
+        assertEquals(RowStatus.DUPLICATE, StatementImport.review(after, listOf(row), mar10).single().status)
+        val (d3, newId) = recordRow(after, row, "groc")
+        assertEquals(cents("957.70"), d3.savingsAmount)
+        assertEquals(RestoreProblem.RECORDED_AGAIN, Trash.restoreProblem(d3, p))
+        assertEquals(listOf<RestoreNotice>(RestoreNotice.PairAvailable(newId)), Trash.restoreNotices(d3, p))
+        assertNull(Trash.restoreProblem(d3, p, pairWith = newId))
+        val paired = Trash.restore(d3, p, clock, ids, pairWith = newId)
+        val one = paired.payments.single()
+        val receipt = p.payments.single()
+        assertEquals(newId, one.id)
+        assertEquals(receipt.parts, one.parts)
+        assertEquals(receipt.receiptLines, one.receiptLines)
+        assertEquals(receipt.bankKeys, one.bankKeys)
+        assertEquals("rc-1", one.receiptId)
+        assertEquals(cents("957.70"), paired.savingsAmount)
+        assertEquals(cents("30.00"), Spent.of(paired, "groc", "2026-03"))
+        assertEquals(cents("12.30"), Spent.of(paired, "home", "2026-03"))
+    }
+
+    // SPEC:R127 SPEC:R109
+    @Test fun `R127 the pair's own warning comes with its notice, for a receipt charged to a card whose charges are not logged`() {
+        clock.setDay(mar10)
+        val base = receiptWorld().copy(accounts = listOf(card(payoffCategoryId = "fun")))
+        val d1 = Receipts.confirm(base, Receipts.setSource(Receipts.open(base, shop()), PaymentSource.Account("card")), clock, "pay-r")
+        val (after, p) = assertNotNull(Trash.deletePayment(d1, "pay-r", clock, ids))
+        val (withRow, bankId) = recordRow(after, BankRow(LocalDate(2026, 3, 12), -cents("42.30"), "POS MERCATO LUME 0423", "FIT-12"), "groc")
+        assertEquals(listOf<RestoreNotice>(RestoreNotice.PairAvailable(bankId, PaymentNotice.CHARGES_NOT_LOGGED)), Trash.restoreNotices(withRow, p))
+    }
+
+    // SPEC:R127 SPEC:R123 SPEC:R122
+    @Test fun `R127 a receipt's Household part, its category deleted since, needs another category to come back as the pair`() {
+        val (d, p, bankId) = receiptThenRow()
+        val (noHome, _) = assertNotNull(Trash.deleteCategory(d, "home"))
+        assertNull(Trash.restoreProblem(noHome, p), "on its own its part keeps the deleted id")
+        assertEquals(RestoreProblem.CATEGORY_MISSING, Trash.restoreProblem(noHome, p, pairWith = bankId))
+        val paired = Trash.restore(noHome, p, clock, ids, replacementCategoryId = "fun", pairWith = bankId)
+        val one = paired.payments.single()
+        assertEquals(listOf(Part("groc", cents("30.00")), Part("fun", cents("12.30"))), one.parts)
+        assertEquals(listOf("groc", "fun"), one.receiptLines.map { it.categoryId })
+        assertEquals(cents("957.70"), paired.savingsAmount)
+        assertEquals(cents("12.30"), Spent.of(paired, "fun", "2026-03"))
+    }
 }

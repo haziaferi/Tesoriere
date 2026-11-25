@@ -93,6 +93,17 @@ object Pairing {
             .map { it.second.id to it.third }
 
     /**
+     * The receipt payments, holding no bank keys, that bank row [row] would be suggested with (SPEC
+     * R118, R127), best first in R118's order: the store's link, equal totals, the closest day, the
+     * payment recorded first.
+     */
+    fun receiptCandidates(d: ProfileData, row: BankRow): List<Pair<String, Match>> =
+        d.payments.withIndex().filter { receiptSide(it.value) }
+            .mapNotNull { (i, p) -> match(p.date, p.total, row)?.let { Triple(i, p, it) } }
+            .sortedWith(compareBy({ rank(d, it.second.payee ?: "", row.description) }, { it.third.ordinal }, { abs(it.second.date.daysTo(row.date)) }, { it.first }))
+            .map { it.second.id to it.third }
+
+    /**
      * Which payment each row of [rows] names in the import review (SPEC R118): every option, a row
      * in [eligible] (money out, not recorded yet) and a receipt payment that [match] finds, taken in
      * R118's order (the store's link, equal totals, the closest day, the earlier row, the row listed
@@ -186,30 +197,44 @@ object Pairing {
 
     // --- bank row first, then its receipt (SPEC R38 row 2) ---
 
-    /** What bank payment [paymentId] becomes when paired with the receipt under [review] (SPEC R119); null for an unknown id. */
-    fun receiptPairDraft(d: ProfileData, paymentId: String, review: ReceiptReview, differenceCategoryId: String?): PaymentDraft? {
+    /**
+     * What bank payment [paymentId] becomes when paired with the receipt under [review] (SPEC R119);
+     * null for an unknown id. [receiptParts], when given, are the receipt side's own parts, kept by
+     * a restore from the Trash in place of its lines' categories, and its total is theirs (SPEC R127).
+     */
+    fun receiptPairDraft(
+        d: ProfileData, paymentId: String, review: ReceiptReview, differenceCategoryId: String?, receiptParts: List<Part>? = null,
+    ): PaymentDraft? {
         val p = d.payments.firstOrNull { it.id == paymentId } ?: return null
         val f = review.file
-        return PaymentDraft(f.date, p.total, review.source, f.store, withDifference(Receipts.parts(review), differencePart(f.totalPaid, p.total), differenceCategoryId))
+        val parts = receiptParts ?: Receipts.parts(review)
+        return PaymentDraft(f.date, p.total, review.source, f.store, withDifference(parts, differencePart(receiptTotal(review, receiptParts), p.total), differenceCategoryId))
     }
 
+    /** The receipt side's total: its own parts' when given (SPEC R127), else the receipt's. */
+    private fun receiptTotal(review: ReceiptReview, receiptParts: List<Part>?): Money = receiptParts?.sumOf { it.amount } ?: review.file.totalPaid
+
     /** Why bank payment [paymentId] and the receipt under [review] cannot be paired, or null (SPEC R119). */
-    fun receiptPairProblem(d: ProfileData, paymentId: String, review: ReceiptReview, differenceCategoryId: String?): PairProblem? {
+    fun receiptPairProblem(
+        d: ProfileData, paymentId: String, review: ReceiptReview, differenceCategoryId: String?, receiptParts: List<Part>? = null,
+    ): PairProblem? {
         val p = d.payments.firstOrNull { it.id == paymentId }
         if (p == null || !bankSide(p)) return PairProblem.PAYMENT_NOT_PAIRABLE
         // the receipt's own checks, but its own total: the pair's total is the bank row's
         val rp = Receipts.problem(d, review)
         if (rp != null && rp != ReceiptProblem.CANNOT_SAVE) return PairProblem.RECEIPT_PROBLEM
-        if (!canConfirmPair(differencePart(review.file.totalPaid, p.total), differenceCategoryId)) return PairProblem.DIFFERENCE_UNFILED
+        if (!canConfirmPair(differencePart(receiptTotal(review, receiptParts), p.total), differenceCategoryId)) return PairProblem.DIFFERENCE_UNFILED
         val base = Receipts.withAdded(d, review)
-        val draft = receiptPairDraft(d, paymentId, review, differenceCategoryId) ?: return PairProblem.PAYMENT_NOT_PAIRABLE
+        val draft = receiptPairDraft(d, paymentId, review, differenceCategoryId, receiptParts) ?: return PairProblem.PAYMENT_NOT_PAIRABLE
         if (!Payments.canSave(base, draft, paymentId, pairing = true)) return PairProblem.CANNOT_SAVE
         return null
     }
 
     /** The warning the paired payment would carry (SPEC R54, R109); null for an unknown id. */
-    fun receiptPairNotice(d: ProfileData, paymentId: String, review: ReceiptReview, differenceCategoryId: String?): PaymentNotice? =
-        receiptPairDraft(d, paymentId, review, differenceCategoryId)?.let { Payments.draftNotice(Receipts.withAdded(d, review), it, editing = paymentId) }
+    fun receiptPairNotice(
+        d: ProfileData, paymentId: String, review: ReceiptReview, differenceCategoryId: String?, receiptParts: List<Part>? = null,
+    ): PaymentNotice? =
+        receiptPairDraft(d, paymentId, review, differenceCategoryId, receiptParts)?.let { Payments.draftNotice(Receipts.withAdded(d, review), it, editing = paymentId) }
 
     /**
      * Pairs bank payment [paymentId] with the receipt under [review], suggested or by hand (SPEC
@@ -217,12 +242,15 @@ object Pairing {
      * difference part, keeping its total and keys; then the receipt is kept as its Confirm keeps
      * it (SPEC R115), and the store's link made the first time the store pairs (SPEC R120).
      */
-    fun pairReceiptWithPayment(d: ProfileData, paymentId: String, review: ReceiptReview, differenceCategoryId: String?, clock: Clock, txId: String): ProfileData {
-        val problem = receiptPairProblem(d, paymentId, review, differenceCategoryId)
+    fun pairReceiptWithPayment(
+        d: ProfileData, paymentId: String, review: ReceiptReview, differenceCategoryId: String?, clock: Clock, txId: String,
+        receiptParts: List<Part>? = null,
+    ): ProfileData {
+        val problem = receiptPairProblem(d, paymentId, review, differenceCategoryId, receiptParts)
         require(problem == null) { "the pair cannot be recorded: $problem (SPEC R119)" }
         val bankText = d.payments.first { it.id == paymentId }.payee
         val base = Receipts.withAdded(d, review)
-        val edited = Payments.edit(base, paymentId, receiptPairDraft(d, paymentId, review, differenceCategoryId)!!, clock, txId, pairing = true)
+        val edited = Payments.edit(base, paymentId, receiptPairDraft(d, paymentId, review, differenceCategoryId, receiptParts)!!, clock, txId, pairing = true)
         return linkStore(Receipts.keep(d, edited, review, paymentId), review.file.store, bankText)
     }
 

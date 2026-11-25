@@ -16,12 +16,17 @@ import com.hazia.tesoriere.model.StoredLabels
 import com.hazia.tesoriere.model.Transaction
 import com.hazia.tesoriere.model.TrashItem
 import com.hazia.tesoriere.pairing.Pairing
+import com.hazia.tesoriere.payments.Part
 import com.hazia.tesoriere.payments.Payment
 import com.hazia.tesoriere.payments.PaymentNotice
 import com.hazia.tesoriere.payments.PaymentSource
 import com.hazia.tesoriere.payments.Payments
+import com.hazia.tesoriere.receipts.ReceiptReview
 import com.hazia.tesoriere.receipts.ReceiptSettings
 import com.hazia.tesoriere.receipts.Receipts
+import com.hazia.tesoriere.statements.BankRow
+import com.hazia.tesoriere.statements.ReviewRow
+import com.hazia.tesoriere.statements.RowStatus
 import com.hazia.tesoriere.statements.StatementImport
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
@@ -52,9 +57,10 @@ import kotlinx.serialization.json.Json
  *   R41). The payload keeps what each payment from a deleted Goal or charged to a deleted Account
  *   took from it ([TrashPayload.charged]); a change since, which wrote a row in the item's place
  *   (SPEC R54), refuses the restore with a code ([RestoreProblem], owner answer of 2026-11-25).
- *   A receipt payment whose bank row was recorded as a payment of its own while it was in the
- *   Trash is noted ([RestoreNotice.PairAvailable]) and may come back as that payment's pair,
- *   through Pairing.pairReceiptWithPayment, so the purchase counts once (SPEC R125).
+ *   A payment whose other side of a pair was recorded while it was in the Trash, a receipt's or a
+ *   bank row's, is noted ([RestoreNotice.PairAvailable]) and may come back as that payment's pair,
+ *   through Pairing.pairReceiptWithPayment or Pairing.pairBankWithPayment, so the purchase counts
+ *   once; a receipt side keeps its own parts (SPEC R127).
  * - A category's delete removes its category links and keeps them ([TrashPayload.categoryLinks]),
  *   and takes another category for the recurring expenses and Accounts that file under it (SPEC
  *   R42, R123); restore brings the links back, never the moved expenses.
@@ -126,7 +132,7 @@ enum class RestoreProblem {
     TARGET_DELETED,
     /** The rows of an undone quick-add take more from a Goal than it holds. */
     GOAL_SHORT,
-    /** A receipt payment restored as a pair that pairing refuses (SPEC R119, R125): see Pairing.receiptPairProblem. */
+    /** A payment restored as a pair that pairing refuses (SPEC R119, R127): see Pairing.receiptPairProblem and bankPairProblem. */
     CANNOT_PAIR,
 }
 
@@ -136,10 +142,11 @@ sealed interface RestoreNotice {
     data class Source(val notice: PaymentNotice) : RestoreNotice
 
     /**
-     * The restored receipt payment meets [paymentId], recorded from a bank row with no receipt, as
-     * R37 and R118 say: it may be restored as that pair instead of on its own.
+     * The restored payment would pair with [paymentId], recorded since (SPEC R127): it may be
+     * restored as that pair instead of on its own. [notice] is the warning the pair itself would
+     * carry (SPEC R54, R109), the difference not yet filed.
      */
-    data class PairAvailable(val paymentId: String) : RestoreNotice
+    data class PairAvailable(val paymentId: String, val notice: PaymentNotice? = null) : RestoreNotice
 }
 
 /** What the Trash's daily look finds (SPEC R121): items to go for good, and items due their one notice. Trash item ids. */
@@ -285,12 +292,14 @@ object Trash {
 
         for (pay in p.payments.filter { x -> d.payments.none { it.id == x.id } }) {
             val keys = pay.bankKeys?.let(StatementImport::keyStrings).orEmpty().toSet()
+            // restored as a pair, the partner holds what it completes (SPEC R127)
             val again = d.payments.any { o ->
-                (pay.receiptId != null && o.receiptId == pay.receiptId) || (o.bankKeys?.let(StatementImport::keyStrings)?.any { it in keys } == true)
+                o.id != pairWith &&
+                    ((pay.receiptId != null && o.receiptId == pay.receiptId) || (o.bankKeys?.let(StatementImport::keyStrings)?.any { it in keys } == true))
             }
             if (again) return RestoreProblem.RECORDED_AGAIN
         }
-        if (pairWith != null && pairProblem(d, p, pairWith, differenceCategoryId)) return RestoreProblem.CANNOT_PAIR
+        if (pairWith != null) pairProblem(d, p, pairWith, differenceCategoryId, replacementCategoryId)?.let { return it }
 
         val rows = p.transactions.filter { t -> d.transactions.none { it.id == t.id } }
         val byGoal = HashMap<String, Money>(); val byAccount = HashMap<String, Money>()
@@ -309,16 +318,15 @@ object Trash {
     }
 
     /**
-     * What a restore of [p] notes (SPEC R125): a payment's own warning, when its source was deleted
-     * since its removal or its Goal is short; and, for a receipt payment holding no bank keys, the
-     * best payment recorded from a bank row with no receipt that it meets, in R118's order
-     * (Pairing.paymentCandidates), which it may be restored as the pair of.
+     * What a restore of [p] notes (SPEC R125, R127): a payment's own warning, when its source was
+     * deleted since its removal or its Goal is short; and the payment recorded since that it would
+     * pair with, best first in R118's order, with the warning the pair would carry.
      */
     fun restoreNotices(d: ProfileData, p: TrashPayload): List<RestoreNotice> =
         p.payments.filter { x -> d.payments.none { it.id == x.id } }.flatMap { pay ->
             listOfNotNull(
                 Payments.reinstateNotice(d, pay, settled = p.written.isNotEmpty())?.let { RestoreNotice.Source(it) },
-                pairFor(d, pay)?.let { RestoreNotice.PairAvailable(it) },
+                pairFor(d, pay)?.let { RestoreNotice.PairAvailable(it, pairNotice(d, pay, it)) },
             )
         }
 
@@ -328,10 +336,10 @@ object Trash {
      * R122). A recurring expense resumes from the month of the restore: it is marked swept for it,
      * and the months it spent in the Trash are not caught up. A restored expense or Account whose
      * category is gone files under [replacementCategoryId] (SPEC R123). An item whose id is in the
-     * Profile again is left as it is. With [pairWith], the receipt payment comes back as the pair
-     * of that bank row's payment, with its difference filed under [differenceCategoryId], instead
-     * of on its own (SPEC R125). Refused while [restoreProblem] finds one; a Profile is restored by
-     * [restoreProfile].
+     * Profile again is left as it is. With [pairWith], the payment comes back as the pair of that
+     * payment, with its difference filed under [differenceCategoryId], instead of on its own, and
+     * its delete's rows stay (SPEC R127). Refused while [restoreProblem] finds one; a Profile is
+     * restored by [restoreProfile].
      */
     fun restore(
         d: ProfileData, p: TrashPayload, clock: Clock, ids: () -> String, replacementCategoryId: String? = null,
@@ -376,9 +384,10 @@ object Trash {
         }
 
         val payments = p.payments.filter { x -> n.payments.none { it.id == x.id } }
-        for (t in p.written) if (payments.isNotEmpty() || t.key in back) n = undoRow(n, t, clock, ids())
-        // a payment whose removal wrote a row for its deleted source: that row is undone above (SPEC R125)
-        for (pay in payments) n = if (pairWith != null) restoreAsPair(n, pay, pairWith, differenceCategoryId, clock, ids())
+        // a payment whose removal wrote a row for its deleted source: that row is undone with it (SPEC
+        // R125); restored as a pair it stays removed, its partner completed instead (SPEC R127)
+        for (t in p.written) if ((payments.isNotEmpty() && pairWith == null) || t.key in back) n = undoRow(n, t, clock, ids())
+        for (pay in payments) n = if (pairWith != null) restoreAsPair(n, pay, pairWith, differenceCategoryId, replacementCategoryId, clock, ids())
             else Payments.reinstate(n, pay, settled = p.written.isNotEmpty(), clock, ids())
 
         val rows = p.transactions.filter { t -> n.transactions.none { it.id == t.id } }
@@ -404,45 +413,112 @@ object Trash {
 
     // ---- helpers ----------------------------------------------------------------------------------
 
+    /** Which side of a pair a payment in the Trash brings (SPEC R127): a receipt's, or a bank row's holding no receipt. */
+    private enum class Side { RECEIPT, BANK }
+
+    private fun sideOf(pay: Payment): Side? = when {
+        pay.total <= 0 -> null
+        pay.receiptId != null -> Side.RECEIPT
+        pay.bankKeys != null -> Side.BANK
+        else -> null
+    }
+
     /**
-     * The bank row's payment receipt payment [pay] could be restored as the pair of (SPEC R118,
-     * R125): the best Pairing.paymentCandidates finds for its receipt, read back by Receipts.reopen;
-     * null for a payment that holds bank keys, no receipt, or is a refund.
+     * The payment recorded since that [pay] could be restored as the pair of (SPEC R127): for a
+     * receipt holding no bank keys, the best bank row's payment Pairing.paymentCandidates finds;
+     * for a receipt holding them, a payment with no receipt holding one of them; for a bank row's
+     * payment, the best receipt payment Pairing.receiptCandidates finds. Null for none, or a refund.
      */
-    private fun pairFor(d: ProfileData, pay: Payment): String? {
-        if (pay.receiptId == null || pay.bankKeys != null || pay.total <= 0) return null
+    private fun pairFor(d: ProfileData, pay: Payment): String? = when (sideOf(pay)) {
+        Side.RECEIPT -> {
+            val held = pay.bankKeys?.let(StatementImport::keyStrings)?.toSet()
+            if (held != null) d.payments.firstOrNull { o -> o.receiptId == null && o.total > 0 && o.bankKeys?.let(StatementImport::keyStrings)?.any { it in held } == true }?.id
+            else Receipts.reopen(d, pay)?.let { Pairing.paymentCandidates(d, it.file).firstOrNull()?.first }
+        }
+        Side.BANK -> Pairing.receiptCandidates(d, bankRow(pay)).firstOrNull()?.first
+        null -> null
+    }
+
+    /** The warning the pair of [pay] with [partner] would carry, the difference not yet filed (SPEC R127). */
+    private fun pairNotice(d: ProfileData, pay: Payment, partner: String): PaymentNotice? = when (sideOf(pay)) {
+        Side.RECEIPT -> receiptSideOf(d, pay, null)?.let { (review, parts) -> Pairing.receiptPairNotice(unrecorded(d, pay), partner, review, null, parts) }
+        Side.BANK -> Pairing.bankPairNotice(unimported(d, pay), partner, reviewRow(pay), null)
+        null -> null
+    }
+
+    /**
+     * Why restoring [p]'s payment as the pair of [pairWith] is refused (SPEC R127): a receipt side
+     * whose part or line names a category gone, with no category that exists given in its place,
+     * is `CATEGORY_MISSING`; one payload payment that pairing refuses, its receipt id read as not
+     * recorded and its bank keys as not imported, since its delete kept them so, is `CANNOT_PAIR`.
+     */
+    private fun pairProblem(d: ProfileData, p: TrashPayload, pairWith: String, differenceCategoryId: String?, replacement: String?): RestoreProblem? {
+        val pay = p.payments.singleOrNull()?.takeIf { x -> d.payments.none { it.id == x.id } } ?: return RestoreProblem.CANNOT_PAIR
+        return when (sideOf(pay)) {
+            Side.RECEIPT -> {
+                val live = d.categories.mapTo(HashSet()) { it.id }
+                val named = pay.parts.filter { !it.difference }.mapNotNull { it.categoryId } + pay.receiptLines.map { it.categoryId }
+                if (named.any { it !in live } && (replacement == null || replacement !in live)) return RestoreProblem.CATEGORY_MISSING
+                val (review, parts) = receiptSideOf(d, pay, replacement) ?: return RestoreProblem.CANNOT_PAIR
+                RestoreProblem.CANNOT_PAIR.takeIf { Pairing.receiptPairProblem(unrecorded(d, pay), pairWith, review, differenceCategoryId, parts) != null }
+            }
+            Side.BANK -> RestoreProblem.CANNOT_PAIR.takeIf { Pairing.bankPairProblem(unimported(d, pay), pairWith, reviewRow(pay), differenceCategoryId) != null }
+            null -> RestoreProblem.CANNOT_PAIR
+        }
+    }
+
+    /**
+     * [pay] back as the pair of [pairWith] (SPEC R119, R127). A receipt side completes a bank row's
+     * payment through Pairing.pairReceiptWithPayment, with its own parts less any difference part,
+     * its lines in the categories they were filed under, a category gone taking [replacement], and
+     * the links kept; a bank row's payment completes a receipt payment through
+     * Pairing.pairBankWithPayment, with its keys and its amount. The recorded receipt ids and the
+     * import's keys stay as they were, the payment's among them.
+     */
+    private fun restoreAsPair(
+        d: ProfileData, pay: Payment, pairWith: String, differenceCategoryId: String?, replacement: String?, clock: Clock, txId: String,
+    ): ProfileData = when (sideOf(pay)) {
+        Side.RECEIPT -> {
+            val (review, parts) = requireNotNull(receiptSideOf(d, pay, replacement))
+            val paired = Pairing.pairReceiptWithPayment(unrecorded(d, pay), pairWith, review, differenceCategoryId, clock, txId, parts)
+            paired.copy(receiptSettings = paired.receiptSettings?.copy(recordedReceiptIds = d.receiptSettings!!.recordedReceiptIds))
+        }
+        Side.BANK -> {
+            val paired = Pairing.pairBankWithPayment(unimported(d, pay), pairWith, reviewRow(pay), differenceCategoryId, clock, txId)
+            paired.copy(importState = paired.importState.copy(importedKeys = d.importState.importedKeys))
+        }
+        null -> error("not a side of a pair (SPEC R127)")
+    }
+
+    /**
+     * Receipt payment [pay] read back as its receipt under review, its lines in the categories they
+     * were filed under, with its own parts less any difference part (SPEC R127); a category gone
+     * takes [replacement].
+     */
+    private fun receiptSideOf(d: ProfileData, pay: Payment, replacement: String?): Pair<ReceiptReview, List<Part>>? {
         val review = Receipts.reopen(d, pay) ?: return null
-        return Pairing.paymentCandidates(d, review.file).firstOrNull()?.first
+        val live = d.categories.mapTo(HashSet()) { it.id }
+        fun filed(c: String?) = if (c == null || c in live) c else replacement
+        val parts = pay.parts.filter { !it.difference }.map { it.copy(categoryId = filed(it.categoryId)) }
+        val lines = review.lineCategories.map { filed(it) }
+        return review.copy(lineCategories = lines, openedCategories = lines) to parts
     }
 
-    /**
-     * Whether restoring [p]'s payment as the pair of bank payment [pairWith] is refused: the
-     * payload must hold one receipt payment, no row written for a deleted source, and pairing must
-     * take it, its receipt id read as not recorded, since its delete kept it so (SPEC R41, R119).
-     */
-    private fun pairProblem(d: ProfileData, p: TrashPayload, pairWith: String, differenceCategoryId: String?): Boolean {
-        val pay = p.payments.singleOrNull()?.takeIf { x -> d.payments.none { it.id == x.id } } ?: return true
-        if (p.written.isNotEmpty() || pay.receiptId == null || pay.bankKeys != null || pay.total <= 0) return true
-        val review = Receipts.reopen(d, pay) ?: return true
-        return Pairing.receiptPairProblem(unrecorded(d, pay), pairWith, review, differenceCategoryId) != null
-    }
+    /** Bank row's payment [pay] read back as its row: its day, amount and text, and its keys (SPEC R127). */
+    private fun bankRow(pay: Payment) = BankRow(pay.date, -pay.total, pay.payee ?: "", pay.bankKeys?.fitid)
 
-    /**
-     * Receipt payment [pay] back as the pair of bank payment [pairWith], through
-     * Pairing.pairReceiptWithPayment as when the bank row came first (SPEC R119, R125): the bank
-     * payment takes the receipt's parts, difference part, day, source, id and lines, and the links
-     * are kept. The recorded receipt ids stay as they were, the receipt's among them.
-     */
-    private fun restoreAsPair(d: ProfileData, pay: Payment, pairWith: String, differenceCategoryId: String?, clock: Clock, txId: String): ProfileData {
-        val review = requireNotNull(Receipts.reopen(d, pay))
-        val paired = Pairing.pairReceiptWithPayment(unrecorded(d, pay), pairWith, review, differenceCategoryId, clock, txId)
-        return paired.copy(receiptSettings = paired.receiptSettings?.copy(recordedReceiptIds = d.receiptSettings!!.recordedReceiptIds))
-    }
+    private fun reviewRow(pay: Payment) = ReviewRow(bankRow(pay), requireNotNull(pay.bankKeys), pay.payee ?: "", RowStatus.READY, false, null, null, null)
 
     /** [d] with [pay]'s receipt id read as not recorded, so pairing takes its receipt again. */
     private fun unrecorded(d: ProfileData, pay: Payment): ProfileData {
         val id = pay.receiptId ?: return d
         return d.receiptSettings?.let { s -> d.copy(receiptSettings = s.copy(recordedReceiptIds = s.recordedReceiptIds - id)) } ?: d
+    }
+
+    /** [d] with [pay]'s bank keys read as not imported, so pairing takes its row again. */
+    private fun unimported(d: ProfileData, pay: Payment): ProfileData {
+        val keys = pay.bankKeys?.let(StatementImport::keyStrings)?.toSet() ?: return d
+        return d.copy(importState = d.importState.copy(importedKeys = d.importState.importedKeys.filter { it !in keys }))
     }
 
     /** The rows [after] holds that [before] did not: what a delete wrote. */
