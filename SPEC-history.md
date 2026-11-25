@@ -226,3 +226,4 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R110 · changed · rule restated in two sentences; its cases are in the table · owner
 - 2026-11-25 · R60 · changed · the creation day is part of schema 1, still edited in place; no migration adds it · builder
 - 2026-11-25 · R85 · changed · a Loan's own category is part of schema 1, still edited in place; no migration adds it · builder
+- 2026-11-25 · R107 · changed · the floor and the amount match also read the expense's sweep rows, so an edit of its schedule keeps a swept bill found · builder

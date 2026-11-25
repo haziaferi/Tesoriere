@@ -459,9 +459,19 @@ object Recurring {
 
     /**
      * The first day a bank row can be [e]'s bill (SPEC R107): the later of its first due date
-     * (SPEC R61) and the day it was created, before which no sweep covered it.
+     * (SPEC R61) and the day it was created, before which no sweep covered it, or the day of its
+     * earliest sweep row in the ledger when that is earlier, as after an edit moved its schedule.
      */
-    fun billFloor(e: RecurringExpense): LocalDate = maxOf(e.firstDueDate, createdOn(e))
+    fun billFloor(d: ProfileData, e: RecurringExpense): LocalDate {
+        val floor = maxOf(e.firstDueDate, createdOn(e))
+        // an edit of the schedule starts the chain again (SPEC R65); a bill a sweep already paid stays findable
+        val firstSweep = sweepRows(d, e).minOfOrNull { it.date } ?: return floor
+        return minOf(floor, firstSweep)
+    }
+
+    /** The expense's `rec:` rows in the ledger, sweeps and returns alike. */
+    fun sweepRows(d: ProfileData, e: RecurringExpense): List<Transaction> =
+        d.transactions.filter { it.key == TransactionKey.RecurringKey(e.id).stored }
 
     /** Whether [e] is a card's payment (SPEC R93): linked to an Account of type credit. */
     fun paysCard(d: ProfileData, e: RecurringExpense): Boolean =

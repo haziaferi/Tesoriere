@@ -379,25 +379,28 @@ object StatementImport {
         /**
          * Whether an outflow [r] with payee words [pw] names a recurring expense (SPEC R107): whole
          * words either way round, "Rent" is in "Affitto casa rent", not in "Parent teacher assoc";
-         * never for a row dated before the later of its first due date and its creation day
-         * (Recurring.billFloor, SPEC R60, R61).
+         * never for a row dated before its floor (Recurring.billFloor, SPEC R60, R61).
          */
         fun named(r: BankRow, pw: List<String>): Boolean = pw.isNotEmpty() && recurring.any { (e, nw) ->
-            r.date >= Recurring.billFloor(e) &&
+            r.date >= Recurring.billFloor(d, e) &&
                 (pw.windowed(nw.size).any { it == nw } || nw.windowed(pw.size).any { it == pw })
         }
         /**
          * Whether an outflow [r] is a recurring expense's bill by its amount and day (SPEC R107):
-         * only due dates on the chain count (SPEC R61), and never for a row dated before the later
-         * of its first due date and its creation day (SPEC R60).
+         * the days are its due dates on the chain (SPEC R61) and the days of its sweep rows, which
+         * an edit of its schedule leaves where they were (SPEC R65); never for a row dated before
+         * its floor (Recurring.billFloor).
          */
         fun billOf(r: BankRow): Boolean = byAmount.any { e ->
-            if (r.date < Recurring.billFloor(e)) return@any false
-            Recurring.dueDatesBetween(e, r.date.minusDays(RECURRING_DAYS), r.date.plusDays(RECURRING_DAYS)).any { due ->
-                // what its rows dated on that due date hold: an edit with the difference declined leaves the old amount there
-                val swept = d.transactions.filter { it.key == TransactionKey.RecurringKey(e.id).stored && it.date == due }.sumOf { it.amount }
-                -r.amount == e.amount || (swept > 0 && -r.amount == swept)
-            }
+            if (r.date < Recurring.billFloor(d, e)) return@any false
+            val from = r.date.minusDays(RECURRING_DAYS); val to = r.date.plusDays(RECURRING_DAYS)
+            val rows = Recurring.sweepRows(d, e)
+            // what its rows dated a day hold: an edit with the difference declined leaves the old amount there
+            fun held(day: LocalDate) = rows.filter { it.date == day }.sumOf { it.amount }.let { it > 0 && -r.amount == it }
+            // on a due date the amount matches too; on a sweep row's day only what the rows hold,
+            // so a share swept on the 1st does not make every bill of the full amount near a 1st its bill
+            Recurring.dueDatesBetween(e, from, to).any { due -> -r.amount == e.amount || held(due) } ||
+                rows.map { it.date }.filter { it >= from && it <= to }.distinct().any { held(it) }
         }
         return rows.map { r ->
             val keys = keys(r)

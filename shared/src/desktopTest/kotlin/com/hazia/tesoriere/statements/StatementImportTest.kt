@@ -427,6 +427,29 @@ class StatementImportTest {
         assertEquals(listOf(RowStatus.RECURRING, RowStatus.RECURRING), StatementImport.review(old, rows, clock.today).map { it.status })
     }
 
+    // SPEC:R107 SPEC:R65 SPEC:R63
+    @Test fun `R107 Telefono swept on 10 March and moved on 15 March to fall due on 12 April still finds TELEFONO on 10 March and TIM -29_90 on 11 March`() {
+        val c = TestClock(LocalDate(2026, 3, 1))
+        var d = world().copy(recurringExpenses = emptyList())
+        d = com.hazia.tesoriere.engine.Recurring.create(
+            d, Fixture.recurring("tel", "29.90", Cadence.MONTHLY, firstDue = LocalDate(2026, 3, 10), categoryId = "home", name = "Telefono"), c, ids::next,
+        )
+        assertEquals(listOf(LocalDate(2026, 3, 10)), d.transactions.filter { it.key == "rec:tel" }.map { it.date })
+        c.setDay(LocalDate(2026, 3, 15))
+        val moved = d.recurringExpenses.single().let { it.copy(dueDate = LocalDate(2026, 4, 12)) }
+        val (edited, _) = com.hazia.tesoriere.engine.Recurring.edit(d, moved, c.today)          // the difference is declined
+        assertEquals(LocalDate(2026, 4, 12), edited.recurringExpenses.single().firstDueDate)
+        val rows = listOf(
+            BankRow(LocalDate(2026, 3, 11), -2990, "TIM S.P.A.", null),
+            BankRow(LocalDate(2026, 3, 10), -2990, "TELEFONO ABBONAMENTO", null),
+        )
+        val review = StatementImport.review(edited, rows, LocalDate(2026, 3, 16))
+        assertEquals(listOf(RowStatus.RECURRING, RowStatus.RECURRING), review.map { it.status })
+        // a row before the sweep still is not found
+        val early = StatementImport.review(edited, listOf(BankRow(LocalDate(2026, 3, 5), -2990, "TELEFONO ABBONAMENTO", null)), LocalDate(2026, 3, 16))
+        assertEquals(RowStatus.READY, early.single().status)
+    }
+
     // SPEC:R107 SPEC:R65
     @Test fun `R107 -29_90 on 10 March arrives RECURRING after the swept Telefono was edited to 34_90 with the difference declined`() {
         val c = TestClock(LocalDate(2026, 3, 1))
