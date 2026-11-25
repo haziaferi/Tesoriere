@@ -144,3 +144,8 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R105 · changed · the amount keyword value never takes a Value date column · builder
 - 2026-11-25 · R54 · changed · a change to what is charged to a deleted Account logs an acct row, so its rows and payments still add up to zero · builder
 - 2026-11-25 · R88 · changed · a later change to a deleted Account's payments keeps its rows and payments at zero · builder
+- 2026-11-25 · R25 · changed · a card's payment's sweep rows count in no spent · owner
+- 2026-11-25 · R67 · changed · a row written while the expense is linked to a card is a card payoff, counted in no spent · owner
+- 2026-11-25 · R93 · changed · a card's committed payment sweeps as a card payoff · owner
+- 2026-11-25 · R99 · changed · a card's payment's sweeps are in no slice · owner
+- 2026-11-25 · R101 · changed · a card's payment's sweeps are no expense · owner
