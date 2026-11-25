@@ -219,3 +219,5 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R86 · changed · a Loan is saved with or without its own category, never with one that does not exist · owner
 - 2026-11-25 · R91 · changed · a Loan taken from the calculator takes its payment's category as its own · owner
 - 2026-11-25 · R94 · changed · a Loan changed to a card clears its own category · owner
+- 2026-11-25 · R110 · changed · a card whose charges are not logged asks no fees-or-correction choice for a rise by hand · owner
+- 2026-11-25 · R86 · changed · a card whose charges are not logged asks no choice for a rise of its balance · owner

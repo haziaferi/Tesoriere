@@ -110,6 +110,20 @@ class CardFeesTest {
         assertNull(AccountEditing.problem(bare, card(balance = "640.00").copy(id = "new")))
     }
 
+    // SPEC:R110 SPEC:R109 SPEC:R86
+    @Test fun `R110 a card whose charges are not logged raised from 300_00 to 320_00 asks no choice and files the rise under no category`() {
+        val d = world(card(fees = null, notLogged = true))
+        val up = d.accounts.single().copy(balance = cents("320.00"))
+        assertNull(AccountEditing.problem(d, up))
+        val saved = d.edited("320.00", rise = null)
+        assertEquals(cents("320.00"), saved.accounts.single().balance)
+        assertNull(saved.transactions.single().categoryId)
+        assertTrue(Reports.spendingComposition(saved, day).slices.isEmpty())
+        // every other card still asks
+        val logged = world(card())
+        assertEquals(AccountEditing.AccountProblem.RISE_CHOICE_MISSING, AccountEditing.problem(logged, logged.accounts.single().copy(balance = cents("320.00"))))
+    }
+
     // SPEC:R110 SPEC:R99
     @Test fun `R110 paying 320_00 off the card from Savings after its fees adds nothing to Fees or Spending`() {
         val d = world().increased("12.50").edited("320.00")

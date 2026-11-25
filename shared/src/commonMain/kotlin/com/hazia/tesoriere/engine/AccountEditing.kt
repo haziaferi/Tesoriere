@@ -70,10 +70,14 @@ object AccountEditing {
     fun canSave(d: ProfileData, draft: Account, rise: BalanceRise? = null, riseCategoryId: String? = null): Boolean =
         problem(d, draft, rise, riseCategoryId) == null
 
-    /** Whether saving [draft] raises a stored card's balance, which takes the user's choice (SPEC R110). */
+    /**
+     * Whether saving [draft] raises a stored card's balance, which takes the user's choice (SPEC
+     * R110); a card whose charges are not logged asks none, every answer filing the rise under no
+     * category (SPEC R109).
+     */
     private fun cardRise(d: ProfileData, draft: Account): Boolean {
         val existing = d.accounts.firstOrNull { it.id == draft.id } ?: return false
-        return draft.type == AccountType.CREDIT && draft.balance > existing.balance
+        return draft.type == AccountType.CREDIT && !draft.chargesNotLogged && draft.balance > existing.balance
     }
 
     /**
