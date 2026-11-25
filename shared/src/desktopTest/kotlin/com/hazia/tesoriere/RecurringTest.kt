@@ -305,6 +305,32 @@ class RecurringTest {
         assertEquals("acct:loan", d.transactions.single().key)
     }
 
+    // SPEC:R67 SPEC:R54 SPEC:R25
+    @Test fun `R67 a Loan's 260_00 payment adds 260_00 to Car in September, and after a 9,800_00 car charged to the Loan in October its sweep is a transfer`() {
+        val clock = TestClock(LocalDate(2026, 9, 1)); val ids = Ids()
+        val e = recurring("pay", "260.00", Cadence.MONTHLY, LocalDate(2026, 9, 15), linkedAccountId = "loan", categoryId = "c1", name = "Car loan payment")
+        val loan = Account("loan", Fixture.PROFILE, "Car loan", null, AccountType.LOAN, balance = cents("0.00"), linkedRecurringExpenseId = "pay")
+        var d = withExpenses(world(), e).copy(accounts = listOf(loan))
+        d = Recurring.sweepOccurrences(d, "pay", LocalDate(2026, 9, 1), clock) { ids.next() }.first
+        assertEquals(cents("260.00"), Spent.of(d, "c1", "2026-09"))
+        // the car, bought in October, is a payment charged to the Loan (SPEC R54)
+        val car = com.hazia.tesoriere.payments.PaymentDraft(
+            LocalDate(2026, 10, 3), cents("9,800.00"), com.hazia.tesoriere.payments.PaymentSource.Account("loan"), "Car dealer",
+            listOf(com.hazia.tesoriere.payments.Part("c1", cents("9,800.00"))),
+        )
+        d = com.hazia.tesoriere.payments.Payments.record(d, car, clock, "car")
+        assertEquals(cents("9,800.00"), d.accounts.single().balance)
+        d = Recurring.sweepOccurrences(d, "pay", LocalDate(2026, 10, 1), clock) { ids.next() }.first
+        assertEquals(cents("9,800.00"), Spent.of(d, "c1", "2026-10"))                       // the October sweep is a transfer
+        assertEquals(cents("260.00"), Spent.of(d, "c1", "2026-09"))                         // September stays as it was
+        assertEquals(cents("480.00"), d.savings.amount)                                     // both sweeps still moved Savings
+        // its return is a transfer too, and lowers no spent
+        clock.setDay(LocalDate(2026, 10, 10))
+        val back = Recurring.delete(d, "pay", reverse = true, clock) { ids.next() }
+        assertEquals(cents("9,800.00"), Spent.of(back, "c1", "2026-10"))
+        assertEquals(cents("740.00"), back.savings.amount)
+    }
+
     // ---- every recurring expense has a category (owner answer 2 of 2026-11-24) ----------------
 
     // SPEC:R67

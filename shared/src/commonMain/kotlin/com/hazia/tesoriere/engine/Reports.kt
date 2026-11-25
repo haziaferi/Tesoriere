@@ -27,7 +27,7 @@ import kotlin.time.Instant
  *   recurring expense and its Goals slice are gone, and `savings` rows count in no slice: money
  *   into a Goal or paid off an Account is a transfer, counted when a payment spends it (owner,
  *   2026-11-25). Parts and sweep rows with no category (both only from a Sci-Fin backup) are
- *   Uncategorised (SPEC R99). A card's payment's sweeps are a card payoff, in no slice and no
+ *   Uncategorised (SPEC R99). A card's payment's sweeps, and a Loan's once a payment is charged to it, are an Account payoff, in no slice and no
  *   expense: the charges they pay count through their parts (SPEC R67, R93, R101); a card whose
  *   charges are not logged has its payoff rows filed under its payoff category, counted there
  *   (SPEC R109). Every row is read as written, through Ledger.spent.

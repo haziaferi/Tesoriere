@@ -164,10 +164,11 @@ data class Transaction(
      */
     val categoryId: String? = null,
     /**
-     * A `rec:` row written while its expense was linked to a card: a card payoff, a transfer that
-     * moves Savings and counts in no spent (SPEC R67, R93, owner answer A of 2026-11-25).
+     * A `rec:` row written while its expense was linked to a card, or to a Loan with a payment
+     * charged to it: an Account payoff, a transfer that moves Savings and counts in no spent
+     * (SPEC R67, R93, owner answers A and F of 2026-11-25). Written once, never read from the link.
      */
-    val cardPayoff: Boolean = false,
+    val accountPayoff: Boolean = false,
 )
 
 /** One per Profile. The defaults are a fresh install's: every piece SPEC R18 starts off is off. */

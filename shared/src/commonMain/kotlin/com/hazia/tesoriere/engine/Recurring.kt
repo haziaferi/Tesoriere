@@ -8,6 +8,7 @@ import com.hazia.tesoriere.model.ProfileData
 import com.hazia.tesoriere.model.RecurringExpense
 import com.hazia.tesoriere.model.StoredLabels
 import com.hazia.tesoriere.model.Transaction
+import com.hazia.tesoriere.payments.PaymentSource
 import com.hazia.tesoriere.model.ceilDiv
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.number
@@ -26,13 +27,14 @@ import kotlinx.datetime.number
  *   category's spent for its month (SPEC R25). A return on deletion is filed under the category
  *   of the rows it reverses, one row per category, never the expense's category of the day (SPEC
  *   R66, owner answer of 2026-11-25).
- * - A row written while the expense is linked to a card is marked `cardPayoff`: it moves Savings
- *   and counts in no spent, since the charges it pays count through their parts (SPEC R67, R93,
- *   owner answer A of 2026-11-25). Sci-Fin counted a card's payment as spending. The mark is
- *   written, not read from the link, so a later link, release or deletion leaves past rows as
- *   they were; a return carries the mark of the rows it reverses. A card whose charges are not
- *   logged has its payment's rows filed under its payoff category instead, unmarked, so they
- *   count there (SPEC R109), written so in the same way.
+ * - A row written while the expense is linked to a card, or to a Loan with a payment charged to
+ *   it, is marked `accountPayoff`: it moves Savings and counts in no spent, since what it pays
+ *   counts through the parts of the payments charged (SPEC R67, R93, owner answers A and F of
+ *   2026-11-25). Sci-Fin counted a card's and a Loan's payment as spending. The mark is written,
+ *   not read from the link or the payments, so a later link, release, deletion or purchase logged
+ *   late leaves past rows as they were; a return carries the mark of the rows it reverses. A card
+ *   whose charges are not logged has its payment's rows filed under its payoff category instead,
+ *   unmarked, so they count there (SPEC R109), written so in the same way.
  * - The rows' notes come from StoredLabels, not Sci-Fin's `stored()`.
  * - Sci-Fin's section references are replaced by SPEC rule numbers.
  */
@@ -381,12 +383,12 @@ object Recurring {
         val rows = reversedRows(d, e, clock.today())
         if (rows.sumOf { it.amount } <= 0) return d
         var next = d
-        // a card payoff's rows are returned as a card payoff, counted in no spent either (SPEC R67)
-        for ((filedAs, filed) in rows.groupBy { it.categoryId to it.cardPayoff }) {
+        // an Account payoff's rows are returned as an Account payoff, counted in no spent either (SPEC R67)
+        for ((filedAs, filed) in rows.groupBy { it.categoryId to it.accountPayoff }) {
             val back = filed.sumOf { it.amount }
             if (back == 0L) continue
-            val (categoryId, cardPayoff) = filedAs
-            val m = Movement(-back, TransactionKey.RecurringKey(e.id), e.name, StoredLabels.DELETION_REVERSAL, categoryId = categoryId, cardPayoff = cardPayoff)
+            val (categoryId, accountPayoff) = filedAs
+            val m = Movement(-back, TransactionKey.RecurringKey(e.id), e.name, StoredLabels.DELETION_REVERSAL, categoryId = categoryId, accountPayoff = accountPayoff)
             next = Ledger.logAndMove(next, m, clock, ids()).first
         }
         return next
@@ -433,19 +435,23 @@ object Recurring {
      */
     private fun row(d: ProfileData, e: RecurringExpense, amount: Money, note: String, date: LocalDate?): Movement {
         val (categoryId, payoff) = filing(d, e)
-        return Movement(amount, TransactionKey.RecurringKey(e.id), e.name, note, date = date, categoryId = categoryId, cardPayoff = payoff)
+        return Movement(amount, TransactionKey.RecurringKey(e.id), e.name, note, date = date, categoryId = categoryId, accountPayoff = payoff)
     }
 
     /**
      * How a row of [e] written now is filed: under its category as it stands (SPEC R67); while it
-     * is linked to a card, as a card payoff counted in no spent (SPEC R67, R93), unless the card's
-     * charges are not logged, when it is filed under the card's payoff category and counts there
-     * (SPEC R109). Returns the category and whether the row is a card payoff.
+     * is linked to a card, as an Account payoff counted in no spent (SPEC R67, R93), unless the
+     * card's charges are not logged, when it is filed under the card's payoff category and counts
+     * there (SPEC R109); while it is linked to a Loan with a payment charged to it, as an Account
+     * payoff too, the purchase counting through its parts (SPEC R54, R67). Returns the category
+     * and whether the row is an Account payoff.
      */
     fun filing(d: ProfileData, e: RecurringExpense): Pair<String, Boolean> {
-        val card = e.linkedAccountId?.let { id -> d.accounts.firstOrNull { it.id == id && it.type == AccountType.CREDIT } }
-            ?: return e.categoryId to false
-        return Accounts.payoffCategory(d, card)?.let { it to false } ?: (e.categoryId to true)
+        val account = e.linkedAccountId?.let { id -> d.accounts.firstOrNull { it.id == id } } ?: return e.categoryId to false
+        return when (account.type) {
+            AccountType.CREDIT -> Accounts.payoffCategory(d, account)?.let { it to false } ?: (e.categoryId to true)
+            AccountType.LOAN -> e.categoryId to d.payments.any { it.source == PaymentSource.Account(account.id) }
+        }
     }
 
     /** Whether [e] is a card's payment (SPEC R93): linked to an Account of type credit. */

@@ -81,13 +81,13 @@ class ChargesNotLoggedTest {
         val on = world(card(linked = "fix")).copy(recurringExpenses = listOf(fixed))
         val swept = Recurring.sweepOccurrences(on, "fix", LocalDate(2026, 9, 1), clock) { ids.next() }.first
         val row = swept.transactions.single()
-        assertEquals("shop" to false, row.categoryId to row.cardPayoff)
+        assertEquals("shop" to false, row.categoryId to row.accountPayoff)
         assertEquals(cents("50.00"), shop(swept, "2026-09")); assertEquals(0L, Spent.of(swept, "home", "2026-09"))
         val returned = Recurring.delete(swept, "fix", reverse = true, clock) { ids.next() }
         assertEquals(0L, shop(returned, "2026-09"))
         val off = world(card(on = false, linked = "fix")).copy(recurringExpenses = listOf(fixed))
         val sweptOff = Recurring.sweepOccurrences(off, "fix", LocalDate(2026, 9, 1), clock) { ids.next() }.first
-        assertTrue(sweptOff.transactions.single().cardPayoff)
+        assertTrue(sweptOff.transactions.single().accountPayoff)
         assertEquals(0L, shop(sweptOff, "2026-09")); assertEquals(0L, Spent.of(sweptOff, "home", "2026-09"))
     }
 

@@ -61,8 +61,8 @@ data class Movement(
     val rate: Money? = null,
     /** A recurring sweep's category at sweep time (owner answer 2 of 2026-11-24), or a card's payoff category (SPEC R109). */
     val categoryId: String? = null,
-    /** A `rec:` row of an expense linked to a card: counted in no spent (SPEC R67, R93). */
-    val cardPayoff: Boolean = false,
+    /** A `rec:` row of an expense linked to a card, or to a Loan with a payment charged to it: counted in no spent (SPEC R67, R93). */
+    val accountPayoff: Boolean = false,
 )
 
 object Ledger {
@@ -84,14 +84,14 @@ object Ledger {
     /**
      * What [tx] counts as spending, read as it was written (SPEC R25, R109), or null for none: a
      * `cat:` adjustment in its own category; a sweep in the category it was filed under, unless it
-     * is a card payoff (SPEC R67); a `savings` or `spend:` row filed under a card's payoff
+     * is an Account payoff (SPEC R67); a `savings` or `spend:` row filed under a card's payoff
      * category by minus its amount, the money that left Savings or the Goal (SPEC R109); an
      * `acct:` row filed under a category by its amount, a card's interest or fees (SPEC R110).
      * Every other row, income, transfers and corrections, counts nowhere.
      */
     fun spent(tx: Transaction): RowSpent? = when (val k = TransactionKey.parse(tx.key)) {
         is TransactionKey.CategoryKey -> RowSpent(k.id, tx.amount)
-        is TransactionKey.RecurringKey -> if (tx.cardPayoff) null else RowSpent(tx.categoryId, tx.amount)
+        is TransactionKey.RecurringKey -> if (tx.accountPayoff) null else RowSpent(tx.categoryId, tx.amount)
         TransactionKey.SavingsKey, is TransactionKey.GoalSpendKey -> tx.categoryId?.let { RowSpent(it, -tx.amount) }
         is TransactionKey.AccountKey -> tx.categoryId?.let { RowSpent(it, tx.amount) }
         is TransactionKey.GoalKey -> null
@@ -116,7 +116,7 @@ object Ledger {
             hoursWorked = m.hoursWorked,
             rate = m.rate,
             categoryId = m.categoryId,
-            cardPayoff = m.cardPayoff,
+            accountPayoff = m.accountPayoff,
         )
         val effect = savingsEffect(tx)
         var next = d.copy(transactions = d.transactions + tx)

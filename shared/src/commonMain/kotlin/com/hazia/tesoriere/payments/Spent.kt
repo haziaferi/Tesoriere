@@ -22,7 +22,7 @@ object Spent {
      * The category's spent for month [ym] (`YYYY-MM`): its parts of payments dated that month, a
      * refund's lowering it, and the ledger rows dated that month that count in it as written
      * (Ledger.spent): its adjustments, the recurring expense rows filed under it (SPEC R25, R67)
-     * other than a card's payment's, a card payoff being a transfer whose charges count already
+     * other than an Account payoff's, a card's or a Loan's payment being a transfer whose charges count already
      * through their parts (SPEC R93, owner answer A of 2026-11-25), and the payoff rows of a card
      * whose charges are not logged, filed under it (SPEC R109).
      */

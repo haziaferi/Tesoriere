@@ -197,3 +197,7 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R94 · changed · a card changed to a Loan clears its fees category · owner
 - 2026-11-25 · R99 · changed · a card's interest and fees are in their category's slice · owner
 - 2026-11-25 · R101 · changed · a card's interest and fees are expenses · owner
+- 2026-11-25 · R67 · changed · a Loan's payment is a transfer once a payment is charged to the Loan, as written on each row; earlier months stay as they were · owner
+- 2026-11-25 · R25 · changed · a Loan's payment's rows count in no spent once a payment is charged to the Loan · owner
+- 2026-11-25 · R99 · changed · a Loan's payment's sweeps are in no slice once a payment is charged to the Loan · owner
+- 2026-11-25 · R101 · changed · a Loan's payment's sweeps are no expense once a payment is charged to the Loan · owner
