@@ -282,3 +282,9 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R122 · changed · CANNOT_PAIR refuses a restore as a pair that R119 would refuse · builder
 - 2026-11-25 · R123 · changed · finished expenses and a logged card's payoff category count as filing under the category; fees and Loan categories move too · builder
 - 2026-11-25 · R41 · changed · a deleted receipt payment whose bank row was recorded meanwhile may be restored as its pair · builder
+- 2026-11-25 · R127 · added · a payment restored as the pair of a payment recorded since, from either side; the receipt side keeps its own parts · builder
+- 2026-11-25 · R125 · changed · the restore as a pair moves to R127 · builder
+- 2026-11-25 · R122 · changed · CANNOT_PAIR names R127's pairs from either side · builder
+- 2026-11-25 · R119 · changed · each payment that took a row's keys while the review was open stands for one row only · builder
+- 2026-11-25 · R23 · changed · only pairing writes a difference part; an edit keeps one the payment already holds · builder
+- 2026-11-25 · R41 · changed · the restore as a pair cites R127 · builder
