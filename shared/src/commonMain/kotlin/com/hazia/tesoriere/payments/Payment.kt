@@ -94,6 +94,11 @@ data class Payment(
     val receiptId: String? = null,
     val receiptLines: List<ReceiptLine> = emptyList(),
     val bankKeys: BankKeys? = null,
+    /**
+     * A payment from a Goal short of its total: the share Savings paid, the Goal paying the rest
+     * (SPEC R54). Kept so undoing, editing or removing it restores both exactly; 0 otherwise.
+     */
+    val fromSavings: Money = 0,
 )
 
 /**
@@ -106,6 +111,9 @@ enum class PaymentNotice {
 
     /** Its source Account was deleted: editing, re-filing or removing it moves no balance (SPEC R88). */
     SOURCE_ACCOUNT_DELETED,
+
+    /** A draft from a Goal that holds less than its total: the Goal pays all it holds, Savings the rest (SPEC R54). */
+    GOAL_SHORT,
 }
 
 /** What the payment editor holds before it is saved. */

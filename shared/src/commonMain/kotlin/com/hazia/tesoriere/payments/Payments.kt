@@ -13,7 +13,9 @@ import com.hazia.tesoriere.model.StoredLabels
  * its own record and writes no ledger row; its source moves Savings, a Goal or an Account at
  * once, and its parts count in their categories' spent when read (SPEC R25). A refund is a
  * payment with a negative total and negative parts: the same arithmetic moves its source the
- * other way and lowers its categories' spent (SPEC R21, R23). The two rows: what
+ * other way and lowers its categories' spent (SPEC R21, R23). A payment from a Goal short of its
+ * total takes all the Goal holds and the rest from Savings, and keeps that share in
+ * [Payment.fromSavings], so undoing it restores both exactly (SPEC R54). The two rows: what
  * a payment from a Goal deleted since moves in Savings, when edited or removed, is logged as a
  * `savings` row, so the reports' replay of Savings (SPEC R95) still adds up to it; and a change to
  * what is charged to an Account deleted since is logged as an `acct:` row, so its rows and its
@@ -27,8 +29,9 @@ object Payments {
     /**
      * Whether the editor's save is on: a total other than zero, negative for a refund (SPEC R21),
      * parts in categories that exist, each of the total's sign, adding up to the total (SPEC R23),
-     * and a source that exists; a Goal pays at most what it holds (SPEC R54). When [editing] names
-     * the payment being edited, its own effect counts as undone.
+     * and a source that exists. A Goal short of the total is no reason to refuse: Savings pays
+     * the rest, after the warning of [draftNotice] (SPEC R54). When [editing] names the payment
+     * being edited, its own effect counts as undone.
      */
     fun canSave(d: ProfileData, draft: PaymentDraft, editing: String? = null): Boolean {
         if (draft.total == 0L || draft.parts.isEmpty() || remainder(draft) != 0L) return false
@@ -40,10 +43,33 @@ object Payments {
         return when (val s = draft.source) {
             PaymentSource.Savings -> true
             // a Goal deleted since stays this payment's source; it moves Savings instead (SPEC R54)
-            is PaymentSource.Goal -> base.goals.firstOrNull { it.id == s.id }?.let { draft.total <= it.saved } ?: (old?.source == s)
+            is PaymentSource.Goal -> base.goals.any { it.id == s.id } || old?.source == s
             // an Account deleted since stays this payment's source and moves no balance (SPEC R54, R88)
             is PaymentSource.Account -> base.accounts.any { it.id == s.id } || old?.source == s
         }
+    }
+
+    /**
+     * The share of [draft]'s total that Savings would pay because its Goal holds less (SPEC R54):
+     * the total less all the Goal holds, worked out against what it holds once the payment being
+     * edited has returned its own share; 0 for any other source, a refund, or a Goal deleted since.
+     */
+    fun fromSavings(d: ProfileData, draft: PaymentDraft, editing: String? = null): Money {
+        val s = draft.source as? PaymentSource.Goal ?: return 0
+        if (draft.total <= 0) return 0
+        val old = editing?.let { id -> d.payments.firstOrNull { it.id == id } }
+        val base = old?.let { undo(d, it) } ?: d
+        val goal = base.goals.firstOrNull { it.id == s.id }
+            // deleted since: the share it already took is kept, never more than the new total
+            ?: return if (old?.source == s) minOf(old.fromSavings, draft.total) else 0
+        return maxOf(0L, draft.total - maxOf(0L, goal.saved))
+    }
+
+    /** The warning code for a draft before it is saved, or null when there is none: a Goal short of its total (SPEC R54). */
+    fun draftNotice(d: ProfileData, draft: PaymentDraft, editing: String? = null): PaymentNotice? {
+        val s = draft.source as? PaymentSource.Goal ?: return null
+        if (d.goals.none { it.id == s.id }) return null
+        return PaymentNotice.GOAL_SHORT.takeIf { fromSavings(d, draft, editing) > 0 }
     }
 
     /** The warning code for a recorded payment whose source was deleted since, or null when there is none (SPEC R54). */
@@ -54,28 +80,33 @@ object Payments {
             PaymentSource.Savings, null -> null
         }
 
-    /** Records [draft] as a new payment and applies its source (SPEC R54). */
+    /** Records [draft] as a new payment and applies its source (SPEC R54), with Savings paying what a short Goal cannot. */
     fun record(d: ProfileData, draft: PaymentDraft, clock: Clock, id: String): ProfileData {
         require(canSave(d, draft)) { "the payment cannot be saved" }
         val p = Payment(
             id = id, profileId = d.profileId, date = draft.date, loggedAt = clock.now(), total = draft.total,
             source = draft.source, payee = draft.payee?.takeIf { it.isNotBlank() }, parts = draft.parts,
+            fromSavings = fromSavings(d, draft),
         )
         return apply(d, p).copy(payments = d.payments + p)
     }
 
     /**
      * Replaces a payment's date, total, source, payee and parts, undoing the old source's effect
-     * and applying the new one (SPEC R54). Its id, logged instant, receipt and bank keys stay.
+     * and applying the new one (SPEC R54), with the share Savings pays for a short Goal worked out
+     * again once the old share is returned. Its id, logged instant, receipt and bank keys stay.
      * What a Goal deleted since moves in Savings is logged as one `savings` row [txId], dated
      * today, when it is not zero.
      */
     fun edit(d: ProfileData, paymentId: String, draft: PaymentDraft, clock: Clock, txId: String): ProfileData {
         val old = d.payments.first { it.id == paymentId }
         require(canSave(d, draft, editing = paymentId)) { "the payment cannot be saved" }
-        val new = old.copy(date = draft.date, total = draft.total, source = draft.source, payee = draft.payee?.takeIf { it.isNotBlank() }, parts = draft.parts)
+        val new = old.copy(
+            date = draft.date, total = draft.total, source = draft.source, payee = draft.payee?.takeIf { it.isNotBlank() }, parts = draft.parts,
+            fromSavings = fromSavings(d, draft, editing = paymentId),
+        )
         var next = apply(undo(d, old), new)
-        val shift = deletedGoalShift(d, old.source, old.total) - deletedGoalShift(d, new.source, new.total)
+        val shift = deletedGoalShift(d, old) - deletedGoalShift(d, new)
         next = logDeletedGoalShift(next, shift, clock, txId)
         // canSave admits a deleted Goal or Account only as the payment's own source, so at most one row is logged
         next = logDeletedAccountShift(d, next, old, new, clock, txId)
@@ -84,12 +115,12 @@ object Payments {
 
     /**
      * Removes a payment and undoes its source's effect (SPEC R54); for a Goal deleted since, the
-     * money returned to Savings is logged as one `savings` row [txId], dated today, and for an
-     * Account deleted since, the charge taken off it as one `acct:` row [txId].
+     * money returned to Savings in its place is logged as one `savings` row [txId], dated today,
+     * and for an Account deleted since, the charge taken off it as one `acct:` row [txId].
      */
     fun remove(d: ProfileData, paymentId: String, clock: Clock, txId: String): ProfileData {
         val p = d.payments.firstOrNull { it.id == paymentId } ?: return d
-        var next = logDeletedGoalShift(undo(d, p), deletedGoalShift(d, p.source, p.total), clock, txId)
+        var next = logDeletedGoalShift(undo(d, p), deletedGoalShift(d, p), clock, txId)
         next = logDeletedAccountShift(d, next, p, null, clock, txId)
         return next.copy(payments = d.payments.filter { it.id != paymentId })
     }
@@ -110,9 +141,14 @@ object Payments {
         return Ledger.logAndMove(d, Movement(-change, key, label, StoredLabels.DELETED_ACCOUNT_PAYMENT), clock, txId).first
     }
 
-    /** What undoing [total] from [source] returns to Savings when the source is a Goal deleted since, else 0. */
-    private fun deletedGoalShift(d: ProfileData, source: PaymentSource, total: Money): Money =
-        if (source is PaymentSource.Goal && d.goals.none { it.id == source.id }) total else 0
+    /**
+     * What undoing [p] returns to Savings in its Goal's place when that Goal was deleted since:
+     * the Goal's share, the total less what Savings paid; 0 for any other source.
+     */
+    private fun deletedGoalShift(d: ProfileData, p: Payment): Money {
+        val s = p.source
+        return if (s is PaymentSource.Goal && d.goals.none { it.id == s.id }) p.total - p.fromSavings else 0
+    }
 
     /** The `savings` row that moves Savings in a deleted Goal's place (SPEC R54, R95); nothing for 0. */
     private fun logDeletedGoalShift(d: ProfileData, amount: Money, clock: Clock, txId: String): ProfileData =
@@ -120,17 +156,22 @@ object Payments {
         else Ledger.logAndMove(d, Movement(amount, TransactionKey.SavingsKey, StoredLabels.SAVINGS, StoredLabels.DELETED_GOAL_PAYMENT), clock, txId).first
 
     /**
-     * SPEC R54's table: Savings and a Goal go down by the total, an Account's balance goes up. A
-     * Goal or an Account deleted since moves nothing here: the Goal's Savings movement is logged
-     * as a ledger row by the caller ([logDeletedGoalShift]); the Account is gone.
+     * SPEC R54's table: Savings goes down by the total, a Goal by its share of it with Savings
+     * paying [fromSavings], an Account's balance goes up. A Goal or an Account deleted since moves
+     * nothing here: the Goal's Savings movement is logged as a ledger row by the caller
+     * ([logDeletedGoalShift]), though the share Savings paid moves Savings as it did; the Account
+     * is gone. A negative [total] is a refund, or an undo.
      */
-    private fun move(d: ProfileData, source: PaymentSource, total: Money): ProfileData = when (source) {
+    private fun move(d: ProfileData, source: PaymentSource, total: Money, fromSavings: Money): ProfileData = when (source) {
         // touching Savings ends its unset state, counting from zero (SPEC R49)
         PaymentSource.Savings -> d.copy(savings = d.savings.copy(amount = (d.savings.amount ?: 0) - total))
-        is PaymentSource.Goal -> d.copy(goals = d.goals.map { if (it.id == source.id) it.copy(saved = it.saved - total) else it })
+        is PaymentSource.Goal -> {
+            val g = d.copy(goals = d.goals.map { if (it.id == source.id) it.copy(saved = it.saved - (total - fromSavings)) else it })
+            if (fromSavings == 0L) g else g.copy(savings = g.savings.copy(amount = (g.savings.amount ?: 0) - fromSavings))
+        }
         is PaymentSource.Account -> d.copy(accounts = d.accounts.map { if (it.id == source.id) it.copy(balance = it.balance + total) else it })
     }
 
-    private fun apply(d: ProfileData, p: Payment) = move(d, p.source, p.total)
-    private fun undo(d: ProfileData, p: Payment) = move(d, p.source, -p.total)
+    private fun apply(d: ProfileData, p: Payment) = move(d, p.source, p.total, p.fromSavings)
+    private fun undo(d: ProfileData, p: Payment) = move(d, p.source, -p.total, -p.fromSavings)
 }

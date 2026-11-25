@@ -15,6 +15,7 @@ import com.hazia.tesoriere.payments.BankKeys
 import com.hazia.tesoriere.payments.Part
 import com.hazia.tesoriere.payments.Payment
 import com.hazia.tesoriere.payments.PaymentDraft
+import com.hazia.tesoriere.payments.PaymentNotice
 import com.hazia.tesoriere.payments.PaymentSource
 import com.hazia.tesoriere.payments.Spent
 import kotlinx.datetime.LocalDate
@@ -494,26 +495,28 @@ class StatementImportTest {
     }
 
     // SPEC:R107, R54
-    @Test fun `R107 rows of 100_00 and 14_00 from a Goal holding 110_00 keep confirm off, the first alone leaves 10_00`() {
+    @Test fun `R107 rows of 100_00 and 14_00 from a Goal holding 110_00 warn on the second and leave the Goal 0_00 and Savings 996_00, the first alone 10_00`() {
         val d = world()
         val rows = listOf(
             BankRow(LocalDate(2026, 3, 8), -10000, "PRELIEVO SPORTELLO 0412", null),
             BankRow(LocalDate(2026, 3, 7), -1400, "POS EDICOLA CENTRALE", null),
         )
+        // the review is newest first, so the 8 March row is taken first, as confirm writes them
         val both = StatementImport.review(d, rows, clock.today)
             .file("PRELIEVO SPORTELLO 0412", "groc" to "100.00", source = PaymentSource.Goal("cash"))
             .file("POS EDICOLA CENTRALE", "books" to "14.00", source = PaymentSource.Goal("cash"))
-        assertFalse(StatementImport.canConfirm(d, both))
+        assertTrue(StatementImport.canConfirm(d, both))
+        assertEquals(listOf(null, PaymentNotice.GOAL_SHORT), StatementImport.rowNotices(d, both))
+        val paidBoth = StatementImport.confirm(d, both, clock, ids::next)
+        assertEquals(0L, paidBoth.goals.single().saved)
+        assertEquals(cents("996.00"), paidBoth.savings.amount)
+        assertEquals(cents("4.00"), paidBoth.payments.single { it.payee == "POS EDICOLA CENTRALE" }.fromSavings)
         val first = both.tick("POS EDICOLA CENTRALE", false)
-        assertTrue(StatementImport.canConfirm(d, first))
+        assertEquals(listOf<PaymentNotice?>(null, null), StatementImport.rowNotices(d, first))
         val after = StatementImport.confirm(d, first, clock, ids::next)
         assertEquals(cents("10.00"), after.goals.single().saved)
         assertEquals(cents("1,000.00"), after.savings.amount)
         assertEquals(cents("100.00"), Spent.of(after, "groc", "2026-03"))
-        // one row above what the Goal holds is off on its own
-        val over = StatementImport.review(d, listOf(BankRow(LocalDate(2026, 3, 8), -12000, "PRELIEVO SPORTELLO 0412", null)), clock.today)
-            .file("PRELIEVO SPORTELLO 0412", "groc" to "120.00", source = PaymentSource.Goal("cash"))
-        assertFalse(StatementImport.canConfirm(d, over))
     }
 
     // SPEC:R107 SPEC:R21 SPEC:R26

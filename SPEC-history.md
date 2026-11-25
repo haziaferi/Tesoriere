@@ -171,3 +171,6 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R99 · changed · a refund lowers its categories' slices · owner
 - 2026-11-25 · R101 · changed · a refund lowers the expenses and is no income · owner
 - 2026-11-25 · R107 · changed · a row of money in can be recorded as a refund with its keys · owner
+- 2026-11-25 · R54 · changed · a Goal short of a payment's total pays all it holds and Savings the rest, after a warning; the payment keeps that share · owner
+- 2026-11-25 · R95 · changed · the share a Goal's payment took from Savings is money out of Savings · owner
+- 2026-11-25 · R107 · changed · a row from a Goal short of it takes the rest from Savings after a warning, instead of keeping Confirm off · owner

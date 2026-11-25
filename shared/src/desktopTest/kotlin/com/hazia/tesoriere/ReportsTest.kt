@@ -431,6 +431,13 @@ class ReportsTest {
         assertEquals(cents("1,450.00"), Reports.incomeVsExpenses(d, today).last().income)
     }
 
+    // SPEC:R95 SPEC:R54
+    @Test fun `R95 a 60_00 payment from a Goal holding 50_00 takes 10_00 out of Savings on its date`() {
+        val d0 = profile(goals = listOf(goal("g", "G", saved = "50.00")), categories = listOf(category("c", "Food")))
+        val d = Payments.record(d0, PaymentDraft(today, cents("60.00"), PaymentSource.Goal("g"), null, listOf(Part("c", cents("60.00")))), TestClock(today), "p")
+        assertEquals(listOf(today to cents("-10.00")), Reports.savingsMovements(d).map { it.date to it.effect })
+    }
+
     // SPEC:R95 SPEC:R96 SPEC:R98 SPEC:R21
     @Test fun `R95 a 30_00 refund to Savings on 1 September is money in, Age of Money 13 days, and a 460_00 refund is no outflow for Coverage`() {
         val clock = TestClock(today); val ids = Ids("pay")

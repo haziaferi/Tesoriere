@@ -18,7 +18,9 @@ import kotlin.time.Instant
  * Changed from Sci-Fin:
  * - Every expense is a payment, which writes no ledger row (SPEC R54). The movements of Savings
  *   are the ledger rows by their Savings effect plus the payments from Savings, each out by its
- *   total (SPEC R95, [savingsMovements]); a payment from a Goal or charged to an Account is none.
+ *   total (SPEC R95, [savingsMovements]), a refund's coming in; a payment from a Goal moves
+ *   Savings only by the share Savings paid when the Goal was short (SPEC R54), and one charged to
+ *   an Account is none.
  * - Spending counts what was spent, composed by category from Spent.of (SPEC R25): the parts of
  *   payments from any source, so a split payment counts in each of its categories, the `cat:`
  *   adjustments, and the sweep rows filed under the category (SPEC R67). Sci-Fin's slice per
@@ -72,7 +74,11 @@ object Reports {
         val rows = d.transactions.mapNotNull { t ->
             Ledger.savingsEffect(t).takeIf { it != 0L }?.let { SavingsMovement(t.date, t.loggedAt, it) }
         }
-        val paid = d.payments.filter { it.source == PaymentSource.Savings }.map { SavingsMovement(it.date, it.loggedAt, -it.total) }
+        // a payment from Savings by its total, a refund's coming in; one from a short Goal by the share Savings paid (SPEC R54)
+        val paid = d.payments.mapNotNull { p ->
+            val out = if (p.source == PaymentSource.Savings) p.total else if (p.source is PaymentSource.Goal) p.fromSavings else 0L
+            if (out == 0L) null else SavingsMovement(p.date, p.loggedAt, -out)
+        }
         return (rows + paid).sortedWith(compareBy({ it.date }, { it.loggedAt }))
     }
 

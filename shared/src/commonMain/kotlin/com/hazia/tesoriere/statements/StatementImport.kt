@@ -13,6 +13,7 @@ import com.hazia.tesoriere.model.StoredLabels
 import com.hazia.tesoriere.payments.BankKeys
 import com.hazia.tesoriere.payments.Part
 import com.hazia.tesoriere.payments.PaymentDraft
+import com.hazia.tesoriere.payments.PaymentNotice
 import com.hazia.tesoriere.payments.PaymentSource
 import com.hazia.tesoriere.payments.Payments
 import kotlinx.datetime.LocalDate
@@ -56,6 +57,9 @@ import kotlin.math.abs
  *   kept under the whole payee still matches.
  * - canConfirm() replaces `unassigned()`: it also checks that a draft's parts add up (SPEC R23),
  *   and an outflow sent into a Goal holds it back, as Sci-Fin's `goal:` target on an outflow did.
+ *   A row paid from a Goal short of it takes the rest from Savings, with the warning code of
+ *   rowNotices() (SPEC R54, owner answer H of 2026-11-25, in place of answer 6 of 2026-11-24,
+ *   which kept Confirm off).
  *   confirmSummary() gives the count and the money out and in apart, the figures of Sci-Fin's
  *   `importSummary()` line, as figures with no sentence (SPEC R16, R107).
  * - An outflow is RECURRING also when its amount is a recurring expense's amount, or what its rows
@@ -420,38 +424,54 @@ object StatementImport {
     /**
      * Whether the review's Confirm is on (SPEC R107): every ticked outflow is either a payment
      * whose parts add up and whose source exists (SPEC R23, R54) or a payoff of an Account that
-     * exists, and none is sent into a Goal. Rows paying from the same Goal are taken in turn, as
-     * [confirm] writes them, so two that together pay more than it holds are caught here.
+     * exists, and none is sent into a Goal; a ticked row of money in filed as a refund is a
+     * payment whose parts add up, sent into no Goal (SPEC R21). A Goal short of a row is no reason
+     * to refuse: Savings pays the rest, after the warning of [rowNotices] (SPEC R54).
      */
-    fun canConfirm(d: ProfileData, rows: List<ReviewRow>): Boolean {
+    fun canConfirm(d: ProfileData, rows: List<ReviewRow>): Boolean = walk(d, rows).first
+
+    /**
+     * The warning code of each row, in the order given, or null: [PaymentNotice.GOAL_SHORT] for a
+     * ticked row paid from a Goal that holds less than it once the ticked rows before it are
+     * taken, in the order [confirm] writes them (SPEC R54, R107).
+     */
+    fun rowNotices(d: ProfileData, rows: List<ReviewRow>): List<PaymentNotice?> = walk(d, rows).second
+
+    /** Walks the rows as [confirm] writes them, keeping what each Goal holds: whether all can be recorded, and each row's notice. */
+    private fun walk(d: ProfileData, rows: List<ReviewRow>): Pair<Boolean, List<PaymentNotice?>> {
         val holds = d.goals.associate { it.id to it.saved }.toMutableMap()
-        for (rr in rows) {
-            if (!rr.include) continue
-            if (rr.row.amount > 0) {
-                // money in is Savings, a Goal, or a refund: a payment whose parts add up (SPEC R21, R23, R107)
-                val refund = recorded(rr) ?: continue
-                if (rr.incomingGoalId != null || rr.payoffAccountId != null || !Payments.canSave(d, refund)) return false
-                (refund.source as? PaymentSource.Goal)?.let { s -> holds[s.id]?.let { holds[s.id] = it - refund.total } }
-                continue
-            }
-            if (rr.incomingGoalId != null) return false
-            val payoff = rr.payoffAccountId
-            val draft = recorded(rr)
-            when {
-                payoff != null && draft == null -> if (d.accounts.none { it.id == payoff }) return false
-                draft != null && payoff == null -> {
-                    if (!Payments.canSave(d, draft)) return false
-                    val s = draft.source
-                    if (s is PaymentSource.Goal) {
-                        val left = holds[s.id] ?: return false
-                        if (draft.total > left) return false
-                        holds[s.id] = left - draft.total
-                    }
-                }
-                else -> return false
-            }
+        var ok = true
+        val notices = ArrayList<PaymentNotice?>(rows.size)
+        /** Takes [total] from Goal [id] as a payment does: all it holds at most; true when it held less. */
+        fun take(id: String, total: Money): Boolean {
+            val left = holds[id] ?: return false
+            holds[id] = maxOf(0L, left - total)
+            return total > left
         }
-        return true
+        for (rr in rows) {
+            var notice: PaymentNotice? = null
+            if (rr.include) {
+                val payoff = rr.payoffAccountId
+                val draft = recorded(rr)
+                val goal = (draft?.source as? PaymentSource.Goal)?.id
+                when {
+                    // money in is Savings, a Goal, or a refund: a payment whose parts add up (SPEC R21, R23, R107)
+                    rr.row.amount > 0 -> if (draft != null) {
+                        if (rr.incomingGoalId != null || payoff != null || !Payments.canSave(d, draft)) ok = false
+                        else if (goal != null) take(goal, draft.total)
+                    }
+                    rr.incomingGoalId != null -> ok = false
+                    payoff != null && draft == null -> if (d.accounts.none { it.id == payoff }) ok = false
+                    draft != null && payoff == null -> {
+                        if (!Payments.canSave(d, draft)) ok = false
+                        else if (goal != null && take(goal, draft.total)) notice = PaymentNotice.GOAL_SHORT
+                    }
+                    else -> ok = false
+                }
+            }
+            notices.add(notice)
+        }
+        return ok to notices
     }
 
     /** What the Confirm names (SPEC R107): the ticked rows' count, the money out and the money in, each positive. */
