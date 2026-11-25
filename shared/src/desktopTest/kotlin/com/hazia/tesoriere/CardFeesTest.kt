@@ -124,6 +124,15 @@ class CardFeesTest {
         assertEquals(AccountEditing.AccountProblem.RISE_CHOICE_MISSING, AccountEditing.problem(logged, logged.accounts.single().copy(balance = cents("320.00"))))
     }
 
+    // SPEC:R110 SPEC:R86
+    @Test fun `R110 a card with Fees as its fees category edited up as interest or fees under a picked category that does not exist is refused with its own code`() {
+        val d = world(card(balance = "312.50"))
+        val up = d.accounts.single().copy(balance = cents("320.00"))
+        assertEquals(AccountEditing.AccountProblem.RISE_CATEGORY_UNKNOWN, AccountEditing.problem(d, up, AccountEditing.BalanceRise.FEES, "nowhere"))
+        assertEquals(d, d.edited("320.00", picked = "nowhere"))
+        assertNull(AccountEditing.problem(d, up, AccountEditing.BalanceRise.FEES))
+    }
+
     // SPEC:R110 SPEC:R99
     @Test fun `R110 paying 320_00 off the card from Savings after its fees adds nothing to Fees or Spending`() {
         val d = world().increased("12.50").edited("320.00")

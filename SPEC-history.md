@@ -230,3 +230,5 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R94 · changed · a Loan changed to a card that cannot be saved changes nothing: its payment and the return stay · builder
 - 2026-11-25 · R107 · changed · Confirm records and checks the ticked rows oldest first, one day's rows in the review's order · builder
 - 2026-11-25 · R107 · changed · money sent into a Goal counts for the later rows paid from it in the same Confirm · builder
+- 2026-11-25 · R89 · changed · a picked category that does not exist refuses a Loan's payment by hand instead of being passed over · builder
+- 2026-11-25 · R110 · changed · a picked category that does not exist refuses a rise instead of being passed over · builder

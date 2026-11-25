@@ -282,6 +282,26 @@ class AccountsTest {
         assertEquals(cents("260.00"), Spent.of(linked, "bills", "2026-09"))
     }
 
+    // SPEC:R89 SPEC:R110
+    @Test fun `R89 a picked category that does not exist refuses a Loan payment by hand with a code, instead of counting in Car`() {
+        val clock = TestClock(today); val ids = Ids()
+        val loan = Account("l", Fixture.PROFILE, "Loan", type = AccountType.LOAN, balance = cents("4,000.00"), loanCategoryId = "c1")
+        val d = world(accounts = listOf(loan))
+        assertEquals(Accounts.QuickAddProblem.CATEGORY_UNKNOWN,
+            Accounts.quickAddProblem(d, "l", cents("200.00"), Accounts.Direction.PAYMENT, Accounts.PayoffFrom.Savings, categoryId = "nowhere"))
+        assertFailsWith<IllegalArgumentException> {
+            Accounts.quickAdd(d, "l", cents("200.00"), Accounts.Direction.PAYMENT, null, from = Accounts.PayoffFrom.Savings, clock = clock, categoryId = "nowhere") { ids.next() }
+        }
+        assertNull(Accounts.quickAddProblem(d, "l", cents("200.00"), Accounts.Direction.PAYMENT, Accounts.PayoffFrom.Savings))
+        // a card with Fees as its fees category refuses an increase picked under a category that does not exist
+        val card = card().copy(feesCategoryId = "c1")
+        assertEquals(Accounts.QuickAddProblem.CATEGORY_UNKNOWN,
+            Accounts.quickAddProblem(world(accounts = listOf(card)), "cc", cents("12.50"), Accounts.Direction.INCREASE, Accounts.PayoffFrom.None, categoryId = "nowhere"))
+        // a Loan with nothing to file under and no category picked has its own code
+        assertEquals(Accounts.QuickAddProblem.CATEGORY_MISSING,
+            Accounts.quickAddProblem(world(accounts = listOf(loan.copy(loanCategoryId = null))), "l", cents("200.00"), Accounts.Direction.PAYMENT, Accounts.PayoffFrom.Savings))
+    }
+
     // SPEC:R86 SPEC:R94 SPEC:R91
     @Test fun `R86 a Loan saves with no category of its own but not with one that does not exist, changed to a card it has none, and taken from the calculator it has its payment's`() {
         val clock = TestClock(today)

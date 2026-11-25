@@ -43,6 +43,8 @@ object AccountEditing {
         RISE_CHOICE_MISSING,
         /** A card's balance rises as interest or fees with no category that exists (SPEC R110). */
         RISE_CATEGORY_MISSING,
+        /** The category picked for interest or fees does not exist; it is never passed over for the fees category (SPEC R110). */
+        RISE_CATEGORY_UNKNOWN,
     }
 
     /**
@@ -61,6 +63,7 @@ object AccountEditing {
         if (draft.loanCategoryId != null && d.categories.none { it.id == draft.loanCategoryId }) return AccountProblem.LOAN_CATEGORY_UNKNOWN
         if (cardRise(d, draft)) {
             if (rise == null) return AccountProblem.RISE_CHOICE_MISSING
+            if (rise == BalanceRise.FEES && riseCategoryId != null && d.categories.none { it.id == riseCategoryId }) return AccountProblem.RISE_CATEGORY_UNKNOWN
             if (rise == BalanceRise.FEES && !Accounts.canRise(d, draft, riseCategoryId)) return AccountProblem.RISE_CATEGORY_MISSING
         }
         return null

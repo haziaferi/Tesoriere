@@ -518,6 +518,8 @@ class StatementImportTest {
         val own = d.copy(accounts = d.accounts.map { if (it.id == "loan") it.copy(loanCategoryId = "books") else it })
         assertTrue(StatementImport.canConfirm(own, review))
         assertEquals(cents("60.00"), Spent.of(StatementImport.confirm(own, review, clock, ids::next), "books", "2026-03"))
+        // a picked category that does not exist keeps Confirm off, never passed over for the Loan's own
+        assertFalse(StatementImport.canConfirm(own, review.map { it.copy(payoffCategoryId = "nowhere") }))
     }
 
     // SPEC:R107 SPEC:R89 SPEC:R67

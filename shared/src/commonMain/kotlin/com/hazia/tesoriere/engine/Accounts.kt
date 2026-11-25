@@ -204,22 +204,52 @@ object Accounts {
 
     /**
      * The category a rise of card [a]'s balance that is not a payment is filed under as interest
-     * or fees (SPEC R110): [picked], else the card's fees category, when it exists; null when
-     * none does. A card whose charges are not logged files its rises under none (SPEC R109).
+     * or fees (SPEC R110): [picked] when one is picked, else the card's fees category, when it
+     * exists; null when it does not. A picked category is never passed over for the fees
+     * category. A card whose charges are not logged files its rises under none (SPEC R109).
      */
     fun riseCategory(d: ProfileData, a: Account, picked: String? = null): String? {
         if (a.type != AccountType.CREDIT || a.chargesNotLogged) return null
-        return (picked ?: a.feesCategoryId)?.takeIf { id -> d.categories.any { it.id == id } }
+        return (picked ?: a.feesCategoryId)?.takeIf { categoryExists(d, it) }
     }
 
     /**
      * Whether [a]'s balance may rise other than by a payment charged to it (SPEC R89, R110): a
      * Loan always; a card as its interest or fees, filed under a category that exists, or under
-     * none while its charges are not logged (SPEC R109).
+     * none while its charges are not logged (SPEC R109). A picked category that does not exist
+     * refuses it either way.
      */
-    fun canRise(d: ProfileData, a: Account, picked: String? = null): Boolean = when (a.type) {
-        AccountType.LOAN -> true
-        AccountType.CREDIT -> a.chargesNotLogged || riseCategory(d, a, picked) != null
+    fun canRise(d: ProfileData, a: Account, picked: String? = null): Boolean =
+        (picked == null || categoryExists(d, picked)) && when (a.type) {
+            AccountType.LOAN -> true
+            AccountType.CREDIT -> a.chargesNotLogged || riseCategory(d, a, picked) != null
+        }
+
+    private fun categoryExists(d: ProfileData, id: String) = d.categories.any { it.id == id }
+
+    /** Why a quick-add cannot be logged, as a code; how it reads is the design pass's (SPEC R16). */
+    enum class QuickAddProblem {
+        /** The category picked for it does not exist; it is never passed over (SPEC R89, R110). */
+        CATEGORY_UNKNOWN,
+        /** It counts as spending and has no category to count in: a card's rise with no fees category, a Loan's payment with none of its own (SPEC R89, R110). */
+        CATEGORY_MISSING,
+        /** A payoff from a Goal that does not exist or holds less than it (SPEC R89). */
+        GOAL_SHORT,
+    }
+
+    /** Why [quickAdd] would refuse these inputs, or null when it would log them (SPEC R89, R110). */
+    fun quickAddProblem(
+        d: ProfileData, accountId: String, amount: Money, direction: Direction, from: PayoffFrom, categoryId: String? = null,
+    ): QuickAddProblem? {
+        val a = d.accounts.first { it.id == accountId }
+        if (categoryId != null && !categoryExists(d, categoryId)) return QuickAddProblem.CATEGORY_UNKNOWN
+        if (direction == Direction.INCREASE) return if (canRise(d, a, categoryId)) null else QuickAddProblem.CATEGORY_MISSING
+        if (!canPayOff(d, a, from, categoryId)) return QuickAddProblem.CATEGORY_MISSING
+        if (from is PayoffFrom.Goal) {
+            val goal = d.goals.firstOrNull { it.id == from.id }
+            if (goal == null || amount > goal.saved) return QuickAddProblem.GOAL_SHORT
+        }
+        return null
     }
 
     /** A quick-add's direction: PAYMENT lowers the balance, INCREASE raises it: a Loan, or a card's interest or fees (SPEC R89, R110). */
@@ -255,16 +285,9 @@ object Accounts {
         clock: Clock, date: LocalDate? = null, categoryId: String? = null, ids: () -> String,
     ): ProfileData {
         val a = d.accounts.first { it.id == accountId }
-        require(direction == Direction.PAYMENT || canRise(d, a, categoryId)) {
-            "a card takes an increase only as interest or fees in a category that exists; a charge is a payment (SPEC R22, R110)"
-        }
-        require(direction == Direction.INCREASE || canPayOff(d, a, from, categoryId)) {
-            "a payment off a Loan with nothing charged to it counts as spending and needs a category (SPEC R89)"
-        }
+        val problem = quickAddProblem(d, accountId, amount, direction, from, categoryId)
+        require(problem == null) { "the quick-add cannot be logged: $problem (SPEC R89, R110)" }
         val goal = (from as? PayoffFrom.Goal)?.takeIf { direction == Direction.PAYMENT }?.let { f -> d.goals.firstOrNull { it.id == f.id } }
-        if (direction == Direction.PAYMENT && from is PayoffFrom.Goal) {
-            require(goal != null && amount <= goal.saved) { "a payoff from a Goal takes at most what it holds (SPEC R89)" }
-        }
         val signed = if (direction == Direction.PAYMENT) -amount else amount
         val note = payee ?: if (direction == Direction.PAYMENT) StoredLabels.PAID_OFF else StoredLabels.INCREASED
         val rise = if (direction == Direction.INCREASE) riseCategory(d, a, categoryId) else null
@@ -303,24 +326,27 @@ object Accounts {
     /**
      * The category the `savings` or `spend:` row of a payment off [a] is filed under as it is
      * written, or null for a transfer: a card's payoff category while its charges are not logged
-     * (SPEC R109); for a Loan with nothing charged to it, [picked], else the Loan's own, else its linked payment's
-     * category, when it exists (SPEC R89).
+     * (SPEC R109); for a Loan with nothing charged to it, [picked] when one is picked and it
+     * exists, never passed over, else the Loan's own category, else its linked payment's, the
+     * first that exists (SPEC R89).
      */
     fun payoffFiling(d: ProfileData, a: Account, picked: String? = null): String? = when (a.type) {
         AccountType.CREDIT -> payoffCategory(d, a)
-        AccountType.LOAN -> if (hasCharges(d, a)) null else {
+        AccountType.LOAN -> if (hasCharges(d, a)) null else if (picked != null) picked.takeIf { categoryExists(d, it) } else {
             val linked = a.linkedRecurringExpenseId?.let { id -> d.recurringExpenses.firstOrNull { it.id == id }?.categoryId }
-            listOfNotNull(picked, a.loanCategoryId, linked).firstOrNull { id -> d.categories.any { it.id == id } }
+            listOfNotNull(a.loanCategoryId, linked).firstOrNull { categoryExists(d, it) }
         }
     }
 
     /**
      * Whether a payment off [a] from [from] can be logged (SPEC R89): a payment off a Loan from
      * Savings or a Goal while nothing is charged to it counts as spending, so it needs a category,
-     * [picked], the Loan's own or the linked payment's; every other payment can.
+     * [picked], the Loan's own or the linked payment's; every other payment can. A picked
+     * category that does not exist refuses it either way.
      */
     fun canPayOff(d: ProfileData, a: Account, from: PayoffFrom, picked: String? = null): Boolean =
-        a.type != AccountType.LOAN || from == PayoffFrom.None || hasCharges(d, a) || payoffFiling(d, a, picked) != null
+        (picked == null || categoryExists(d, picked)) &&
+            (a.type != AccountType.LOAN || from == PayoffFrom.None || hasCharges(d, a) || payoffFiling(d, a, picked) != null)
 
     /** A Loan with no rate cannot follow its payment: the update has nothing to work out from (SPEC R86). */
     fun loanInputsComplete(a: Account): Boolean = a.type == AccountType.LOAN && a.interestRate != null
