@@ -103,6 +103,7 @@ Kinds: O owner rule · D decided · I inherited · A assumed · Q open.
 | D-R112 | The receipt Profile | 14. Chatelaine receipts |
 | D-R29 | Picking up receipts | 14. Chatelaine receipts |
 | D-R30 | Receipt files Tesoriere cannot take | 14. Chatelaine receipts |
+| D-R116 | Scanning the receipt folder | 14. Chatelaine receipts |
 | D-R31 | Receipt review | 14. Chatelaine receipts |
 | D-R32 | Category links | 14. Chatelaine receipts |
 | D-R33 | Closing a review | 14. Chatelaine receipts |
@@ -1675,6 +1676,29 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
+### D-R116 · Scanning the receipt folder
+
+**Rule:** A scan reads, in name order, the receipt folder's files whose names end in `.json`, passes over every other name, such as the temporary name Chatelaine writes under (Chatelaine's spec, rule 123), and writes nothing, to the folder or to the Profile (R27, R29). Each file read takes the first row below that fits: a receipt is new while its id is not among the receipt Profile's recorded ids (R112, R115), and one id met in two files of a scan is offered once, from the first. The count of receipts waiting is the number ready to review, and a Profile that does not hold the receipt folder scans nothing.
+
+**Values:**
+
+| Check, in this order | The file is |
+|---|---|
+| it cannot be read, or is not a receipt file | refused as unreadable (R30) |
+| its format is above the highest Tesoriere reads, 1 | refused, naming its format (R30) |
+| its receipt id is recorded | left out, not listed (R30) |
+| its receipt id was met in an earlier file of this scan | left out, not listed |
+| its currency is not the Profile's | refused, naming both currencies (R30, R47) |
+| none of the above | ready to review (R29) |
+
+**Evidence:** Only names ending in `.json` are read: builder, 2026-11-25, after Chatelaine's spec, rule 123, which writes a file under a temporary name and renames it once whole.
+
+**Acceptance:** Three new files give three receipts ready, a count of 3, and the Profile unchanged; a file whose receipt id is recorded is not listed; a format-2 file is refused naming 2; a USD file in a EUR Profile is refused naming USD and EUR; a file that is not JSON is refused as unreadable; two files holding one receipt id give one receipt; a file named `chatelaine-receipt-rc-9.part` is not read. Each leaves the Profile unchanged.
+
+**Not:** Recording on a scan: nothing is recorded before Confirm (R29, R31). Moving or deleting a file once it is recorded: the folder is read only (R27).
+
+**Since:** 2026-11-25 · builder · own words
+
 ### D-R31 · Receipt review
 
 **Rule:** A receipt is reviewed as one payment: its store, date and total, and its lines each in the Tesoriere category its category link gives (R32). A line can be moved to another category for this receipt only; no line can be left out. One Confirm, naming the total, records the payment; closing the review records nothing.
@@ -2020,6 +2044,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R112 · The receipt Profile: With the folder chosen in Profile A, Profile B is offered no folder and choosing one there is refused; a receipt opened for review in B cannot be confirmed, and the same receipt in A records one payment in A and none in B.
 - R29 · Picking up receipts: With the default, opening the app with three new files offers three receipts and runs no background work; with the daily check on, three new files give one notification that day; no receipt is recorded before its Confirm.
 - R30 · Receipt files Tesoriere cannot take: One file per row, put in the receipt folder, is listed with its reason (or, for a recorded id, not at all) and changes no figure.
+- R116 · Scanning the receipt folder: Three new files give three receipts ready, a count of 3, and the Profile unchanged; a file whose receipt id is recorded is not listed; a format-2 file is refused naming 2; a USD file in a EUR Profile is refused naming USD and EUR; a file that is not JSON is refused as unreadable; two files holding one receipt id give one receipt; a file named `chatelaine-receipt-rc-9.part` is not read. Each leaves the Profile unchanged.
 - R31 · Receipt review: A receipt of five lines in two categories records one payment of the receipt's total with two parts; moving one line to a third category gives three parts and changes no category link; closing the review leaves no payment.
 - R32 · Category links: A receipt with category Pulizia links to Tesoriere's pulizia; a later receipt with the same id named Pulizie stays linked and shows the names-differ note; a new category with no equal name keeps Confirm off until it is added or linked.
 - R33 · Closing a review: Adding a category in a review and closing it shows the warning; dismissing it returns to the review with the change intact; closing anyway leaves no new category and no new link.

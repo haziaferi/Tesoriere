@@ -244,3 +244,4 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R113 · added · how a review opens each line's category and the store's source, Savings when the kept source is gone · builder
 - 2026-11-25 · R114 · added · moving a line, linking or adding a Chatelaine category in the review; the notes; what counts as changes · builder
 - 2026-11-25 · R115 · added · Confirm records through the payment path, keeps every line and the receipt id; when Confirm stays off · builder
+- 2026-11-25 · R116 · added · a scan reads only names ending in .json, writes nothing, sorts each file; one id twice is offered once · builder
