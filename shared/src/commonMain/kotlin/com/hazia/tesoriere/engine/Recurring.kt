@@ -7,6 +7,7 @@ import com.hazia.tesoriere.model.Money
 import com.hazia.tesoriere.model.ProfileData
 import com.hazia.tesoriere.model.RecurringExpense
 import com.hazia.tesoriere.model.StoredLabels
+import com.hazia.tesoriere.model.Transaction
 import com.hazia.tesoriere.model.ceilDiv
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.number
@@ -20,9 +21,11 @@ import kotlinx.datetime.number
  *
  * Changed from Sci-Fin:
  * - Every recurring expense has a category (SPEC R67, owner answer 2 of 2026-11-24): `create` and
- *   `edit` require one that exists ([canSave]), and every `rec:` row written here (sweep, share,
- *   accepted difference, return on deletion) carries the expense's `categoryId` at that moment, so
- *   it counts in that category's spent for its month (SPEC R25).
+ *   `edit` require one that exists ([canSave]), and every sweep, share and accepted difference
+ *   written here carries the expense's `categoryId` at that moment, so it counts in that
+ *   category's spent for its month (SPEC R25). A return on deletion is filed under the category
+ *   of the rows it reverses, one row per category, never the expense's category of the day (SPEC
+ *   R66, owner answer of 2026-11-25).
  * - The rows' notes come from StoredLabels, not Sci-Fin's `stored()`.
  * - Sci-Fin's section references are replaced by SPEC rule numbers.
  */
@@ -321,21 +324,37 @@ object Recurring {
      * for due dates not yet passed, never the expense's `amount` (SPEC R66). Bimonthly and yearly:
      * the shares swept so far in the current cycle. A finished expense offers 0.
      */
-    fun reversalAmount(d: ProfileData, e: RecurringExpense, today: LocalDate): Money {
-        if (e.finishedAt != null) return 0
+    fun reversalAmount(d: ProfileData, e: RecurringExpense, today: LocalDate): Money =
+        reversedRows(d, e, today).sumOf { it.amount }
+
+    /** The expense's `rec:` rows a deletion offers back (SPEC R66); none for a finished expense. */
+    private fun reversedRows(d: ProfileData, e: RecurringExpense, today: LocalDate): List<Transaction> {
+        if (e.finishedAt != null) return emptyList()
         val rows = d.transactions.filter { it.key == TransactionKey.RecurringKey(e.id).stored }
         if (e.cadence.apportioned) {
             val prev = previousOccurrence(e)
-            return rows.filter { prev == null || it.date > prev }.sumOf { it.amount }
+            return rows.filter { prev == null || it.date > prev }
         }
         // A due date has passed from the start of the next day: due today is still ahead (SPEC R61).
-        return rows.filter { it.date >= today }.sumOf { it.amount }
+        return rows.filter { it.date >= today }
     }
 
-    /** The return on deletion: one `rec:` row of the opposite sign, dated today, filed under the expense's category (SPEC R66, R67). */
+    /**
+     * The return on deletion: `rec:` rows of the opposite sign, dated today, one per category the
+     * reversed rows were filed under, in the order those rows were logged (SPEC R66, R67).
+     * Nothing is written unless the whole return is above zero.
+     */
     fun applyReversal(d: ProfileData, e: RecurringExpense, clock: Clock, ids: () -> String): ProfileData {
-        val back = reversalAmount(d, e, clock.today())
-        return if (back > 0) Ledger.logAndMove(d, row(e, -back, StoredLabels.DELETION_REVERSAL, date = null), clock, ids()).first else d
+        val rows = reversedRows(d, e, clock.today())
+        if (rows.sumOf { it.amount } <= 0) return d
+        var next = d
+        for ((categoryId, filed) in rows.groupBy { it.categoryId }) {
+            val back = filed.sumOf { it.amount }
+            if (back == 0L) continue
+            val m = Movement(-back, TransactionKey.RecurringKey(e.id), e.name, StoredLabels.DELETION_REVERSAL, categoryId = categoryId)
+            next = Ledger.logAndMove(next, m, clock, ids()).first
+        }
+        return next
     }
 
     /**

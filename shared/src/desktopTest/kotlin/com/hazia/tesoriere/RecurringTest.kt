@@ -354,6 +354,34 @@ class RecurringTest {
         assertEquals(cents("-300.00"), back.amount); assertEquals("phone", back.categoryId); assertEquals(LocalDate(2026, 9, 20), back.date)
     }
 
+    // SPEC:R66 SPEC:R67 SPEC:R25
+    @Test fun `R66 a semimonthly 300_00 swept under Phone, moved to Internet and deleted on 20 September returns 300_00 under Phone`() {
+        val clock = TestClock(LocalDate(2026, 9, 1)); val ids = Ids()
+        var d = Recurring.create(world("2,000.00"), recurring("s", "300.00", Cadence.SEMIMONTHLY, LocalDate(2026, 9, 15), dueDate2 = LocalDate(2026, 9, 30), categoryId = "phone"), clock) { ids.next() }
+        clock.setDay(LocalDate(2026, 9, 20))
+        d = Recurring.edit(d, d.recurringExpenses[0].copy(categoryId = "net"), clock.today()).first
+        d = Recurring.delete(d, "s", reverse = true, clock) { ids.next() }
+        assertEquals(cents("300.00"), Spent.of(d, "phone", "2026-09"))
+        assertEquals(0L, Spent.of(d, "net", "2026-09"))
+        assertEquals("phone", d.transactions.last().categoryId)
+        assertEquals(cents("1,700.00"), d.savings.amount)
+    }
+
+    // SPEC:R66 SPEC:R67
+    @Test fun `R66 a yearly 100_00 share swept under Phone in August and Internet in September returns -100_00 under each`() {
+        val clock = TestClock(LocalDate(2026, 9, 14)); val ids = Ids()
+        val e = recurring("y", "1,200.00", Cadence.YEARLY, LocalDate(2026, 7, 15), dueDate = LocalDate(2027, 7, 15), share = "100.00", categoryId = "phone")
+        var d = withExpenses(world("2,000.00"), e)
+        d = Recurring.sweepOccurrences(d, "y", LocalDate(2026, 8, 1), clock) { ids.next() }.first
+        d = d.copy(recurringExpenses = d.recurringExpenses.map { it.copy(categoryId = "net") })
+        d = Recurring.sweepOccurrences(d, "y", LocalDate(2026, 9, 1), clock) { ids.next() }.first
+        d = Recurring.delete(d, "y", reverse = true, clock) { ids.next() }
+        val back = d.transactions.drop(2)
+        assertEquals(listOf("phone" to cents("-100.00"), "net" to cents("-100.00")), back.map { it.categoryId to it.amount })
+        assertTrue(back.all { it.date == LocalDate(2026, 9, 14) && it.key == "rec:y" })
+        assertEquals(cents("2,000.00"), d.savings.amount)
+    }
+
     // SPEC:R67 SPEC:R34
     @Test fun `R67 changing an expense's category files later sweeps under the new one and leaves past months`() {
         val clock = TestClock(LocalDate(2026, 9, 1)); val ids = Ids()
