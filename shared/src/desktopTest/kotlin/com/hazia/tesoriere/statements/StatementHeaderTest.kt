@@ -24,6 +24,15 @@ class StatementHeaderTest {
         assertEquals("POS CAFFE DEL MOLO", rows[0].description)
     }
 
+    // SPEC:R105 SPEC:R104
+    @Test fun `R105 with Debit and Credit columns a Value date column is not the amount, a debit of 3_50 gives -3_50`() {
+        val rows = StatementImport.parseCsv("Booking date,Value date,Description,Debit,Credit\n01/09/2026,04/09/2026,POS CAFFE DEL MOLO,3.50,\n")
+        assertEquals(1, rows.size)
+        assertEquals(LocalDate(2026, 9, 1), rows[0].date)
+        assertEquals(-350L, rows[0].amount)
+        assertEquals("POS CAFFE DEL MOLO", rows[0].description)
+    }
+
     // SPEC:R105
     @Test fun `R105 a Credit card number column is not the credit column, debit 800_00 and credit 12_00`() {
         val rows = StatementImport.parseCsv(

@@ -92,6 +92,21 @@ class StatementImportTest {
         assertNull(StatementImport.amount(null))
     }
 
+    // SPEC:R104
+    @Test fun `R104 a Unicode minus, an en dash and a DR suffix read -12_40, a CR suffix 12_40`() {
+        val cases = mapOf(
+            "−12,40" to -1240L, "–12,40" to -1240L, "12,40−" to -1240L,
+            "12,40 DR" to -1240L, "12,40DR" to -1240L, "12,40 dr" to -1240L, "12,40 CR" to 1240L, "1.234,56 Cr" to 123456L,
+        )
+        for ((raw, expected) in cases) assertEquals(expected, StatementImport.amount(raw), raw)
+    }
+
+    // SPEC:R104
+    @Test fun `R104 a day, a time or a word is no amount, so 04_03_2026 never reads 403,202_60`() {
+        for (raw in listOf("04/03/2026", "10:30", "EUR 12,40", "12,40 USD", "DR 12,40", "abc"))
+            assertNull(StatementImport.amount(raw), raw)
+    }
+
     // ---- keys and duplicates ---------------------------------------------------------------------
 
     // SPEC:R26

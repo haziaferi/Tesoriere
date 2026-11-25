@@ -23,7 +23,11 @@ import kotlin.math.abs
  *
  * Changed from Sci-Fin:
  * - amount() reads cents with whole-number arithmetic (SPEC R20, R104); Sci-Fin's went through a
- *   Double and rounded. A third decimal rounds the cent half up, as Sci-Fin's rounding did.
+ *   Double and rounded. A third decimal rounds the cent half up, as Sci-Fin's rounding did. A
+ *   text holding `/`, `:` or a letter (other than a trailing DR or CR) is no amount, where
+ *   Sci-Fin read a day's digits as one; the Unicode minus, the en dash and DR read as minus.
+ * - The amount keyword "value" never takes a header holding "date" (SPEC R105): Sci-Fin let a
+ *   Value date column become the amount of a Debit/Credit statement.
  * - An outflow becomes a payment (SPEC R21) with the row's keys in its bankKeys: Sci-Fin's string
  *   target becomes a PaymentDraft with a source and parts. `cat:` is a draft from Savings,
  *   `spend:` a draft from a Goal, `charge:` a draft from an Account (SPEC R22, R54), and any of
@@ -84,13 +88,25 @@ object StatementImport {
     /**
      * A statement amount in cents (SPEC R104), with whole-number arithmetic only (SPEC R20). When
      * both separators appear the last is the decimal point; with one, three trailing digits mean a
-     * thousands separator and any other count a decimal point. `(12,40)` and `12,40-` are -12.40.
+     * thousands separator and any other count a decimal point. `(12,40)`, `12,40-`, `−12,40` and
+     * `12,40 DR` are -12.40, `12,40 CR` is 12.40. A text holding `/`, `:` or any other letter is a
+     * day, a time or a word, never an amount.
      */
     fun amount(raw: String?): Money? {
         if (raw == null) return null
-        var t = raw.trim().filter { it.isDigit() || it in ".,-+()" }
+        var s = raw.trim()
+        // a trailing DR is money out, CR money in (SPEC R104)
+        val suffix = s.takeLast(2).uppercase().takeIf { s.length > 2 && (it == "DR" || it == "CR") }
+        if (suffix != null) s = s.dropLast(2)
+        if (s.any { it == '/' || it == ':' || it.isLetter() }) return null
+        // the Unicode minus and the en dash stand for a minus
+        var t = s.map { if (it == '−' || it == '–') '-' else it }.joinToString("").filter { it.isDigit() || it in ".,-+()" }
         if (t.isEmpty()) return null
-        val neg = (t.startsWith("(") && t.endsWith(")")) || t.startsWith("-") || t.endsWith("-")
+        val neg = when (suffix) {
+            "DR" -> true
+            "CR" -> false
+            else -> (t.startsWith("(") && t.endsWith(")")) || t.startsWith("-") || t.endsWith("-")
+        }
         t = t.filter { it !in "()-+" }
         if (t.isEmpty()) return null
         val lastDot = t.lastIndexOf('.')
@@ -205,16 +221,18 @@ object StatementImport {
      */
     private fun find(header: List<String>, keys: List<String>, claimed: Set<Int>): Int {
         val free = header.indices.filter { it !in claimed }
+        // the amount keyword "value" never takes "Value date" (SPEC R105)
+        fun fits(k: String, i: Int) = k != "value" || "date" !in words(header[i])
         for (k in keys) free.firstOrNull { header[it].trim() == k }?.let { return it }
         for (k in keys) {
             val kw = words(k)
             free.firstOrNull { i ->
                 val hw = words(header[i])
-                hw.size <= kw.size + 1 && hw.windowed(kw.size).any { it == kw }
+                fits(k, i) && hw.size <= kw.size + 1 && hw.windowed(kw.size).any { it == kw }
             }?.let { return it }
         }
         // a one-word compound still carries its key: German "Buchungsdatum", "Umsatzbetrag"
-        for (k in keys) free.firstOrNull { i -> words(header[i]).let { it.size == 1 && ' ' !in k && it[0].contains(k) } }?.let { return it }
+        for (k in keys) free.firstOrNull { i -> fits(k, i) && words(header[i]).let { it.size == 1 && ' ' !in k && it[0].contains(k) } }?.let { return it }
         return -1
     }
 
