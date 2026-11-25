@@ -45,7 +45,9 @@ import kotlin.math.abs
  *   the description's spacing one space and trims it first; Sci-Fin took it as written.
  * - A payee rule is learned from a row filed under one category, from any source; a split row
  *   teaches nothing (SPEC R108). Sci-Fin learned from a `cat:` target only. A rule pre-fills a
- *   one-part draft from Savings.
+ *   one-part draft from Savings. Rules are kept under [payeeRuleName], the payee less words with a
+ *   digit, masked card numbers and card-payment words, where Sci-Fin kept the whole payee; a rule
+ *   kept under the whole payee still matches.
  * - canConfirm() replaces `unassigned()`: it also checks that a draft's parts add up (SPEC R23),
  *   and an outflow sent into a Goal holds it back, as Sci-Fin's `goal:` target on an outflow did.
  *   confirmSummary() gives the count and the money out and in apart, the figures of Sci-Fin's
@@ -313,6 +315,22 @@ object StatementImport {
     fun normalisePayee(s: String): String =
         s.lowercase().replace(Regex("[^\\p{L}\\p{N} ]"), " ").replace(Regex("\\s+"), " ").trim()
 
+    /** The bank's words for a card payment, dropped from a rule name (SPEC R108). Kept short on purpose. */
+    private val PAYEE_NOISE = setOf("pos", "pagamento", "carta", "ore", "card", "payment")
+
+    /**
+     * The name a payee rule is kept under (SPEC R108): the payee less every word holding a digit
+     * (dates, times, terminal ids, card numbers), every word of three or more x's (a masked card
+     * number) and the card-payment words above; the whole payee when nothing is left.
+     */
+    fun payeeRuleName(description: String): String {
+        val payee = normalisePayee(description)
+        val kept = payee.split(' ').filter { w ->
+            w.isNotEmpty() && w.none { it.isDigit() } && w !in PAYEE_NOISE && !(w.length >= 3 && w.all { it == 'x' })
+        }
+        return kept.joinToString(" ").ifEmpty { payee }
+    }
+
     /** The payment an outflow [row] becomes: its day, its amount as the total, its description as the payee. */
     fun draft(row: BankRow, parts: List<Part>, source: PaymentSource = PaymentSource.Savings): PaymentDraft {
         require(row.amount < 0) { "only money out is a payment" }
@@ -340,8 +358,13 @@ object StatementImport {
                     RowStatus.RECURRING
                 else -> RowStatus.READY
             }
-            // a category is never guessed: only a rule the user taught pre-fills one (SPEC R108)
-            val rule = if (r.amount < 0) d.importState.payeeRules[payee]?.takeIf { id -> d.categories.any { it.id == id } } else null
+            // a category is never guessed: only a rule the user taught pre-fills one, kept under the
+            // row's rule name, else under its whole payee as a rule taught before rule names was (SPEC R108)
+            val rule = if (r.amount < 0) {
+                listOf(payeeRuleName(r.description), payee).firstNotNullOfOrNull { name ->
+                    d.importState.payeeRules[name]?.takeIf { id -> d.categories.any { it.id == id } }
+                }
+            } else null
             ReviewRow(
                 row = r, keys = keys, payee = payee, status = status,
                 include = status == RowStatus.READY || status == RowStatus.INCOMING,
@@ -424,7 +447,8 @@ object StatementImport {
                 else -> {
                     val draft = requireNotNull(recorded(rr))
                     val categories = draft.parts.mapNotNull { it.categoryId }.distinct()
-                    if (categories.size == 1 && rr.payee.isNotEmpty()) rules = rules + (rr.payee to categories.single())
+                    val name = payeeRuleName(r.description)
+                    if (categories.size == 1 && name.isNotEmpty()) rules = rules + (name to categories.single())
                     val id = ids()
                     val written = Payments.record(next, draft, clock, id)
                     written.copy(payments = written.payments.map { if (it.id == id) it.copy(bankKeys = rr.keys) else it })

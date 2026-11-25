@@ -156,3 +156,4 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R104 · changed · a three-letter currency code before or after the figure is ignored · builder
 - 2026-11-25 · R105 · changed · Italian headers (Data contabile, Data valuta, Causale, Dare, Avere and others) are read, and the booking date wins over the value date · builder
 - 2026-11-25 · R26 · changed · the synthetic key makes runs of spaces, tabs and non-breaking spaces one space and trims before taking 40 characters · builder
+- 2026-11-25 · R108 · changed · a payee rule is kept under a rule name that drops words holding a digit, masked card numbers and card-payment words · builder

@@ -202,7 +202,7 @@ class StatementImportTest {
         val first = StatementImport.review(d, march(), clock.today)
         assertNull(first.row("POS MERCATO VERDE 0412").draft)                       // never guessed on first sight
         val after = StatementImport.confirm(d, marchFiled(d), clock, ids::next)
-        assertEquals(mapOf("pos mercato verde 0412" to "groc"), after.importState.payeeRules)
+        assertEquals(mapOf("mercato verde" to "groc"), after.importState.payeeRules)       // kept under the rule name
         clock.setDay(LocalDate(2026, 4, 30))
         val next = StatementImport.review(after, april(), clock.today)
         val mercato = next.row("POS MERCATO VERDE 0412")
@@ -232,7 +232,7 @@ class StatementImportTest {
             .tick("POS MERCATO VERDE 0412", true)
             .file("POS MERCATO VERDE 0412", "groc" to "12.40", source = PaymentSource.Goal("cash"))
         val after = StatementImport.confirm(d, review, clock, ids::next)
-        assertEquals("groc", after.importState.payeeRules["pos mercato verde 0412"])
+        assertEquals("groc", after.importState.payeeRules["mercato verde"])
     }
 
     // SPEC:R108
@@ -245,6 +245,33 @@ class StatementImportTest {
     @Test fun `R108 the payee of POS star MERCATO-VERDE 0412 is pos mercato verde 0412`() {
         assertEquals("pos mercato verde 0412", StatementImport.normalisePayee("POS*MERCATO-VERDE  0412"))
         assertEquals("caffè äöü 12", StatementImport.normalisePayee("  Caffè/ÄÖÜ   12 "))
+    }
+
+    // SPEC:R108
+    @Test fun `R108 POS 03_03 MERCATO VERDE 0412 and PAGAMENTO POS 12_03_2026 ORE 10_22 MERCATO VERDE CARTA star 1234 both have the rule name mercato verde`() {
+        val pos = "POS 03/03 MERCATO VERDE 0412"
+        val card = "PAGAMENTO POS 12/03/2026 ORE 10:22 MERCATO VERDE CARTA ****1234"
+        assertEquals("mercato verde", StatementImport.payeeRuleName(pos))
+        assertEquals("mercato verde", StatementImport.payeeRuleName(card))
+        assertEquals("mercato verde", StatementImport.payeeRuleName("CARD PAYMENT MERCATO VERDE XXXX XXXX 1234"))
+        assertEquals("farmacia san lorenzo", StatementImport.payeeRuleName("FARMACIA SAN LORENZO"))
+        assertEquals("pos 0412", StatementImport.payeeRuleName("POS 0412"))                 // nothing left: the whole payee
+        assertEquals("pos mercato verde 0412", StatementImport.normalisePayee("POS MERCATO VERDE 0412"))  // the payee itself keeps every word
+    }
+
+    // SPEC:R108
+    @Test fun `R108 a rule learned from POS 03_03 MERCATO VERDE 0412 pre-fills PAGAMENTO POS 12_03_2026 MERCATO VERDE CARTA with 18_75 in Groceries`() {
+        val d = world()
+        val march = StatementImport.review(d, listOf(BankRow(LocalDate(2026, 3, 3), -1240, "POS 03/03 MERCATO VERDE 0412", null)), clock.today)
+            .file("POS 03/03 MERCATO VERDE 0412", "groc" to "12.40")
+        val after = StatementImport.confirm(d, march, clock, ids::next)
+        assertEquals(mapOf("mercato verde" to "groc"), after.importState.payeeRules)
+        val desc = "PAGAMENTO POS 12/03/2026 ORE 10:22 MERCATO VERDE CARTA ****1234"
+        val next = StatementImport.review(after, listOf(BankRow(LocalDate(2026, 3, 12), -1875, desc, null)), clock.today).single()
+        assertEquals(PaymentDraft(LocalDate(2026, 3, 12), 1875, PaymentSource.Savings, desc, listOf(Part("groc", 1875))), next.draft)
+        // a rule kept under the whole payee still matches it
+        val kept = d.copy(importState = d.importState.copy(payeeRules = mapOf("pos mercato verde 0412" to "groc")))
+        assertEquals(listOf(Part("groc", 1240)), StatementImport.review(kept, march(), clock.today).row("POS MERCATO VERDE 0412").draft?.parts)
     }
 
     // ---- the review --------------------------------------------------------------------------------
