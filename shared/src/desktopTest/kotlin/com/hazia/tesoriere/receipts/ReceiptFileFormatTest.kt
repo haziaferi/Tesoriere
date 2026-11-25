@@ -47,6 +47,23 @@ class ReceiptFileFormatTest {
         assertEquals("600 g", ok.file.lines[0].pack)
     }
 
+    // SPEC:R117 SPEC:R27 · Chatelaine's spec, rule 123: pack
+    @Test fun `R117 an empty pack reads as no pack`() {
+        val ok = assertIs<ParseResult.Ok>(parse("pack-empty.json"))
+        assertEquals(null, ok.file.lines[0].pack)
+    }
+
+    // SPEC:R117 SPEC:R30 · Chatelaine's spec, rule 123: currency, an ISO 4217 code
+    @Test fun `R117 currency eur reads as EUR and is taken in a EUR Profile`() {
+        assertEquals(ParseResult.Ok(example), parse("currency-lower.json"))
+    }
+
+    // SPEC:R117 SPEC:R30 · Chatelaine's spec, rule 123: format
+    @Test fun `R117 a format-2 file over 1 MiB is unreadable, not a newer format`() {
+        val big = "{\"format\":2,\"note\":\"" + "x".repeat(1_048_576) + "\"}"
+        assertEquals(ParseResult.Unreadable, ReceiptFileFormat.parse(big.encodeToByteArray()))
+    }
+
     // SPEC:R117 SPEC:R27 · Chatelaine's spec, rule 123: format
     @Test fun `R117 a file with no format is unreadable`() = unreadable("missing-format.json")
 

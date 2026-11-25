@@ -83,12 +83,13 @@ object ReceiptFileFormat {
         if (sum != total) throw Unreadable()
         return ReceiptFile(
             formatVersion = version, receiptId = text(o, "receiptId"), store = text(o, "store"),
-            date = LocalDate.parse(text(o, "date")), currency = text(o, "currency"), totalPaid = total, lines = lines,
+            date = LocalDate.parse(text(o, "date")), currency = text(o, "currency").uppercase(), totalPaid = total, lines = lines,
         )
     }
 
     private fun line(o: JsonObject): ReceiptFileLine {
-        val pack = o["pack"]?.let { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content ?: throw Unreadable() }
+        // an empty or blank pack is no pack (SPEC R117)
+        val pack = o["pack"]?.let { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content ?: throw Unreadable() }?.takeIf { it.isNotBlank() }
         val quantity = whole(o, "quantity")
         if (quantity < 1 || quantity > Int.MAX_VALUE) throw Unreadable()
         val price = whole(o, "pricePaid")
