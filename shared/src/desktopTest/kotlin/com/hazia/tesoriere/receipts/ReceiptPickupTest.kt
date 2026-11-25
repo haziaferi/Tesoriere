@@ -119,6 +119,36 @@ class ReceiptPickupTest {
         assertEquals(emptyList(), folder.reads)
     }
 
+    // SPEC:R116 SPEC:R30
+    @Test fun `R116 a parse that throws refuses that file as unreadable and the scan goes on`() {
+        val folder = MemoryFolder(mapOf(
+            "chatelaine-receipt-rc-1.json" to "overflow", "chatelaine-receipt-rc-2.json" to "boom", "chatelaine-receipt-rc-3.json" to "a",
+        ))
+        val throwing: (ByteArray) -> ParseResult = {
+            when (it.decodeToString()) {
+                "overflow" -> throw StackOverflowError()
+                "boom" -> throw IllegalStateException("made-up failure")
+                else -> parse(it)
+            }
+        }
+        val p = ReceiptPickup.scan(world(), folder, throwing)
+        assertEquals(listOf("rc-a"), names(p))
+        assertEquals(
+            listOf<Pair<String, Refusal>>("chatelaine-receipt-rc-1.json" to Refusal.Unreadable, "chatelaine-receipt-rc-2.json" to Refusal.Unreadable),
+            p.refused,
+        )
+        assertEquals(1, ReceiptPickup.waiting(world(), folder, throwing))
+    }
+
+    // SPEC:R116 SPEC:R117
+    @Test fun `R116 a file of 3,000 nested arrays read by the real parser is refused and the scan goes on`() {
+        val deep = """{"format":1,"x":""" + "[".repeat(3000)
+        val folder = MemoryFolder(mapOf("chatelaine-receipt-rc-1.json" to deep, "chatelaine-receipt-rc-2.json" to "a"))
+        val p = ReceiptPickup.scan(world(), folder) { if (it.decodeToString() == "a") parse(it) else ReceiptFileFormat.parse(it) }
+        assertEquals(listOf("rc-a"), names(p))
+        assertEquals(listOf<Pair<String, Refusal>>("chatelaine-receipt-rc-1.json" to Refusal.Unreadable), p.refused)
+    }
+
     // SPEC:R27
     @Test fun `R27 the receipt folder offers no way to write`() {
         assertEquals(setOf("names", "read"), ReceiptFolder::class.java.declaredMethods.map { it.name }.toSet())

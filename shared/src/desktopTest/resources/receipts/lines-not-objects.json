@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "receiptId": "3f6c2a9e-8b41-4d27-9c55-0e7a1b2d4f68",
+  "store": "Supermarket A",
+  "date": "2026-11-24",
+  "currency": "EUR",
+  "totalPaid": 1099,
+  "lines": [
+    "cookies Q"
+  ]
+}

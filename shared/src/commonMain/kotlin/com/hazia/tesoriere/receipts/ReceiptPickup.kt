@@ -54,8 +54,12 @@ object ReceiptPickup {
         val ready = mutableListOf<ReceiptFile>()
         val refused = mutableListOf<Pair<String, Refusal>>()
         for (name in folder.names().filter { it.endsWith(ENDING) }.sorted()) {
-            val bytes = folder.read(name)
-            val result = if (bytes == null) ParseResult.Unreadable else parse(bytes)
+            // one file that fails to read in any way is refused, and the scan goes on (SPEC R116)
+            val result = try {
+                folder.read(name)?.let(parse) ?: ParseResult.Unreadable
+            } catch (_: Throwable) {
+                ParseResult.Unreadable
+            }
             val file = when (result) {
                 ParseResult.Unreadable -> { refused += name to Refusal.Unreadable; continue }
                 is ParseResult.NewerFormat -> { refused += name to Refusal.NewerFormat(result.version); continue }

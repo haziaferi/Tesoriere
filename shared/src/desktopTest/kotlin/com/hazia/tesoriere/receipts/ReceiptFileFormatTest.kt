@@ -131,6 +131,67 @@ class ReceiptFileFormatTest {
         assertEquals(ParseResult.Unreadable, ReceiptFileFormat.parse(ByteArray(0)))
     }
 
+    // SPEC:R117 SPEC:R30 · Chatelaine's spec, rule 123: format, raised by a change to a key's meaning
+    @Test fun `R117 format 2 with a key of its own and every line in place gives NewerFormat 2`() {
+        assertEquals(ParseResult.NewerFormat(2), parse("format-2-new-key.json"))
+    }
+
+    // SPEC:R117 SPEC:R30 · Chatelaine's spec, rule 123: format, a whole number
+    @Test fun `R117 format 99999999999 gives NewerFormat 2147483647`() {
+        assertEquals(ParseResult.NewerFormat(Int.MAX_VALUE), parse("format-huge.json"))
+    }
+
+    // SPEC:R117 SPEC:R30 · Chatelaine's spec, rule 123: totalPaid, in whole cents
+    @Test fun `R117 a totalPaid written as text 1099 in quotes is unreadable`() = unreadable("total-quoted.json")
+
+    // SPEC:R117 SPEC:R115 · Chatelaine's spec, rules 123 and 124: totalPaid and pricePaid of a purchase
+    @Test fun `R117 a total of 0_00 or a line of -1_00 among lines that add up is unreadable`() {
+        unreadable("zero-total.json")
+        unreadable("negative-line.json")
+    }
+
+    // SPEC:R117 SPEC:R30 · Chatelaine's spec, rule 123: quantity, the number of packs bought
+    @Test fun `R117 a quantity of 0 is unreadable`() = unreadable("quantity-zero.json")
+
+    // SPEC:R117 SPEC:R30 · Chatelaine's spec, rule 123: store, currency, name, categoryId, categoryName
+    @Test fun `R117 a blank store, currency, line name, categoryId or categoryName is unreadable`() {
+        unreadable("blank-store.json")
+        unreadable("blank-currency.json")
+        unreadable("blank-line-name.json")
+        unreadable("blank-line-categoryId.json")
+        unreadable("blank-line-categoryName.json")
+    }
+
+    // SPEC:R117 SPEC:R30 · Chatelaine's spec, rule 123: pack as text, lines as objects
+    @Test fun `R117 a pack written as a number or lines that are not objects are unreadable`() {
+        unreadable("pack-not-text.json")
+        unreadable("lines-not-objects.json")
+    }
+
+    // SPEC:R117 SPEC:R30 · Chatelaine's spec, rule 123: totalPaid, the sum of the lines' pricePaid
+    @Test fun `R117 lines whose sum is too large to hold are unreadable`() = unreadable("sum-overflow.json")
+
+    // SPEC:R117 SPEC:R116
+    @Test fun `R117 a file of 3,000 nested arrays is unreadable and does not throw`() {
+        val deep = "{\"format\":1,\"x\":" + "[".repeat(3000)
+        assertEquals(ParseResult.Unreadable, ReceiptFileFormat.parse(deep.encodeToByteArray()))
+        val closed = "{\"format\":1,\"x\":" + "[".repeat(3000) + "]".repeat(3000) + "}"
+        assertEquals(ParseResult.Unreadable, ReceiptFileFormat.parse(closed.encodeToByteArray()))
+    }
+
+    // SPEC:R117
+    @Test fun `R117 a file over 1 MiB is unreadable and one just under reads`() {
+        val text = bytes("example.json").decodeToString().trimEnd()
+        fun padded(size: Int): ByteArray {
+            val head = text.dropLast(1) + ",\"note\":\""
+            val tail = "\"}"
+            return (head + "x".repeat(size - head.length - tail.length) + tail).encodeToByteArray()
+        }
+        assertEquals(1_048_576, padded(1_048_576).size)
+        assertEquals(ParseResult.Ok(example), ReceiptFileFormat.parse(padded(1_048_576)))
+        assertEquals(ParseResult.Unreadable, ReceiptFileFormat.parse(padded(1_048_577)))
+    }
+
     // SPEC:R30 SPEC:R116 SPEC:R117 · Chatelaine's spec, rule 123: file name and temporary name
     @Test fun `R30 a folder with one file per case lists each with its reason and changes no figure`() {
         val dir = File(requireNotNull(javaClass.getResource("/receipts/folder")).toURI())
