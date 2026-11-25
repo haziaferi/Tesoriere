@@ -221,3 +221,6 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R94 · changed · a Loan changed to a card clears its own category · owner
 - 2026-11-25 · R110 · changed · a card whose charges are not logged asks no fees-or-correction choice for a rise by hand · owner
 - 2026-11-25 · R86 · changed · a card whose charges are not logged asks no choice for a rise of its balance · owner
+- 2026-11-25 · R67 · changed · restated to the owner's rule; the rows of an expense linked to an Account move to R87 · owner
+- 2026-11-25 · R87 · changed · how a linked expense's rows count, by link at write time, moved here from R67 · owner
+- 2026-11-25 · R110 · changed · rule restated in two sentences; its cases are in the table · owner

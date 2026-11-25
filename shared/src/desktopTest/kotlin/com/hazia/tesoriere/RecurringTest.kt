@@ -306,7 +306,7 @@ class RecurringTest {
     }
 
     // SPEC:R67 SPEC:R54 SPEC:R25
-    @Test fun `R67 a Loan's 260_00 payment adds 260_00 to Car in September, and after a 9,800_00 car charged to the Loan in October its sweep is a transfer`() {
+    @Test fun `R67 R87 a Loan's 260_00 payment adds 260_00 to Car in September, and after a 9,800_00 car charged to the Loan in October its sweep is a transfer`() {
         val clock = TestClock(LocalDate(2026, 9, 1)); val ids = Ids()
         val e = recurring("pay", "260.00", Cadence.MONTHLY, LocalDate(2026, 9, 15), linkedAccountId = "loan", categoryId = "c1", name = "Car loan payment")
         val loan = Account("loan", Fixture.PROFILE, "Car loan", null, AccountType.LOAN, balance = cents("0.00"), linkedRecurringExpenseId = "pay")

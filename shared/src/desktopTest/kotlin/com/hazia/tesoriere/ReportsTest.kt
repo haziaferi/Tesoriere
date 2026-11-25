@@ -378,7 +378,7 @@ class ReportsTest {
     }
 
     // SPEC:R67 SPEC:R99 SPEC:R73
-    @Test fun `R67 a Loan's 229_70 payment swept under Car still counts 229_70 in Car's spent and Spending`() {
+    @Test fun `R67 R87 a Loan's 229_70 payment swept under Car still counts 229_70 in Car's spent and Spending`() {
         val clock = TestClock(today); val ids = Ids()
         var d = profile(savings = "5,000.00", categories = listOf(category("car", "Car")))
         d = Accounts.getLoan(d, cents("9,800.00"), 0.059, 48, RateType.FIXED, "Car loan", "Car loan payment", "car", false, clock) { ids.next() }
@@ -389,7 +389,7 @@ class ReportsTest {
     }
 
     // SPEC:R67 SPEC:R66 SPEC:R93
-    @Test fun `R67 a card's 40_00 payment released from the card, deleted with its return, lowers no spent and Savings is 1,000_00`() {
+    @Test fun `R67 R87 a card's 40_00 payment released from the card, deleted with its return, lowers no spent and Savings is 1,000_00`() {
         val clock = TestClock(today); val ids = Ids()
         var d = profile(categories = listOf(category("food", "Food")))
         d = AccountEditing.save(d, Account("cc", Fixture.PROFILE, "Card", type = AccountType.CREDIT), clock) { ids.next() }
