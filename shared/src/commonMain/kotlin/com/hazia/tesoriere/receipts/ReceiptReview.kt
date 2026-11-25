@@ -1,0 +1,228 @@
+package com.hazia.tesoriere.receipts
+
+import com.hazia.tesoriere.engine.Clock
+import com.hazia.tesoriere.model.AppState
+import com.hazia.tesoriere.model.Category
+import com.hazia.tesoriere.model.Money
+import com.hazia.tesoriere.model.ProfileData
+import com.hazia.tesoriere.payments.Part
+import com.hazia.tesoriere.payments.PaymentDraft
+import com.hazia.tesoriere.payments.PaymentNotice
+import com.hazia.tesoriere.payments.PaymentSource
+import com.hazia.tesoriere.payments.Payments
+import com.hazia.tesoriere.payments.ReceiptLine
+
+/*
+ * Tesoriere's own: Sci-Fin at 2892110 had no receipts. A receipt's review, from opening it to
+ * recording it as one payment (SPEC R31-R35, R112-R115). A review is a value: nothing in the
+ * Profile changes until [Receipts.confirm], so closing a review is simply not confirming it
+ * (SPEC R31, R33). The payment is recorded through Payments.record, so every source behaves as
+ * it does for any payment (SPEC R54, R109).
+ */
+
+/**
+ * A receipt under review. [lineCategories] holds, per line of [file], the Tesoriere category it is
+ * filed under, null while it has none (SPEC R113); [newLinks] are the links the user made in this
+ * review, Chatelaine category id to Tesoriere category id; [addedCategories] are the categories the
+ * user added in it (SPEC R114). Links made by name are not held here: Confirm makes them again
+ * from the Profile (SPEC R115).
+ */
+data class ReceiptReview(
+    val file: ReceiptFile,
+    val source: PaymentSource,
+    val lineCategories: List<String?>,
+    val newLinks: Map<String, String>,
+    val addedCategories: List<Category>,
+)
+
+/** What a review notes for one Chatelaine category (SPEC R114). Codes, not wording (SPEC R16). */
+sealed interface ReviewNote {
+    /** Linked before, to a Tesoriere category of another name. */
+    data class NamesDiffer(val chatelaineId: String) : ReviewNote
+
+    /** Linked by the user in this review to an existing category of another name: rename it in Chatelaine. */
+    data class RenameInChatelaine(val chatelaineId: String, val tesoriereCategoryId: String) : ReviewNote
+
+    /** No link, no equal name, no answer yet: Confirm stays off (SPEC R32). */
+    data class Unlinked(val chatelaineId: String) : ReviewNote
+}
+
+/** Why a review's Confirm is off, as a code, first match in this order (SPEC R115). */
+enum class ReceiptProblem {
+    /** This Profile does not hold the receipt folder (SPEC R112). */
+    NOT_RECEIPT_PROFILE,
+    /** The receipt id was recorded before (SPEC R30). */
+    ALREADY_RECORDED,
+    /** The receipt's currency is not the Profile's (SPEC R30, R47). */
+    OTHER_CURRENCY,
+    /** A Chatelaine category on the receipt has no link (SPEC R32, R114). */
+    UNLINKED,
+    /** A line has no category, or one that does not exist. */
+    CATEGORY_MISSING,
+    /** The payment could not be saved: parts that break SPEC R23, or a source that does not exist (SPEC R54). */
+    CANNOT_SAVE,
+}
+
+object Receipts {
+
+    /** Whether Profile [profileId] may be offered a receipt folder: no other Profile holds one (SPEC R28, R112). */
+    fun offersFolder(app: AppState, profileId: String): Boolean =
+        app.receiptProfileId == null || app.receiptProfileId == profileId
+
+    /** Makes [d]'s Profile the receipt Profile with [folder] (SPEC R112). Refused while another Profile holds one. */
+    fun chooseFolder(app: AppState, d: ProfileData, folder: String): Pair<AppState, ProfileData> {
+        require(offersFolder(app, d.profileId)) { "another Profile holds the receipt folder (SPEC R112)" }
+        val s = d.receiptSettings ?: ReceiptSettings(d.profileId)
+        return app.copy(receiptProfileId = d.profileId) to d.copy(receiptSettings = s.copy(folder = folder))
+    }
+
+    /** Opens [file] for review: each line in the category its link gives, the store's last source (SPEC R113). */
+    fun open(d: ProfileData, file: ReceiptFile): ReceiptReview = ReceiptReview(
+        file = file,
+        source = sourceFor(d, file.store),
+        lineCategories = file.lines.map { keptLink(d, it.categoryId) ?: byName(d, it.categoryName) },
+        newLinks = emptyMap(),
+        addedCategories = emptyList(),
+    )
+
+    /** Files line [index] under [categoryId], for this receipt only; no link changes (SPEC R31, R114). */
+    fun moveLine(r: ReceiptReview, index: Int, categoryId: String): ReceiptReview =
+        r.copy(lineCategories = r.lineCategories.toMutableList().also { it[index] = categoryId })
+
+    /** Links Chatelaine category [chatelaineId] to the existing category [categoryId] (SPEC R32, R114). */
+    fun link(r: ReceiptReview, chatelaineId: String, categoryId: String): ReceiptReview = answer(r, chatelaineId, categoryId, null)
+
+    /** Adds Chatelaine category [chatelaineId] as a new category [newCategoryId], with its Chatelaine name and 0.00 planned (SPEC R32, R114). */
+    fun addAsNew(r: ReceiptReview, chatelaineId: String, newCategoryId: String, profileId: String): ReceiptReview {
+        val name = r.file.lines.first { it.categoryId == chatelaineId }.categoryName.trim()
+        return answer(r, chatelaineId, newCategoryId, Category(newCategoryId, profileId, name, planned = 0))
+    }
+
+    fun setSource(r: ReceiptReview, source: PaymentSource): ReceiptReview = r.copy(source = source)
+
+    /**
+     * What waits for the user, one note per Chatelaine category in the order the lines first name
+     * them (SPEC R114): unlinked, names differ, or rename in Chatelaine.
+     */
+    fun notes(d: ProfileData, r: ReceiptReview): List<ReviewNote> = chatelaineCategories(r).mapNotNull { (id, name) ->
+        val answered = r.newLinks[id]
+        val kept = keptLink(d, id)
+        when {
+            answered != null -> d.categories.firstOrNull { it.id == answered }
+                ?.takeIf { !sameName(it.name, name) }?.let { ReviewNote.RenameInChatelaine(id, answered) }
+            kept != null -> ReviewNote.NamesDiffer(id).takeIf { !sameName(d.categories.first { it.id == kept }.name, name) }
+            byName(d, name) != null -> null
+            else -> ReviewNote.Unlinked(id)
+        }
+    }
+
+    /**
+     * The payment's parts: one per Tesoriere category whose lines add up to other than zero, in the
+     * order the lines first name them (SPEC R115). A line with no category gives a part with none,
+     * which no payment can be saved with.
+     */
+    fun parts(r: ReceiptReview): List<Part> {
+        val sums = LinkedHashMap<String?, Money>()
+        r.file.lines.forEachIndexed { i, l -> val c = r.lineCategories[i]; sums[c] = (sums[c] ?: 0L) + l.pricePaid }
+        return sums.filter { it.value != 0L }.map { (c, amount) -> Part(c, amount) }
+    }
+
+    /** Why Confirm is off, or null when it is on (SPEC R115). */
+    fun problem(d: ProfileData, r: ReceiptReview): ReceiptProblem? {
+        val s = d.receiptSettings
+        if (s?.folder == null) return ReceiptProblem.NOT_RECEIPT_PROFILE
+        if (r.file.receiptId in s.recordedReceiptIds) return ReceiptProblem.ALREADY_RECORDED
+        if (!r.file.currency.equals(d.settings.currency, ignoreCase = true)) return ReceiptProblem.OTHER_CURRENCY
+        if (notes(d, r).any { it is ReviewNote.Unlinked }) return ReceiptProblem.UNLINKED
+        val base = withAdded(d, r)
+        if (r.lineCategories.any { c -> c == null || base.categories.none { it.id == c } }) return ReceiptProblem.CATEGORY_MISSING
+        if (!Payments.canSave(base, draft(r))) return ReceiptProblem.CANNOT_SAVE
+        return null
+    }
+
+    fun canConfirm(d: ProfileData, r: ReceiptReview): Boolean = problem(d, r) == null
+
+    /** The warning the payment would carry, as for any payment: a Goal short of the total, a card whose charges are not logged (SPEC R54, R109). */
+    fun notice(d: ProfileData, r: ReceiptReview): PaymentNotice? = Payments.draftNotice(withAdded(d, r), draft(r))
+
+    /** Whether closing the review loses something the user did: a link or an added category (SPEC R33, R114). */
+    fun hasChanges(r: ReceiptReview): Boolean = r.newLinks.isNotEmpty() || r.addedCategories.isNotEmpty()
+
+    /**
+     * Records the review as payment [id] through Payments.record (SPEC R115), with the receipt's id
+     * and every line, and keeps the receipt id, the links, by name or by the user, the added
+     * categories and the store's source. Refused while [problem] finds one.
+     */
+    fun confirm(d: ProfileData, r: ReceiptReview, clock: Clock, id: String): ProfileData {
+        val problem = problem(d, r)
+        require(problem == null) { "the receipt cannot be confirmed: $problem (SPEC R115)" }
+        val written = Payments.record(withAdded(d, r), draft(r), clock, id)
+        val lines = r.file.lines.mapIndexed { i, l ->
+            ReceiptLine(l.name, l.pack, l.quantity, l.pricePaid, l.categoryId, l.categoryName, r.lineCategories[i]!!)
+        }
+        val byName = chatelaineCategories(r).mapNotNull { (cid, name) ->
+            if (cid in r.newLinks || keptLink(d, cid) != null) null else byName(d, name)?.let { cid to it }
+        }.toMap()
+        val s = d.receiptSettings!!
+        return written.copy(
+            payments = written.payments.map { if (it.id == id) it.copy(receiptId = r.file.receiptId, receiptLines = lines) else it },
+            receiptSettings = s.copy(
+                recordedReceiptIds = s.recordedReceiptIds + r.file.receiptId,
+                categoryLinks = s.categoryLinks + byName + r.newLinks,
+                storeSources = s.storeSources + (r.file.store to r.source.stored),
+            ),
+        )
+    }
+
+    /** Changes a link for the receipts recorded after it; recorded lines stay where they were filed (SPEC R34). */
+    fun changeLink(d: ProfileData, chatelaineId: String, categoryId: String): ProfileData {
+        val s = requireNotNull(d.receiptSettings) { "not the receipt Profile (SPEC R112)" }
+        require(d.categories.any { it.id == categoryId }) { "no such category" }
+        return d.copy(receiptSettings = s.copy(categoryLinks = s.categoryLinks + (chatelaineId to categoryId)))
+    }
+
+    /**
+     * An answer for [chatelaineId] (SPEC R114): its lines with no category, or with the one an
+     * earlier answer gave, go to [target]; a category an earlier answer added is dropped once no
+     * line and no link holds it.
+     */
+    private fun answer(r: ReceiptReview, chatelaineId: String, target: String, added: Category?): ReceiptReview {
+        require(r.file.lines.any { it.categoryId == chatelaineId }) { "no line of that Chatelaine category" }
+        val earlier = r.newLinks[chatelaineId]
+        val cats = r.file.lines.mapIndexed { i, l ->
+            val c = r.lineCategories[i]
+            if (l.categoryId == chatelaineId && (c == null || c == earlier)) target else c
+        }
+        val links = r.newLinks + (chatelaineId to target)
+        val addedCats = (r.addedCategories.filter { it.id != added?.id } + listOfNotNull(added))
+            .filter { a -> a.id in cats || a.id in links.values }
+        return r.copy(lineCategories = cats, newLinks = links, addedCategories = addedCats)
+    }
+
+    private fun draft(r: ReceiptReview) = PaymentDraft(r.file.date, r.file.totalPaid, r.source, r.file.store, parts(r))
+
+    private fun withAdded(d: ProfileData, r: ReceiptReview): ProfileData =
+        d.copy(categories = d.categories + r.addedCategories.filter { a -> d.categories.none { it.id == a.id } })
+
+    /** Each Chatelaine category id on the receipt with its name on the first line that names it. */
+    private fun chatelaineCategories(r: ReceiptReview): List<Pair<String, String>> =
+        r.file.lines.distinctBy { it.categoryId }.map { it.categoryId to it.categoryName }
+
+    /** A link kept from an earlier receipt, while its category exists (SPEC R42, R113). */
+    private fun keptLink(d: ProfileData, chatelaineId: String): String? =
+        d.receiptSettings?.categoryLinks?.get(chatelaineId)?.takeIf { id -> d.categories.any { it.id == id } }
+
+    private fun byName(d: ProfileData, name: String): String? = d.categories.firstOrNull { sameName(it.name, name) }?.id
+
+    private fun sameName(a: String, b: String) = a.trim().equals(b.trim(), ignoreCase = true)
+
+    /** The store's last source, or Savings when there is none or its Goal or Account does not exist (SPEC R35, R113). */
+    private fun sourceFor(d: ProfileData, store: String): PaymentSource {
+        val stored = d.receiptSettings?.storeSources?.get(store) ?: return PaymentSource.Savings
+        return when (val s = runCatching { PaymentSource.parse(stored) }.getOrNull()) {
+            is PaymentSource.Goal -> s.takeIf { d.goals.any { it.id == s.id } }
+            is PaymentSource.Account -> s.takeIf { d.accounts.any { it.id == s.id } }
+            PaymentSource.Savings, null -> null
+        } ?: PaymentSource.Savings
+    }
+}

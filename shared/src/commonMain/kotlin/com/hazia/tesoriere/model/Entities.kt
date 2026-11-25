@@ -293,6 +293,11 @@ data class AppState(
     val profilesEnabled: Boolean = false,
     val lastBackupExportDate: LocalDate? = null,
     val lastBackupImportDate: LocalDate? = null,
+    /**
+     * The Profile that holds the receipt folder, null while none does (SPEC R28, R112). Tesoriere's
+     * own; part of schema 1, still edited in place.
+     */
+    val receiptProfileId: String? = null,
 )
 
 /**
