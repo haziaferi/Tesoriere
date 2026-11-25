@@ -121,10 +121,16 @@ Kinds: O owner rule · D decided · I inherited · A assumed · Q open.
 | D-R40 | Pairing by hand | 15. One payment, two sources |
 | D-R118 | Suggesting a pair | 15. One payment, two sources |
 | D-R119 | Recording a pair | 15. One payment, two sources |
-| D-R41 | Deleting a receipt payment | 16. Edge cases |
-| D-R42 | Deleting a linked category | 16. Edge cases |
-| D-R43 | Test plan | 17. Test plan |
-| D-R44 | Rollout phases | 18. Rollout |
+| D-R121 | The Trash | 16. The Trash |
+| D-R122 | Restoring from the Trash | 16. The Trash |
+| D-R123 | Deleting a category | 16. The Trash |
+| D-R124 | Spending under a deleted category | 16. The Trash |
+| D-R125 | Deleting and restoring a payment | 16. The Trash |
+| D-R126 | A Profile in the Trash | 16. The Trash |
+| D-R41 | Deleting a receipt payment | 17. Edge cases |
+| D-R42 | Deleting a linked category | 17. Edge cases |
+| D-R43 | Test plan | 18. Test plan |
+| D-R44 | Rollout phases | 19. Rollout |
 | D-R45 | Price comparison | Out of scope |
 | D-R46 | Households in v1 | Out of scope |
 | D-R47 | Currency conversion in v1 | Out of scope |
@@ -1375,7 +1381,8 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 | Slice | Holds |
 |---|---|
 | each category | its spent figure for the month (R25): its parts of payments from any source (Savings, a Goal or an Account), a refund's lowering it (R21), its `cat:` adjustments, the sweep rows filed under it (R67), other than an Account payoff's, the payoff rows of a card whose charges are not logged, filed under it as their payoff category (R109), a card's interest and fees filed under it (R110), and the `savings` or `spend:` rows of a Loan's payments by hand filed under it while nothing was charged to the Loan (R89) |
-| Uncategorised | parts with no category (R21) and sweep rows with no category (R19) |
+| a category in the Trash | its spent figure for the month, marked deleted (R124) |
+| Uncategorised | parts with no category (R21), sweep rows with no category (R19), and the spent figure of a category deleted for good (R124) |
 | no slice | `goal:` rows, `savings` rows of either sign (income, corrections, a payment off an Account, R89), `acct:` rows, `spend:` rows, and the sweep rows of an Account payoff, a card's payment or a Loan's with a payment charged to it (R87), each unless filed under a category (R109) |
 
 **Evidence:** Sci-Fin's spec, section 5.2, and `engine/Reports.kt` at `2892110`, with the slices of payments and sweeps from R22, R25 and R67; the transfers left out: owner, 2026-11-25.
@@ -1637,7 +1644,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R112 · The receipt Profile
 
-**Rule:** The app keeps which Profile holds the receipt folder, and that Profile alone keeps the receipt settings: the folder, how new files are found (R29), the recorded receipt ids, the category links (R32) and each store's last source (R35). A folder can be chosen in a Profile only while no other Profile holds one, and only the Profile that holds it scans the folder and confirms receipts (R115).
+**Rule:** The app keeps which Profile holds the receipt folder, and that Profile alone keeps the receipt settings: the folder, how new files are found (R29), the recorded receipt ids, the category links (R32) and each store's last source (R35), except that a Profile restored from the Trash while another holds the folder keeps its own with no folder (R126). A folder can be chosen in a Profile only while no other Profile holds one, and only the Profile that holds a folder scans it and confirms receipts (R115).
 
 **Acceptance:** With the folder chosen in Profile A, Profile B is offered no folder and choosing one there is refused; a receipt opened for review in B cannot be confirmed, and the same receipt in A records one payment in A and none in B.
 
@@ -1986,27 +1993,137 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-25 · builder · own words
 
-## 16. Edge cases
+## 16. The Trash
+
+### D-R121 · The Trash
+
+**Rule:** A delete happens at once and settles its money then, as its own rule says, and what it removed is kept in the Trash for 30 days with what a restore needs, as below; on the 30th day after the delete it goes for good, and Delete forever takes it sooner, neither moving any money. While in the Trash an item is out of the Profile: it sweeps nothing, reminds of nothing, counts towards no figure and is the source of no new payment. One notice is due for an item on the 20th day after its delete, and once given it is not due again; the engine names the items due a notice and the items to go, and how the notice reads is the design pass's (R16).
+
+**Values:**
+
+| Deleted | Kept with it |
+|---|---|
+| a Goal (R58) | the rows its delete wrote, and what each payment from it took from it |
+| a category (R123) | its category links (R42) |
+| a recurring expense (R66) | the Account linked to it, the rows its delete wrote, and what each payment charged to that Account took |
+| an Account (R87, R88) | its linked recurring expense, the rows its delete wrote, and what each payment charged to it took |
+| a pair of ledger rows (R53) | both rows |
+| an Account quick-add, undone (R111) | its rows |
+| a payment (R125) | the whole payment, and the row its removal wrote for a deleted source (R54) |
+| a Profile (R126) | everything it holds |
+
+**Evidence:** Sci-Fin's spec, section 3.6, and `engine/Trash.kt` at `2892110`; the quick-add, the payment, and the payments kept with a Goal or an Account: builder, 2026-11-25.
+
+**Acceptance:** An item deleted on 1 October 2026 is due its notice on 21 October and not on 20 October, and once given is not due again; it is kept on 30 October and goes on 31 October. A monthly expense in the Trash over two month crossings writes no sweep row.
+
+**Not:** Asking the money question again when an item goes for good: it was answered at the delete, so Delete forever and the 30th day have nothing left to settle.
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R122 · Restoring from the Trash
+
+**Rule:** Restore puts back what a delete removed as it was, ids, dates, parts, links and marks included, and undoes each row the delete wrote with a row of the opposite amount on the same key, dated the same day, filed under the same category with the same payoff and share marks (R51, R67), noted `Restored from the Trash`; so Savings, each Goal, each Account's balance and each month's spent figures are what they were before the delete, and both rows stay in the ledger. A restored recurring expense counts the month of the restore as swept, catching up no month it missed, and its due dates move on to that day (R61). Restore is refused with a code, changing nothing, in the cases below; an item whose id is in the Profile again is left as it is.
+
+**Values:**
+
+| Refused when | Code |
+|---|---|
+| a payment from the deleted Goal, or charged to the deleted Account, was since removed, moved to another source or changed in what it took from it, or a payment was since restored onto it, each of which wrote a row in its place (R54) | `WRITTEN_SINCE` |
+| a restored recurring expense or Account would file later rows under a category that no longer exists (R123), and no existing category is given to take its place | `CATEGORY_MISSING` |
+| another payment holds the restored payment's receipt id or one of its bank keys (R107) | `RECORDED_AGAIN` |
+| the rows of an undone quick-add move a Goal or an Account deleted since (R111) | `TARGET_DELETED` |
+| the rows of an undone quick-add take more from a Goal than it holds | `GOAL_SHORT` |
+
+**Evidence:** Sci-Fin's spec, section 3.6, and `engine/Trash.kt` at `2892110`, whose restore rows were dated the day of the restore; the refusal for rows written since: owner, 2026-11-25; the restore's rows dated and filed as the delete's, and the other refusals: builder, 2026-11-25.
+
+**Acceptance:** With Savings at 1,000.00 and a Goal holding 300.00, deleting the Goal with its money returned on 14 September 2026 leaves 1,300.00; restored on 2 October it holds 300.00, Savings is 1,000.00, and a `goal:` row of +300.00 dated 14 September is noted `Restored from the Trash` beside the delete's -300.00. A semimonthly 300.00 expense under Rent created on 1 September from Savings of 2,000.00, deleted on 20 September with its 300.00 returned and restored on 2 October, leaves Savings at 1,400.00 and Rent's September spent at 600.00, and is marked swept for October. A card at 140.00 deleted and restored reads 140.00. A 30.00 payment from a deleted Goal, removed after the delete, refuses the Goal's restore with `WRITTEN_SINCE`; one whose parts were only filed again does not.
+
+**Not:** Dating the restore's rows on the day of the restore, as Sci-Fin: a return in September undone in October would lower September's spent and raise October's. Restoring over a row written since: the Goal or the Account would count that payment twice, in the row and in its own figure.
+
+**Since:** 2026-11-25 · owner · agreed rewording
+
+### D-R123 · Deleting a category
+
+**Rule:** Deleting a category removes it and the category links to it (R42); the parts of payments and the ledger rows filed under it keep its id (R124). When a recurring expense or an Account files later rows under it, as an expense's category (R67), a card's payoff or fees category (R109, R110) or a Loan's own category (R89), the delete takes another existing category and moves each of them to it in the same step, their past rows staying where they were filed; without one, or with one that does not exist, the delete is refused with a code and nothing changes. Restoring the category moves none of them back.
+
+**Values:**
+
+| Case | Code |
+|---|---|
+| no such category | `NO_SUCH_CATEGORY` |
+| the category given in its place does not exist, or is the one deleted | `REPLACEMENT_UNKNOWN` |
+| a recurring expense or an Account files under it and no category is given in its place | `REPLACEMENT_NEEDED` |
+
+**Evidence:** Sci-Fin's spec, section 4.3, and `engine/CategoryEditing.kt` at `2892110`, where no expense had a category; the move of recurring expenses: owner, 2026-11-25; the move of an Account's categories and the codes: builder, 2026-11-25.
+
+**Acceptance:** Deleting Phone while a 60.00 monthly expense files under it is refused with `REPLACEMENT_NEEDED`; with Internet given, the expense files under Internet, and Phone's August spent stays 60.00 with its sweep row under Phone; restoring Phone leaves the expense under Internet. A card whose payoff category is Phone moves to Internet in the same step. Deleting a category nothing files under needs no other category.
+
+**Not:** Leaving an expense under a category that is gone: every expense keeps an existing category (R67). Moving past rows: a past month's spent would shift on its own (R67).
+
+**Since:** 2026-11-25 · owner · agreed rewording
+
+### D-R124 · Spending under a deleted category
+
+**Rule:** A deleted category's spending keeps its id. While the category is in the Trash, Spending reads it as a slice of that category marked deleted, a code and not text, so it shows under the category's name; once the category leaves the Trash for good, as Uncategorised (R99); restored, as the category's own slice again. Which slice holds it never changes a month's total, in Spending or in Income vs Expenses (R101).
+
+**Acceptance:** With Fun at 40.00 and Groceries at 30.00 in September 2026, Fun deleted to the Trash gives a slice of Fun marked deleted at 40.00 and a total of 70.00; Fun gone for good gives Uncategorised at 40.00 and 70.00; Fun restored gives its own slice of 40.00 again.
+
+**Not:** Moving the parts to Uncategorised at the delete: a restore could not bring the name back, and the parts would no longer be as written.
+
+**Since:** 2026-11-25 · owner · agreed rewording
+
+### D-R125 · Deleting and restoring a payment
+
+**Rule:** Deleting a payment removes it through the payment path (R54), undoing what its source moved, and keeps it whole in the Trash: its parts, the share Savings paid, its receipt id and lines and its bank keys. Its receipt id stays recorded (R41) and its bank keys stay among the import's keys, so neither the file nor the bank row arrives as new (R26, R30). Restoring it moves its source again as recorded, or as below when the source has changed since.
+
+**Values:**
+
+| Its source at the restore | Restoring it |
+|---|---|
+| as at the delete | moves it as recorded: the total, and for a Goal the same share from Savings |
+| a Goal holding less than its share | takes all the Goal holds and the rest from Savings, after a warning the user can dismiss, the share Savings paid growing by the rest (R54) |
+| a Goal or an Account deleted since the payment's delete, in the Trash or for good | moves as a payment from a deleted Goal or charged to a deleted Account does (R54), after a warning the user can dismiss: a `savings` row in the Goal's place, or an `acct:` row that keeps the Account's rows and payments adding up to zero |
+| deleted before the payment's delete | undoes the row the payment's delete wrote (R122) |
+
+**Evidence:** Builder, 2026-11-25, from R41 and R54.
+
+**Acceptance:** With Savings at 1,000.00, a 42.30 receipt payment from Savings deleted leaves 1,000.00, and restored leaves 957.70 with its parts, lines and keys. A 30.00 payment from a Goal holding 50.00 after it, deleted, leaves the Goal at 80.00; with 70.00 spent from the Goal since, restoring it warns and leaves the Goal at 0.00 and Savings 20.00 lower. Deleted, then its Goal deleted with 80.00 returned, restoring it warns and leaves Savings 30.00 lower with a `savings` row of -30.00 noted `Payment from a deleted goal`.
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R126 · A Profile in the Trash
+
+**Rule:** A deleted Profile is kept in the Trash whole: its Savings, settings, import memory, Goals, categories, recurring expenses, Accounts, ledger, shifts, payments and receipt settings. Deleting the Profile that holds the receipt folder frees the folder for another Profile (R112). Restored, it comes back as one more Profile, not opened, and holds the receipt folder again while no other Profile holds one; otherwise it comes back with no folder and keeps its recorded receipt ids, category links and stores' sources, so no recorded receipt is offered again if a folder is chosen there later.
+
+**Evidence:** Sci-Fin's spec, sections 3.6 and 8.3, at `2892110`; the payments, the receipt settings and the folder held by another Profile: builder, 2026-11-25.
+
+**Acceptance:** A Profile holding the receipt folder and a 42.30 receipt payment, deleted, frees the folder; restored while no other Profile holds one, it holds the folder again and equals the Profile as deleted. Restored after Profile B chose a folder, B keeps it, and the restored Profile holds no folder and keeps its recorded receipt id.
+
+**Since:** 2026-11-25 · builder · own words
+
+## 17. Edge cases
 
 ### D-R41 · Deleting a receipt payment
 
-**Rule:** A payment recorded from a receipt is deleted through the Trash like any other. Its receipt id stays recorded, so the file is not offered again; restoring it from the Trash restores the payment with its parts and pairs.
+**Rule:** A payment recorded from a receipt is deleted through the Trash like any other payment (R125). Its receipt id stays recorded, so the file is not offered again; restoring it brings back the payment with its parts, receipt lines, bank keys and pair, and the bank row of its pair stays recorded throughout (R26).
 
-**Evidence:** Not checked: the owner has not ruled on whether a deleted receipt should be offered again.
+**Evidence:** Not checked: the owner has not ruled on whether a deleted receipt should be offered again; the phase 1 plan keeps it recorded.
 
-**Acceptance:** Deleting a receipt payment and reopening the app does not offer the receipt file again; restoring it brings back its parts.
+**Acceptance:** Deleting a receipt payment leaves its file out of the next scan (R116). A 42.30 receipt split 30.00 Groceries and 12.30 Household and paired with its bank row, deleted and restored, has its two parts, its two lines and its bank keys again, and the row arrives `DUPLICATE` on an import before and after the restore.
 
-**Since:** 2026-11-24 · builder · own words
+**Since:** 2026-11-25 · builder · own words
 
 ### D-R42 · Deleting a linked category
 
-**Rule:** Deleting a Tesoriere category removes the category links to it; the next receipt with that Chatelaine category asks again, as for a new one (R32).
+**Rule:** Deleting a Tesoriere category removes the category links to it (R123); the next receipt with that Chatelaine category asks again, as for a new one (R32). Restoring the category brings back each removed link whose Chatelaine category has not been linked since.
 
-**Acceptance:** After deleting Pulizia, the next receipt with Chatelaine's Pulizia keeps Confirm off until its line is linked or added.
+**Evidence:** The restore of links: the phase 1 plan's provisional choice, 2026-11-24, as the Trash restores what a delete removed (R122).
 
-**Since:** 2026-11-24 · builder · own words
+**Acceptance:** After deleting Pulizia, the next receipt with Chatelaine's Pulizia keeps Confirm off until its line is linked or added. A Chatelaine category Pulizie linked to Pulizia, after Pulizia is deleted and restored, opens in Pulizia again with Confirm on.
 
-## 17. Test plan
+**Since:** 2026-11-25 · builder · own words
+
+## 18. Test plan
 
 ### D-R43 · Test plan
 
@@ -2027,7 +2144,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · builder · own words
 
-## 18. Rollout
+## 19. Rollout
 
 ### D-R44 · Rollout phases
 
@@ -2156,8 +2273,14 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R40 · Pairing by hand: A EUR 40.00 receipt and a EUR 41.20 bank row, not suggested, can be paired by hand into one EUR 41.20 payment with a EUR 1.20 part the user files.
 - R118 · Suggesting a pair: A 42.30 receipt recorded on 10 March and a statement row of -42.30 on 12 March: the row arrives `PAIR`, unticked, naming the receipt's payment, and the import's Confirm leaves one payment and Savings as it was; the same row on 14 March arrives `READY`; +42.30 arrives `INCOMING`. A refund, or a payment that holds bank keys already, is never named. With rows of -42.30 on 11 and 12 March, only the 11 March row names it; with rows of -42.40 on 11 March and -42.30 on 12 March, the 12 March row does. Two 42.30 receipts of 10 March and rows of -42.30 on 11 and 12 March: the 11 March row names the receipt recorded first and the 12 March row the other. 42.30 receipts of 10 and 11 March with rows of -42.30 on 11 and 14 March: the 14 March row, which only the 11 March receipt meets, names it, and the 11 March row names the 10 March receipt. A named payment removed while the review is open leaves its row unrecorded by that Confirm, and the next import of the statement offers the row `READY`. A receipt opened while a -42.30 payment recorded from a bank row on 12 March holds no receipt notes it as a pair available, and can still be confirmed.
 - R119 · Recording a pair: A 42.30 receipt from Savings at 1,000.00, then its -42.30 row: one payment of 42.30 from Savings, dated the receipt's day, with the row's keys, Savings at 957.70, and the row `DUPLICATE` on the next import. A -42.30 row filed under Groceries from Savings, then a receipt of Groceries 30.00 and Household 12.30 confirmed with a card: one payment of 42.30 from the card with those two parts, the receipt's day and the row's keys, Savings back at 1,000.00 and the card 42.30 higher. A 42.10 receipt from a Goal holding 42.10, paired with a -42.30 row, warns as R54 says and takes 0.20 from Savings. A -42.30 row dated 14 March, 4 days after its receipt, ticked in the import review and paired by hand before Confirm, leaves one payment and Savings 42.30 lower once. A receipt of 30 March paired with its row of 2 April counts in March's spent.
-- R41 · Deleting a receipt payment: Deleting a receipt payment and reopening the app does not offer the receipt file again; restoring it brings back its parts.
-- R42 · Deleting a linked category: After deleting Pulizia, the next receipt with Chatelaine's Pulizia keeps Confirm off until its line is linked or added.
+- R121 · The Trash: An item deleted on 1 October 2026 is due its notice on 21 October and not on 20 October, and once given is not due again; it is kept on 30 October and goes on 31 October. A monthly expense in the Trash over two month crossings writes no sweep row.
+- R122 · Restoring from the Trash: With Savings at 1,000.00 and a Goal holding 300.00, deleting the Goal with its money returned on 14 September 2026 leaves 1,300.00; restored on 2 October it holds 300.00, Savings is 1,000.00, and a `goal:` row of +300.00 dated 14 September is noted `Restored from the Trash` beside the delete's -300.00. A semimonthly 300.00 expense under Rent created on 1 September from Savings of 2,000.00, deleted on 20 September with its 300.00 returned and restored on 2 October, leaves Savings at 1,400.00 and Rent's September spent at 600.00, and is marked swept for October. A card at 140.00 deleted and restored reads 140.00. A 30.00 payment from a deleted Goal, removed after the delete, refuses the Goal's restore with `WRITTEN_SINCE`; one whose parts were only filed again does not.
+- R123 · Deleting a category: Deleting Phone while a 60.00 monthly expense files under it is refused with `REPLACEMENT_NEEDED`; with Internet given, the expense files under Internet, and Phone's August spent stays 60.00 with its sweep row under Phone; restoring Phone leaves the expense under Internet. A card whose payoff category is Phone moves to Internet in the same step. Deleting a category nothing files under needs no other category.
+- R124 · Spending under a deleted category: With Fun at 40.00 and Groceries at 30.00 in September 2026, Fun deleted to the Trash gives a slice of Fun marked deleted at 40.00 and a total of 70.00; Fun gone for good gives Uncategorised at 40.00 and 70.00; Fun restored gives its own slice of 40.00 again.
+- R125 · Deleting and restoring a payment: With Savings at 1,000.00, a 42.30 receipt payment from Savings deleted leaves 1,000.00, and restored leaves 957.70 with its parts, lines and keys. A 30.00 payment from a Goal holding 50.00 after it, deleted, leaves the Goal at 80.00; with 70.00 spent from the Goal since, restoring it warns and leaves the Goal at 0.00 and Savings 20.00 lower. Deleted, then its Goal deleted with 80.00 returned, restoring it warns and leaves Savings 30.00 lower with a `savings` row of -30.00 noted `Payment from a deleted goal`.
+- R126 · A Profile in the Trash: A Profile holding the receipt folder and a 42.30 receipt payment, deleted, frees the folder; restored while no other Profile holds one, it holds the folder again and equals the Profile as deleted. Restored after Profile B chose a folder, B keeps it, and the restored Profile holds no folder and keeps its recorded receipt id.
+- R41 · Deleting a receipt payment: Deleting a receipt payment leaves its file out of the next scan (R116). A 42.30 receipt split 30.00 Groceries and 12.30 Household and paired with its bank row, deleted and restored, has its two parts, its two lines and its bank keys again, and the row arrives `DUPLICATE` on an import before and after the restore.
+- R42 · Deleting a linked category: After deleting Pulizia, the next receipt with Chatelaine's Pulizia keeps Confirm off until its line is linked or added. A Chatelaine category Pulizie linked to Pulizia, after Pulizia is deleted and restored, opens in Pulizia again with Confirm on.
 - R43 · Test plan: CI runs the first five levels on every pull request; a release records its device walk.
 - R44 · Rollout phases: Phase 2's gate is recorded in `SPEC-history.md` or the release notes before Sci-Fin is retired.
 

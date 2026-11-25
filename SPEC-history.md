@@ -267,3 +267,13 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R118 · changed · as many rows as possible name a payment; the order decides among such choices · builder
 - 2026-11-25 · R107 · changed · a ticked duplicate is recorded as before, whatever payment holds its keys · builder
 - 2026-11-25 · R119 · changed · only a row that did not arrive DUPLICATE is skipped at Confirm once a pair holds its keys · builder
+- 2026-11-25 · R121 · added · the Trash keeps each delete 30 days with what a restore needs; one notice on day 20; inert while there · builder
+- 2026-11-25 · R122 · added · restore puts items back and undoes the delete's rows on the same day and filing; refused with a code when rows were written since · owner
+- 2026-11-25 · R123 · added · deleting a category removes its links; expenses and Accounts filing under it move to another category given · owner
+- 2026-11-25 · R124 · added · spending under a deleted category keeps its id; marked deleted while in the Trash, Uncategorised after; totals unchanged · owner
+- 2026-11-25 · R125 · added · a deleted payment is kept whole; restoring it moves its source again, or as for a short or deleted source · builder
+- 2026-11-25 · R126 · added · a deleted Profile is kept whole, payments and receipt settings included; the receipt folder on delete and restore · builder
+- 2026-11-25 · R41 · changed · restoring brings back parts, lines, bank keys and pair; the paired bank row stays recorded · builder
+- 2026-11-25 · R42 · changed · restoring the category brings back its removed links not relinked since · builder
+- 2026-11-25 · R99 · changed · a category in the Trash is its own slice marked deleted; one deleted for good is Uncategorised · builder
+- 2026-11-25 · R112 · changed · a Profile restored while another holds the folder keeps its receipt settings with no folder · builder
