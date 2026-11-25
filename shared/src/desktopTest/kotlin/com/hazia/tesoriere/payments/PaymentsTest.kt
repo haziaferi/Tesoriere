@@ -309,6 +309,22 @@ class PaymentsTest {
         assertFalse(Payments.canSave(d, draft("0.00", PaymentSource.Savings, "fun" to "5.00", "groc" to "-5.00")))
     }
 
+    // SPEC:R23 SPEC:R39
+    @Test fun `R23 a 42_10 payment with item parts of 30_00 and 12_30 and a -0_20 difference part saves, the -0_20 as an item part or two difference parts do not`() {
+        val d = world()
+        fun pay(vararg parts: Part) = PaymentDraft(day, cents("42.10"), PaymentSource.Savings, "Corner shop", parts.toList())
+        val items = arrayOf(Part("groc", cents("30.00")), Part("home", cents("12.30")))
+        assertTrue(Payments.canSave(d, pay(*items, Part("fun", cents("-0.20"), difference = true))))
+        assertFalse(Payments.canSave(d, pay(*items, Part("fun", cents("-0.20")))))
+        assertFalse(Payments.canSave(d, pay(*items, Part("fun", cents("-0.10"), difference = true), Part("fun", cents("-0.10"), difference = true))))
+        // a refund's difference part may be positive; its item parts stay negative
+        val refund = PaymentDraft(day, cents("-14.80"), PaymentSource.Savings, null, listOf(Part("fun", cents("-15.00")), Part("fun", cents("0.20"), difference = true)))
+        assertTrue(Payments.canSave(d, refund))
+        val p = Payments.record(d, pay(*items, Part("fun", cents("-0.20"), difference = true)), clock, "pay-1").payments.single()
+        assertEquals(p, Json.decodeFromString(Payment.serializer(), Json.encodeToString(Payment.serializer(), p)))
+        assertTrue(p.parts.last().difference)
+    }
+
     // SPEC:R21 SPEC:R20
     @Test fun `R21 a payment round-trips through JSON with its source as goal_id and its logged instant in epoch milliseconds`() {
         val p = Payment(

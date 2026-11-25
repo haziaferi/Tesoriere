@@ -54,10 +54,12 @@ object PaymentSourceSerializer : KSerializer<PaymentSource> {
 /**
  * One category's share of a payment (SPEC R21, R23). [categoryId] is null only for a part read
  * from a Sci-Fin backup (owner answer 3 of 2026-11-24), which counts in no category's spent.
- * [amount] has the sign of the payment's total: negative on a refund (SPEC R21, R23).
+ * [amount] has the sign of the payment's total: negative on a refund (SPEC R21, R23), except on
+ * the one part marked [difference], a pair's difference between the bank row and the receipt
+ * (SPEC R39), which may have either sign. Pairing (PR 4) sets the mark; nothing else does.
  */
 @Serializable
-data class Part(val categoryId: String?, val amount: Money)
+data class Part(val categoryId: String?, val amount: Money, val difference: Boolean = false)
 
 /** A bank row's two keys (SPEC R26): the OFX FITID when there is one, and `syn:date|amount|description`. */
 @Serializable

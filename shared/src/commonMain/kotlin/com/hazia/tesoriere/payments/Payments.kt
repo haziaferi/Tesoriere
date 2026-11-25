@@ -29,7 +29,8 @@ object Payments {
 
     /**
      * Whether the editor's save is on: a total other than zero, negative for a refund (SPEC R21),
-     * parts in categories that exist, each of the total's sign, adding up to the total (SPEC R23),
+     * parts in categories that exist, each of the total's sign but a pair's one difference part
+     * (SPEC R39), adding up to the total (SPEC R23),
      * and a source that exists. A Goal short of the total is no reason to refuse: Savings pays
      * the rest, after the warning of [draftNotice] (SPEC R54). When [editing] names the payment
      * being edited, its own effect counts as undone.
@@ -38,7 +39,9 @@ object Payments {
         if (draft.total == 0L || draft.parts.isEmpty() || remainder(draft) != 0L) return false
         val categories = d.categories.mapTo(HashSet()) { it.id }
         val refund = draft.total < 0
-        if (draft.parts.any { it.amount == 0L || (it.amount < 0) != refund || it.categoryId == null || it.categoryId !in categories }) return false
+        // a pair's difference part, at most one, may have the other sign (SPEC R23, R39)
+        if (draft.parts.count { it.difference } > 1) return false
+        if (draft.parts.any { it.amount == 0L || (!it.difference && (it.amount < 0) != refund) || it.categoryId == null || it.categoryId !in categories }) return false
         val old = editing?.let { id -> d.payments.firstOrNull { it.id == id } }
         val base = old?.let { undo(d, it) } ?: d
         return when (val s = draft.source) {

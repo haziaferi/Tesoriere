@@ -502,7 +502,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 | `total` | cents, not zero: positive for a purchase, negative for a refund |
 | `source` | Savings, a Goal, or an Account (R22) |
 | `payee` | optional text: the store or the bank row's payee |
-| `parts` | one or more: category id and cents (R23); only a part read from a Sci-Fin backup may have no category (R19) |
+| `parts` | one or more: category id and cents (R23), and whether the part is a pair's difference part (R39); only a part read from a Sci-Fin backup may have no category (R19) |
 | `receiptId` | the receipt file's id, when the payment came from or was paired with a receipt |
 | `receiptLines` | per line: name, pack, quantity, price paid, Chatelaine category id and name, Tesoriere category |
 | `bankKeys` | the bank row's FITID and its date, amount and description key, when it came from or was paired with a bank row (R26) |
@@ -549,11 +549,11 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R23 · Parts add up
 
-**Rule:** A payment's total is not zero, its parts add up to it to the cent, and every part has the sign of the total, so a refund's parts are all negative (R21). Until they do, the editor shows the remainder and its save stays off.
+**Rule:** A payment's total is not zero, its parts add up to it to the cent, and every part has the sign of the total, so a refund's parts are all negative (R21); the one exception is a pair's difference part (R39), at most one per payment, which may have either sign. Until they do, the editor shows the remainder and its save stays off.
 
-**Acceptance:** A EUR 42.30 payment with parts of EUR 30.00 and EUR 12.00 shows EUR 0.30 left and cannot be saved; with a third part of EUR 0.30 it can. A EUR -15.00 refund with parts of EUR -20.00 and EUR 5.00 cannot be saved, and with one part of EUR -15.00 it can; a total of EUR 0.00 cannot be saved.
+**Acceptance:** A EUR 42.30 payment with parts of EUR 30.00 and EUR 12.00 shows EUR 0.30 left and cannot be saved; with a third part of EUR 0.30 it can. A EUR -15.00 refund with parts of EUR -20.00 and EUR 5.00 cannot be saved, and with one part of EUR -15.00 it can; a total of EUR 0.00 cannot be saved. A EUR 42.10 payment with item parts of EUR 30.00 and EUR 12.30 and a difference part of EUR -0.20 can be saved; the same EUR -0.20 as an item part, or two difference parts, cannot.
 
-**Not:** Filing the remainder to a default category on its own: it hides a mistake. A part of the other sign: a refund that raises one category's spent is a purchase filed in the wrong place.
+**Not:** Filing the remainder to a default category on its own: it hides a mistake. A part of the other sign: a refund that raises one category's spent is a purchase filed in the wrong place. Holding the difference part to the total's sign: a bank row below the receipt's total would leave the pair with no way to add up.
 
 **Since:** 2026-11-25 · owner · agreed rewording
 
@@ -1734,15 +1734,15 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R39 · Difference part
 
-**Rule:** When a pair's totals differ within the tolerance (R37), the bank row's amount is the payment's total, and the difference becomes one more part that the user files under a category; the pair cannot be confirmed until it is filed.
+**Rule:** When a pair's totals differ within the tolerance (R37), the bank row's amount is the payment's total, and the difference becomes one more part, marked as the difference part, that the user files under a category; the pair cannot be confirmed until it is filed. The difference is the bank amount less the receipt's total, so it is negative when the bank row is below the receipt, and as the difference part it may have the other sign from the total (R23).
 
 **Why:** The bank amount is what left the account.
 
-**Acceptance:** A EUR 42.10 receipt paired with a EUR 42.30 bank row records a EUR 42.30 payment with a EUR 0.20 part in the category the user chose, and the pair's confirm is off until it is chosen.
+**Acceptance:** A EUR 42.10 receipt paired with a EUR 42.30 bank row records a EUR 42.30 payment with a EUR 0.20 difference part in the category the user chose, and the pair's confirm is off until it is chosen. A EUR 42.30 receipt paired with a EUR 42.10 bank row records a EUR 42.10 payment with a EUR -0.20 difference part.
 
 **Not:** Filing the difference with the largest line, or spreading it over the lines: both guess where the money went.
 
-**Since:** 2026-11-24 · owner · agreed rewording
+**Since:** 2026-11-25 · owner · agreed rewording
 
 ### D-R40 · Pairing by hand
 
@@ -1840,7 +1840,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R21 · Payment: A recorded receipt payment holds every receipt line; a paired payment holds both its `receiptId` and its `bankKeys`; a recurring expense's sweep records no payment. With Savings at 1,000.00 and a 40.00 payment under Fun, a 15.00 refund from Savings under Fun leaves Savings at 975.00 and Fun's spent for the month at 25.00, and logs no ledger row and no income.
 - R22 · Source and parts are separate: A EUR 40 receipt charged to a card adds its parts to their categories' spent figures and EUR 40 to the card's balance, and moves nothing in Savings.
 - R54 · What a payment's source moves: A 42.30 payment from Savings lowers Savings by 42.30; a 30.00 payment from a Goal holding 50.00 leaves it 20.00 and Savings unchanged, and one of 60.00, after a warning, leaves it 0.00 and Savings 10.00 lower; removed, the Goal holds 50.00 and Savings is as it was; edited to 55.00 it takes 5.00 from Savings, and to 40.00 none, leaving the Goal 10.00; a 40.00 payment charged to a card with a 0.00 balance leaves the balance at 40.00, and a 15.00 refund to it then leaves 25.00; a 15.00 refund into a Goal holding 50.00 leaves it 65.00. With Savings at 1,000.00: 100.00 into a Goal, a 30.00 payment from it, the Goal deleted with its 70.00 returned leaves 970.00; removing the payment then gives 1,000.00 with a `savings` row of +30.00, re-filing its parts leaves 970.00 and logs nothing, and lowering its total to 25.00 gives 975.00 with a row of +5.00; after each, the movements of Savings add up to Savings. A 40.00 payment charged to a card that is deleted since carries a warning, can be re-filed into two parts or removed with Savings unchanged, and a new payment charged to that card cannot be saved. A 40.00 payment charged to a card at 0.00 that is deleted since, removed, logs an `acct:` row of +40.00 for that card; moved to a second card instead, it raises that card to 40.00 and logs the same row; after each, Savings vs Owed's point for the month equals its figure of the day (R100).
-- R23 · Parts add up: A EUR 42.30 payment with parts of EUR 30.00 and EUR 12.00 shows EUR 0.30 left and cannot be saved; with a third part of EUR 0.30 it can. A EUR -15.00 refund with parts of EUR -20.00 and EUR 5.00 cannot be saved, and with one part of EUR -15.00 it can; a total of EUR 0.00 cannot be saved.
+- R23 · Parts add up: A EUR 42.30 payment with parts of EUR 30.00 and EUR 12.00 shows EUR 0.30 left and cannot be saved; with a third part of EUR 0.30 it can. A EUR -15.00 refund with parts of EUR -20.00 and EUR 5.00 cannot be saved, and with one part of EUR -15.00 it can; a total of EUR 0.00 cannot be saved. A EUR 42.10 payment with item parts of EUR 30.00 and EUR 12.30 and a difference part of EUR -0.20 can be saved; the same EUR -0.20 as an item part, or two difference parts, cannot.
 - R24 · Any payment can be split: A bank row and a hand-logged payment can each be saved with two parts in two categories.
 - R25 · Spent is derived: Re-filing a payment's parts changes the spent figures of the categories involved, for the payment's month, and writes no correction row. A 60.00 sweep filed under Phone and dated in March adds 60.00 to Phone's spent for March, and no payment exists for it.
 - R55 · Goal calculator: A 1,200.00 goal with 400.00 saved and a target date six calendar months ahead needs 133.34 a month; the same goal at 150.00 a month takes 6 months.
@@ -1912,7 +1912,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R36 · Store links: After pairing an Esselunga receipt with POS ESSELUNGA MI 0423, the next Esselunga receipt is suggested only with bank rows whose payee matches that link, when one exists.
 - R37 · Pairing rule: Each row of the table, as a receipt and a bank row, gives the suggestion its row says; no pair is recorded without the user's confirm.
 - R38 · Whichever arrives first: Recording a EUR 42.30 receipt and then importing its bank row leaves one payment of EUR 42.30; importing the bank row first under Groceries and then its receipt with Groceries 30.00 and Household 12.30 leaves one payment with those two parts.
-- R39 · Difference part: A EUR 42.10 receipt paired with a EUR 42.30 bank row records a EUR 42.30 payment with a EUR 0.20 part in the category the user chose, and the pair's confirm is off until it is chosen.
+- R39 · Difference part: A EUR 42.10 receipt paired with a EUR 42.30 bank row records a EUR 42.30 payment with a EUR 0.20 difference part in the category the user chose, and the pair's confirm is off until it is chosen. A EUR 42.30 receipt paired with a EUR 42.10 bank row records a EUR 42.10 payment with a EUR -0.20 difference part.
 - R40 · Pairing by hand: A EUR 40.00 receipt and a EUR 41.20 bank row, not suggested, can be paired by hand into one EUR 41.20 payment with a EUR 1.20 part the user files.
 - R41 · Deleting a receipt payment: Deleting a receipt payment and reopening the app does not offer the receipt file again; restoring it brings back its parts.
 - R42 · Deleting a linked category: After deleting Pulizia, the next receipt with Chatelaine's Pulizia keeps Confirm off until its line is linked or added.
