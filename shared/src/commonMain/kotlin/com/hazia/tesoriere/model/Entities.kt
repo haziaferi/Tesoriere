@@ -346,8 +346,8 @@ data class CopySchedule(
 )
 
 /**
- * One deleted thing in the Trash, kept 30 days (SPEC R18). [payload] is JSON: what the delete
- * removed and the money it moved. Device-only: a backup carries what exists, not what was deleted.
+ * One deleted thing in the Trash, kept 30 days (SPEC R18, R121). [payload] is JSON (Trash.encode): what the delete
+ * removed and what a restore needs (SPEC R122). Device-only: a backup carries what exists, not what was deleted.
  */
 @Entity(tableName = "trash", indices = [Index("profileId")])
 data class TrashItem(

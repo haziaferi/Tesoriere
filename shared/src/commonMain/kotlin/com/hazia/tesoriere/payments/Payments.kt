@@ -21,6 +21,8 @@ import com.hazia.tesoriere.model.StoredLabels
  * `savings` row, so the reports' replay of Savings (SPEC R95) still adds up to it; and a change to
  * what is charged to an Account deleted since is logged as an `acct:` row, so its rows and its
  * payments still add up to zero and Savings vs Owed's trend matches its figure (SPEC R88, R100).
+ * A payment put back from the Trash ([Payments.reinstate]) moves its source again as recorded
+ * (SPEC R125).
  */
 object Payments {
 
@@ -135,6 +137,48 @@ object Payments {
     }
 
     /**
+     * Puts back payment [p], removed earlier, for a restore from the Trash (SPEC R122, R125): its
+     * id, date, parts, receipt and keys as they were, at its place in logged order, and its source
+     * moved again as recorded. A Goal that holds less than its share gives all it holds and Savings
+     * the rest, the payment's [Payment.fromSavings] growing by it (SPEC R54). A Goal or an Account
+     * deleted since its removal moves as for any payment of a deleted source: one `savings` or
+     * `acct:` row [txId], dated today. When [settled], the source was deleted before the removal,
+     * whose row the caller undoes instead, so no row is written here.
+     */
+    fun reinstate(d: ProfileData, p: Payment, settled: Boolean, clock: Clock, txId: String): ProfileData {
+        val back = reinstated(d, p, settled)
+        val at = d.payments.indexOfFirst { it.loggedAt > back.loggedAt }.let { if (it < 0) d.payments.size else it }
+        var next = apply(d, back).copy(payments = d.payments.subList(0, at) + back + d.payments.subList(at, d.payments.size))
+        if (settled) return next
+        when (val s = back.source) {
+            is PaymentSource.Goal -> if (d.goals.none { it.id == s.id }) next = logDeletedGoalShift(next, -(back.total - back.fromSavings), clock, txId)
+            is PaymentSource.Account -> next = logDeletedAccountCharge(d, next, s.id, back.total, clock, txId)
+            PaymentSource.Savings -> Unit
+        }
+        return next
+    }
+
+    /** The warning a restore of [p] carries, or null (SPEC R125): its source deleted since, or a Goal short of its share (SPEC R54). */
+    fun reinstateNotice(d: ProfileData, p: Payment): PaymentNotice? = when (val s = p.source) {
+        is PaymentSource.Goal -> when {
+            d.goals.none { it.id == s.id } -> PaymentNotice.SOURCE_GOAL_DELETED
+            reinstated(d, p, settled = false).fromSavings > p.fromSavings -> PaymentNotice.GOAL_SHORT
+            else -> null
+        }
+        is PaymentSource.Account -> PaymentNotice.SOURCE_ACCOUNT_DELETED.takeIf { d.accounts.none { it.id == s.id } }
+        PaymentSource.Savings -> null
+    }
+
+    /** [p] with the share Savings pays grown to what its Goal cannot give, when the Goal holds less than its share (SPEC R54, R125). */
+    private fun reinstated(d: ProfileData, p: Payment, settled: Boolean): Payment {
+        val s = p.source as? PaymentSource.Goal ?: return p
+        if (settled || p.total <= 0) return p
+        val goal = d.goals.firstOrNull { it.id == s.id } ?: return p
+        val held = maxOf(0L, goal.saved)
+        return if (held >= p.total - p.fromSavings) p else p.copy(fromSavings = p.total - held)
+    }
+
+    /**
      * What is charged to an Account deleted since must stay matched by its `acct:` rows, so that
      * they add up to zero together, as the closing row left them (SPEC R54, R88, R100): when [old]
      * was charged to such an Account and [new] (null on removal) charges it less, or nothing, the
@@ -142,11 +186,14 @@ object Payments {
      */
     private fun logDeletedAccountShift(before: ProfileData, d: ProfileData, old: Payment, new: Payment?, clock: Clock, txId: String): ProfileData {
         val s = old.source as? PaymentSource.Account ?: return d
-        if (before.accounts.any { it.id == s.id }) return d
-        val change = (if (new?.source == s) new.total else 0L) - old.total
-        if (change == 0L) return d
-        val key = TransactionKey.AccountKey(s.id)
-        val label = before.transactions.lastOrNull { it.key == key.stored }?.targetLabel ?: s.id
+        return logDeletedAccountCharge(before, d, s.id, (if (new?.source == s) new.total else 0L) - old.total, clock, txId)
+    }
+
+    /** A [change] to what is charged to Account [accountId], when it was deleted before [before], logged as one `acct:` row of the opposite sign (SPEC R54, R88). */
+    private fun logDeletedAccountCharge(before: ProfileData, d: ProfileData, accountId: String, change: Money, clock: Clock, txId: String): ProfileData {
+        if (change == 0L || before.accounts.any { it.id == accountId }) return d
+        val key = TransactionKey.AccountKey(accountId)
+        val label = before.transactions.lastOrNull { it.key == key.stored }?.targetLabel ?: accountId
         return Ledger.logAndMove(d, Movement(-change, key, label, StoredLabels.DELETED_ACCOUNT_PAYMENT), clock, txId).first
     }
 

@@ -46,12 +46,22 @@ import kotlin.time.Instant
  * - Coverage divides in whole cents with a half rounded to the even day, the result Sci-Fin's
  *   Double division and `round` give, with no floating point on money (SPEC R20, R98). No other
  *   figure here touches a Double.
+ * - Spending under a deleted category keeps its id (SPEC R124): a category in the Trash is its own
+ *   slice marked deleted, one deleted for good counts in Uncategorised; neither changes a total.
+ *   Sci-Fin had no spending that outlived its category.
  */
 
-/** What a Spending slice holds (SPEC R99). */
-enum class SliceKind { CATEGORY, UNCATEGORISED }
+/** What a Spending slice holds (SPEC R99, R124). */
+enum class SliceKind {
+    /** A category of the Profile. */
+    CATEGORY,
+    /** A category in the Trash: its spending under its name, marked deleted (SPEC R124). */
+    DELETED_CATEGORY,
+    /** Parts and sweeps with no category, and spending of a category deleted for good (SPEC R99, R124). */
+    UNCATEGORISED,
+}
 
-/** One slice of the month's Spending (SPEC R99); [categoryId] is set for a [SliceKind.CATEGORY] slice only. */
+/** One slice of the month's Spending (SPEC R99); [categoryId] is set for a category's slice, deleted or not, only. */
 data class Slice(val kind: SliceKind, val categoryId: String?, val amount: Money)
 
 /** The month's Spending, largest slice first. [plainList] when shares would describe nothing (SPEC R99). */
@@ -180,15 +190,20 @@ object Reports {
      * parts and sweeps with no category. `goal:` rows, and `savings`, `acct:` and `spend:` rows
      * filed under no category, are in no slice: transfers, income and corrections, not spending;
      * one filed under a category counts there (SPEC R89, R109, R110). Zero slices are left out; the rest
-     * go largest first, ties in the categories' order.
+     * go largest first, ties in the categories' order. [trashed] holds the ids of the Profile's
+     * categories in the Trash (Trash.trashedCategories): their spending is a slice marked deleted,
+     * and a category neither in the Profile nor in it counts in Uncategorised (SPEC R124).
      */
-    fun spendingComposition(d: ProfileData, today: LocalDate): SpendingComposition {
-        val shown = spendingSlices(d, today.ymKey()).filter { it.amount != 0L }.sortedByDescending { it.amount }
+    fun spendingComposition(d: ProfileData, today: LocalDate, trashed: Set<String> = emptySet()): SpendingComposition {
+        val shown = spendingSlices(d, today.ymKey(), trashed).filter { it.amount != 0L }.sortedByDescending { it.amount }
         return SpendingComposition(shown, shown.sumOf { it.amount })
     }
 
-    /** What was spent in [ym] (`YYYY-MM`), one slice per category seen and one for Uncategorised (SPEC R99). */
-    private fun spendingSlices(d: ProfileData, ym: String): List<Slice> {
+    /**
+     * What was spent in [ym] (`YYYY-MM`), one slice per category seen and one for Uncategorised
+     * (SPEC R99): a category in [trashed] marked deleted, one deleted for good in Uncategorised (SPEC R124).
+     */
+    private fun spendingSlices(d: ProfileData, ym: String, trashed: Set<String> = emptySet()): List<Slice> {
         val payments = d.payments.filter { it.date.ymKey() == ym }
         val rows = d.transactions.filter { it.date.ymKey() == ym }
 
@@ -202,7 +217,17 @@ object Reports {
             val s = Ledger.spent(t) ?: continue
             if (s.categoryId != null) categoryIds += s.categoryId else uncategorised += s.amount
         }
-        return categoryIds.map { Slice(SliceKind.CATEGORY, it, Spent.of(d, it, ym)) } + Slice(SliceKind.UNCATEGORISED, null, uncategorised)
+        // a deleted category's spending keeps its id: marked deleted while in the Trash, Uncategorised after (SPEC R124)
+        val live = d.categories.mapTo(HashSet()) { it.id }
+        val slices = categoryIds.mapNotNull { id ->
+            val amount = Spent.of(d, id, ym)
+            when (id) {
+                in live -> Slice(SliceKind.CATEGORY, id, amount)
+                in trashed -> Slice(SliceKind.DELETED_CATEGORY, id, amount)
+                else -> { uncategorised += amount; null }
+            }
+        }
+        return slices + Slice(SliceKind.UNCATEGORISED, null, uncategorised)
     }
 
     // ---- Savings vs Owed (SPEC R100) ---------------------------------------------------------
