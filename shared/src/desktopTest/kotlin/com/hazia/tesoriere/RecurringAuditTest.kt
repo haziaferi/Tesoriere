@@ -198,4 +198,18 @@ class RecurringAuditTest {
         assertEquals(AccountType.CREDIT, out.type); assertNull(out.linkedRecurringExpenseId)
         assertEquals(cents("5,000.00"), d.savingsAmount)
     }
+
+    // SPEC:R94 SPEC:R110
+    @Test fun `R94 a Loan changed to a card raised to 4,100_00 with no choice changes nothing, and with the correction chosen goes through`() {
+        val clock = TestClock(LocalDate(2026, 9, 10)); val ids = Ids()
+        val a = loan("loan", "4,000.00", "pay", RateType.FIXED)
+        var w = world(accounts = listOf(a))
+        w = Recurring.create(w, monthly("pay", "260.00", 20, due = LocalDate(2026, 9, 20), first = LocalDate(2026, 9, 20), linked = "loan"), clock) { ids.next() }
+        val draft = Accounts.retype(a, AccountType.CREDIT).copy(balance = cents("4,100.00"))
+        assertEquals(w, Accounts.retypeToCreditCascade(w, draft, reverse = true, clock) { ids.next() })
+        val d = Accounts.retypeToCreditCascade(w, draft, reverse = true, clock, rise = AccountEditing.BalanceRise.CORRECTION) { ids.next() }
+        assertTrue(d.recurringExpenses.isEmpty())
+        assertEquals(AccountType.CREDIT to cents("4,100.00"), d.accounts.single().let { it.type to it.balance })
+        assertEquals(cents("5,000.00"), d.savingsAmount)
+    }
 }

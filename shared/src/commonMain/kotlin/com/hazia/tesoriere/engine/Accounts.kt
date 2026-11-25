@@ -357,14 +357,22 @@ object Accounts {
 
     /**
      * A Loan changed to a card takes its linked payment with it, with the return on deletion if
-     * accepted; the Account stays, re-typed and linked to nothing (SPEC R94).
+     * accepted; the Account stays, re-typed and linked to nothing (SPEC R94). The card is checked
+     * first ([AccountEditing.problem], with the user's [rise] choice and [riseCategoryId] for a
+     * raised balance): when it cannot be saved, [d] comes back unchanged, so no payment is
+     * deleted and no return moves Savings for an Account that stays a Loan.
      */
-    fun retypeToCreditCascade(d: ProfileData, draft: Account, reverse: Boolean, clock: Clock, ids: () -> String): ProfileData {
+    fun retypeToCreditCascade(
+        d: ProfileData, draft: Account, reverse: Boolean, clock: Clock,
+        rise: AccountEditing.BalanceRise? = null, riseCategoryId: String? = null, ids: () -> String,
+    ): ProfileData {
         val before = d.accounts.firstOrNull { it.id == draft.id } ?: return d
+        val card = draft.copy(linkedRecurringExpenseId = null)
+        if (AccountEditing.problem(d, card, rise, riseCategoryId) != null) return d
         val linked = before.linkedRecurringExpenseId?.let { eid -> d.recurringExpenses.firstOrNull { it.id == eid } }
         var next = if (reverse && linked != null) Recurring.applyReversal(d, linked, clock, ids) else d
         if (linked != null) next = next.copy(recurringExpenses = next.recurringExpenses.filter { it.id != linked.id })
-        return AccountEditing.save(next, draft.copy(linkedRecurringExpenseId = null), clock, ids = ids)
+        return AccountEditing.save(next, card, clock, rise, riseCategoryId, ids)
     }
 
     /** An Account leaves with a closing row for the balance it still showed (SPEC R87, R66). */
