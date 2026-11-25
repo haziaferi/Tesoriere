@@ -685,6 +685,20 @@ class StatementImportTest {
         assertFalse(StatementImport.canConfirm(d, refund.map { it.copy(incomingGoalId = "cash") }))
     }
 
+    // SPEC:R109 SPEC:R107 SPEC:R21
+    @Test fun `R109 a 25_00 statement refund to a card whose charges are not logged carries CHARGES_NOT_LOGGED, as a payment charged to it does`() {
+        val d = world().let { w -> w.copy(accounts = w.accounts.map { it.copy(chargesNotLogged = true, payoffCategoryId = "home") }) }
+        val rows = listOf(
+            BankRow(LocalDate(2026, 3, 20), 2500, "RIMBORSO CALZATURE ORSA", null),
+            BankRow(LocalDate(2026, 3, 19), -1240, "POS MERCATO VERDE 0412", null),
+        )
+        val filed = StatementImport.review(d, rows, clock.today)
+            .map { if (it.row.amount > 0) it.copy(draft = StatementImport.draft(it.row, listOf(Part("home", -2500)), PaymentSource.Account("orbita"))) else it }
+            .file("POS MERCATO VERDE 0412", "groc" to "12.40", source = PaymentSource.Account("orbita"))
+        assertTrue(StatementImport.canConfirm(d, filed))
+        assertEquals(listOf(PaymentNotice.CHARGES_NOT_LOGGED, PaymentNotice.CHARGES_NOT_LOGGED), StatementImport.rowNotices(d, filed))
+    }
+
     // SPEC:R22, R107
     @Test fun `R22 a -12_40 bank row charged to a card raises it to 312_40, counts in Groceries and leaves Savings`() {
         val d = world()

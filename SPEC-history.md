@@ -237,3 +237,4 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R51 · changed · the rows of one Account quick-add share a group · owner
 - 2026-11-25 · R63 · changed · a bimonthly or yearly expense's share row is marked as a share · builder
 - 2026-11-25 · R107 · changed · a share row lowers no floor and matches no bill: only sweeps of a due date do · builder
+- 2026-11-25 · R109 · changed · a statement refund to a card whose charges are not logged carries the same warning as a payment · builder

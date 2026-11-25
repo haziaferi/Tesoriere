@@ -503,7 +503,11 @@ object StatementImport {
             val written: ProfileData? = when {
                 // a refund: a payment of minus the row's amount, with its keys; it teaches no rule (SPEC R21, R107, R108)
                 r.amount > 0 && draft != null ->
-                    if (rr.incomingGoalId != null || payoff != null || !Payments.canSave(next, draft)) null else pay(draft)
+                    if (rr.incomingGoalId != null || payoff != null || !Payments.canSave(next, draft)) null else {
+                        // the payment editor's warning, as for any payment (SPEC R109)
+                        notices[i] = Payments.draftNotice(next, draft)
+                        pay(draft)
+                    }
                 r.amount > 0 -> {
                     val saved = Writes.savingsQuickAdd(next, amt, r.description, false, clock, ids(), r.date)
                     // a Goal deleted while the review was open leaves the money in Savings
