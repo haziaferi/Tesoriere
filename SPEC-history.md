@@ -137,3 +137,6 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R70 · changed · the Profile keeps the last month processed, so a Profile with no recurring expense catches up too · builder
 - 2026-11-25 · R72 · changed · a finished expense's notice holds its name as typed too · builder
 - 2026-11-25 · R74 · changed · the kept summary names each finished expense, deleted or not · builder
+- 2026-11-25 · R107 · changed · money in can go on into a Goal, as in Sci-Fin · builder
+- 2026-11-25 · R107 · changed · Confirm names the count, the money out and the money in apart · builder
+- 2026-11-25 · R26 · changed · Confirm names the money out and the money in apart · builder

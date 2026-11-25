@@ -1353,7 +1353,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R26 · Statement import
 
-**Rule:** A bank statement in CSV or OFX is read on the device, and every bank row lands in a review as a suggestion (R107); nothing is recorded until one Confirm, which names the total. Each recorded bank row keeps the two keys below, and a row with a key that matches one kept from an earlier import, or one in any payment's bank keys, arrives unticked as already recorded. A payee once filed by the user under one category pre-fills that category (R108).
+**Rule:** A bank statement in CSV or OFX is read on the device, and every bank row lands in a review as a suggestion (R107); nothing is recorded until one Confirm, which names the money out and the money in apart (R107). Each recorded bank row keeps the two keys below, and a row with a key that matches one kept from an earlier import, or one in any payment's bank keys, arrives unticked as already recorded. A payee once filed by the user under one category pre-fills that category (R108).
 
 **Values:**
 
@@ -1456,7 +1456,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R107 · The import review
 
-**Rule:** Each bank row arrives in the review with a status, ticked or not, as below, newest first. A ticked outflow is recorded as a payment of its amount on its day, from Savings unless the user picks a Goal or an Account, with parts that add up (R23, R24, R54) and its keys (R26), or as a payment off an Account that lowers Savings too (R89); a ticked row of money in is added to Savings and not counted as income. Confirm stays off while a ticked outflow is neither, its parts do not add up, or a Goal it is paid from holds less than it after the ticked rows before it, and Confirm names the total: the ticked rows' sum, money in positive and money out negative.
+**Rule:** Each bank row arrives in the review with a status, ticked or not, as below, newest first. A ticked outflow is recorded as a payment of its amount on its day, from Savings unless the user picks a Goal or an Account, with parts that add up (R23, R24, R54) and its keys (R26), or as a payment off an Account that lowers Savings too (R89); a ticked row of money in is added to Savings, and on into a Goal when the user picks one, as money put into a Goal is (R50), and is not counted as income. Confirm stays off while a ticked outflow is neither or is sent into a Goal, its parts do not add up, or a Goal it is paid from holds less than it after the ticked rows before it; Confirm names the count of ticked rows, the money out and the money in, each as a positive figure.
 
 **Why:** A recurring expense's sweep already moved Savings (R63); recording its bank row too would count it twice.
 
@@ -1469,9 +1469,9 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 | `RECURRING` | an outflow whose payee's words hold a recurring expense's name's words, or are held in them | no |
 | `READY` | any other outflow | yes |
 
-**Evidence:** Sci-Fin's spec, section 4.3, and `engine/Import.kt` at `2892110`.
+**Evidence:** Sci-Fin's spec, section 4.3, and `engine/Import.kt` at `2892110`, whose Confirm said how many entries were added with the money out and the money in apart.
 
-**Acceptance:** With Savings at 1,000.00, a recurring expense named Rent and the March OFX statement: `AFFITTO CASA RENT` -950.00 arrives `RECURRING` and unticked, `STIPENDIO MARZO` 1,450.00 `INCOMING`; filing -12.40 under Groceries, splitting -42.30 into Pharmacy 30.00 and Household 12.30, and paying off a card at 300.00 with -60.00 names a total of 1,335.30 and leaves Savings at 2,335.30 and the card at 240.00. Rows of -100.00 and -14.00 both from a Goal holding 110.00 keep Confirm off; with only the first it is on and leaves the Goal at 10.00.
+**Acceptance:** With Savings at 1,000.00, a recurring expense named Rent and the March OFX statement: `AFFITTO CASA RENT` -950.00 arrives `RECURRING` and unticked, `STIPENDIO MARZO` 1,450.00 `INCOMING`; filing -12.40 under Groceries, splitting -42.30 into Pharmacy 30.00 and Household 12.30, and paying off a card at 300.00 with -60.00 names 4 rows, 114.70 out and 1,450.00 in, and leaves Savings at 2,335.30 and the card at 240.00. The same 1,450.00 sent on into a Goal holding 110.00 leaves the Goal at 1,560.00 and Savings at 885.30, with a `savings` row of +1,450.00 and a `goal:` row of +1,450.00 dated 7 March; a Goal deleted before Confirm leaves it in Savings. Rows of -100.00 and -14.00 both from a Goal holding 110.00 keep Confirm off; with only the first it is on and leaves the Goal at 10.00.
 
 **Not:** An outflow recorded with nowhere filed: Savings would drop with nothing to show where the money went.
 
@@ -1829,7 +1829,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R104 · Statement amounts: Each text in the table reads as its figure in cents; the parser holds no floating-point value.
 - R105 · CSV columns by header: Headers `Booking date,Value date,Description,Amount` with `01/09/2026,02/09/2026,POS CAFFE DEL MOLO,-3.50` give one row of -3.50 on 2026-09-01. Headers `Date,Credit card number,Description,Debit,Credit` with a debit of `800.00` and a credit of `12.00` give -800.00 and 12.00. Headers `Buchungsdatum;Verwendungszweck;Umsatzbetrag` with `01.09.2026;MIETE WOHNUNG;-800,00` give one row of -800.00. Headers `a;b;c` give no rows.
 - R106 · Statement dates: Each text in the table reads as its day; `05/03/2026` in a CSV statement is 5 March.
-- R107 · The import review: With Savings at 1,000.00, a recurring expense named Rent and the March OFX statement: `AFFITTO CASA RENT` -950.00 arrives `RECURRING` and unticked, `STIPENDIO MARZO` 1,450.00 `INCOMING`; filing -12.40 under Groceries, splitting -42.30 into Pharmacy 30.00 and Household 12.30, and paying off a card at 300.00 with -60.00 names a total of 1,335.30 and leaves Savings at 2,335.30 and the card at 240.00. Rows of -100.00 and -14.00 both from a Goal holding 110.00 keep Confirm off; with only the first it is on and leaves the Goal at 10.00.
+- R107 · The import review: With Savings at 1,000.00, a recurring expense named Rent and the March OFX statement: `AFFITTO CASA RENT` -950.00 arrives `RECURRING` and unticked, `STIPENDIO MARZO` 1,450.00 `INCOMING`; filing -12.40 under Groceries, splitting -42.30 into Pharmacy 30.00 and Household 12.30, and paying off a card at 300.00 with -60.00 names 4 rows, 114.70 out and 1,450.00 in, and leaves Savings at 2,335.30 and the card at 240.00. The same 1,450.00 sent on into a Goal holding 110.00 leaves the Goal at 1,560.00 and Savings at 885.30, with a `savings` row of +1,450.00 and a `goal:` row of +1,450.00 dated 7 March; a Goal deleted before Confirm leaves it in Savings. Rows of -100.00 and -14.00 both from a Goal holding 110.00 keep Confirm off; with only the first it is on and leaves the Goal at 10.00.
 - R108 · Payee rules: `POS MERCATO VERDE 0412` filed under Groceries in March arrives in April's review with one part of 18.75 in Groceries, from Savings; `FARMACIA SAN LORENZO` split into Pharmacy and Household teaches no rule; the payee of `POS*MERCATO-VERDE  0412` is `pos mercato verde 0412`.
 - R27 · The receipt contract: The receipt parser's tests cite Chatelaine's rule 123 field by field; no Tesoriere code opens the receipt folder for writing.
 - R28 · Receipt folder: With the folder set in Profile A, receipts are reviewed and recorded only in Profile A; Profile B offers no receipt folder while A has one.
