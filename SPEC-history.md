@@ -130,3 +130,5 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R108 · added · payee rules learned from one-category rows only · builder
 - 2026-11-25 · R99 · changed · Spending counts what was spent; money into Goals and paid off Accounts left out · owner
 - 2026-11-25 · R101 · changed · expenses are what was spent, the Spending total; transfers left out · owner
+- 2026-11-25 · R66 · changed · the return on deletion is filed under the category of the rows it reverses · owner
+- 2026-11-25 · R67 · changed · a return on deletion carries the reversed rows' category, not the expense's · owner
