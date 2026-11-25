@@ -285,7 +285,8 @@ object Recurring {
     fun create(d: ProfileData, draft: RecurringExpense, clock: Clock, ids: () -> String): ProfileData {
         require(canSave(d, draft)) { "a recurring expense needs a category that exists: '${draft.categoryId}'" }
         val today = clock.today()
-        var e = derivePlan(draft.copy(profileId = d.profileId, finishedAt = null, lastSweptMonth = null), today)
+        // the creation day is kept whatever the first due date (SPEC R60, R64)
+        var e = derivePlan(draft.copy(profileId = d.profileId, finishedAt = null, lastSweptMonth = null, createdOn = today), today)
         e = e.copy(apportionedShare = apportionedShareFor(e, today))
 
         var next = d.copy(recurringExpenses = d.recurringExpenses + e)
@@ -314,7 +315,7 @@ object Recurring {
         val before = d.recurringExpenses.first { it.id == edited.id }
         val sweptThisMonth = before.lastSweptMonth == today.ymKey()
         val beforeAmt = if (sweptThisMonth) sweepAmountForMonth(before, today.year, today.month.number) else 0
-        var e = edited.copy(profileId = d.profileId)
+        var e = edited.copy(profileId = d.profileId, createdOn = before.createdOn)            // an edit never moves the creation day (SPEC R60)
         // the chain starts again from the date entered; only a semimonthly edit of the second date alone keeps the first
         if (scheduleChanged(before, e)) {
             val secondOnly = e.dueDate == before.dueDate && e.firstDueDate == before.firstDueDate && e.cadence == before.cadence && e.dateMode == before.dateMode
@@ -452,6 +453,15 @@ object Recurring {
             AccountType.LOAN -> e.categoryId to Accounts.hasCharges(d, account)
         }
     }
+
+    /** The day [e] was created (SPEC R60): as stored, else, for one read from a Sci-Fin backup, its first due date. */
+    fun createdOn(e: RecurringExpense): LocalDate = e.createdOn ?: e.firstDueDate
+
+    /**
+     * The first day a bank row can be [e]'s bill (SPEC R107): the later of its first due date
+     * (SPEC R61) and the day it was created, before which no sweep covered it.
+     */
+    fun billFloor(e: RecurringExpense): LocalDate = maxOf(e.firstDueDate, createdOn(e))
 
     /** Whether [e] is a card's payment (SPEC R93): linked to an Account of type credit. */
     fun paysCard(d: ProfileData, e: RecurringExpense): Boolean =

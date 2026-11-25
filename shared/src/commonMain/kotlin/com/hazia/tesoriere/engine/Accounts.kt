@@ -115,7 +115,7 @@ object Accounts {
         val exp = RecurringExpense(
             expId, d.profileId, expenseName.trim().ifEmpty { StoredLabels.LOAN_PAYMENT }, amount = m.monthly, cadence = Cadence.MONTHLY,
             categoryId = categoryId, firstDueDate = firstDue, dueDate = firstDue, dueDateAnchorDay = anchorDay, dateMode = DateMode.FIXED_DATE,
-            lastSweptMonth = today.ymKey(), endDate = today.plusMonthsClamped(m.months, anchorDay), linkedAccountId = acctId,
+            lastSweptMonth = today.ymKey(), endDate = today.plusMonthsClamped(m.months, anchorDay), linkedAccountId = acctId, createdOn = today,
         )
         require(Recurring.canSave(d, exp)) { "a Loan's payment needs a category that exists: '$categoryId'" }
         val next = d.copy(accounts = d.accounts + acct, recurringExpenses = d.recurringExpenses + exp)
@@ -175,7 +175,7 @@ object Accounts {
         val e = RecurringExpense(
             expId, d.profileId, name.trim().ifEmpty { StoredLabels.fill(StoredLabels.NAMED_PAYMENT, a.name) }, amount = amount,
             cadence = Cadence.MONTHLY, categoryId = categoryId, firstDueDate = firstDue, dueDate = firstDue, dueDateAnchorDay = today.day,
-            dateMode = DateMode.FIXED_DATE, lastSweptMonth = today.ymKey(), linkedAccountId = a.id,
+            dateMode = DateMode.FIXED_DATE, lastSweptMonth = today.ymKey(), linkedAccountId = a.id, createdOn = today,
         )
         require(Recurring.canSave(d, e)) { "a fixed payment needs a category that exists: '$categoryId'" }
         return d.copy(

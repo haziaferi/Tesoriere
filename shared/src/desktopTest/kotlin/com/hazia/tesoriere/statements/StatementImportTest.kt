@@ -386,7 +386,7 @@ class StatementImportTest {
     }
 
     // SPEC:R107 SPEC:R61 SPEC:R64
-    @Test fun `R107 with Telefono first due 10 March 2026, TELEFONO -12_00 on 6 March and TIM -29_90 on 10 February arrive READY, on 7 March RECURRING`() {
+    @Test fun `R107 with Telefono first due 10 March 2026, TELEFONO -12_00 on 7 March and TIM -29_90 on 10 February arrive READY, on 10 March RECURRING`() {
         val d = world().let { w ->
             w.copy(
                 recurringExpenses = w.recurringExpenses + Fixture.recurring(
@@ -395,14 +395,36 @@ class StatementImportTest {
             )
         }
         val rows = listOf(
-            BankRow(LocalDate(2026, 3, 6), -1200, "TELEFONO ABBONAMENTO", null),     // 4 days before the first due date
+            BankRow(LocalDate(2026, 3, 7), -1200, "TELEFONO ABBONAMENTO", null),     // 3 days before the first due date
             BankRow(LocalDate(2026, 2, 10), -2990, "TIM S.P.A.", null),              // the amount on a day before the chain starts
         )
         val review = StatementImport.review(d, rows, clock.today)
         assertEquals(listOf(RowStatus.READY, RowStatus.READY), review.map { it.status })
         assertTrue(review.all { it.include })
-        val near = StatementImport.review(d, listOf(BankRow(LocalDate(2026, 3, 7), -1200, "TELEFONO ABBONAMENTO", null)), clock.today)
-        assertEquals(RowStatus.RECURRING, near.single().status)
+        val on = StatementImport.review(d, listOf(BankRow(LocalDate(2026, 3, 10), -1200, "TELEFONO ABBONAMENTO", null)), clock.today)
+        assertEquals(RowStatus.RECURRING, on.single().status)
+    }
+
+    // SPEC:R107 SPEC:R60 SPEC:R64
+    @Test fun `R107 with Telefono first due 5 March but created on 14 March, TELEFONO on 10 March and TIM -29_90 on 5 March arrive READY, on 14 March RECURRING`() {
+        val d = world().let { w ->
+            w.copy(
+                recurringExpenses = w.recurringExpenses + Fixture.recurring(
+                    "tel", "29.90", Cadence.MONTHLY, firstDue = LocalDate(2026, 3, 5), dueDate = LocalDate(2026, 4, 5), categoryId = "home",
+                    name = "Telefono", lastSweptMonth = "2026-03", createdOn = LocalDate(2026, 3, 14),
+                ),
+            )
+        }
+        val rows = listOf(
+            BankRow(LocalDate(2026, 3, 10), -1200, "TELEFONO ABBONAMENTO", null),    // before it was created
+            BankRow(LocalDate(2026, 3, 5), -2990, "TIM S.P.A.", null),               // its amount on its first due date, before it was created
+        )
+        assertEquals(listOf(RowStatus.READY, RowStatus.READY), StatementImport.review(d, rows, clock.today).map { it.status })
+        val after = StatementImport.review(d, listOf(BankRow(LocalDate(2026, 3, 14), -1200, "TELEFONO ABBONAMENTO", null)), clock.today)
+        assertEquals(RowStatus.RECURRING, after.single().status)
+        // no creation day, as from a Sci-Fin backup: it reads as the first due date
+        val old = d.copy(recurringExpenses = d.recurringExpenses.map { it.copy(createdOn = null) })
+        assertEquals(listOf(RowStatus.RECURRING, RowStatus.RECURRING), StatementImport.review(old, rows, clock.today).map { it.status })
     }
 
     // SPEC:R107 SPEC:R65

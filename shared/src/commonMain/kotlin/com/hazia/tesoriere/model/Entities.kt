@@ -102,6 +102,12 @@ data class RecurringExpense(
     /** Set once the final occurrence has passed; `dueDate` stops advancing. */
     val finishedAt: LocalDate? = null,
     val linkedAccountId: String? = null,
+    /**
+     * The day it was created (SPEC R60, R64); null for one read from a Sci-Fin backup, which
+     * reads as its first due date (Recurring.createdOn). Schema 1 is edited in place: the first
+     * migration (plan Task 22) must add this column with that reading.
+     */
+    val createdOn: LocalDate? = null,
 )
 
 @Serializable

@@ -331,6 +331,26 @@ class RecurringTest {
         assertEquals(cents("740.00"), back.savings.amount)
     }
 
+    // SPEC:R64 SPEC:R60
+    @Test fun `R64 entered on 14 September 2026 with a first due date of 5 March, an expense keeps 14 September as its creation day, and so do a Loan's payment and a card's fixed payment`() {
+        val clock = TestClock(LocalDate(2026, 9, 14)); val ids = Ids()
+        val d = Recurring.create(world(), recurring("e", "60.00", Cadence.MONTHLY, LocalDate(2026, 3, 5), categoryId = "phone"), clock) { ids.next() }
+        assertEquals(LocalDate(2026, 9, 14), d.recurringExpenses.single().createdOn)
+        assertEquals(LocalDate(2026, 3, 5), d.recurringExpenses.single().firstDueDate)
+        // an edit keeps it
+        val (edited, _) = Recurring.edit(d, d.recurringExpenses.single().copy(amount = cents("65.00"), createdOn = null), clock.today)
+        assertEquals(LocalDate(2026, 9, 14), edited.recurringExpenses.single().createdOn)
+        val loan = com.hazia.tesoriere.engine.Accounts.getLoan(
+            world(), cents("9,800.00"), 0.059, 48, com.hazia.tesoriere.model.RateType.FIXED, "", "", "c1", false, clock,
+        ) { ids.next() }
+        assertEquals(LocalDate(2026, 9, 14), loan.recurringExpenses.single().createdOn)
+        val card = world().copy(accounts = listOf(Account("cc", Fixture.PROFILE, "Card", type = AccountType.CREDIT)))
+        val fixed = com.hazia.tesoriere.engine.Accounts.commitFixedPayment(card, "cc", cents("50.00"), "", "c1", clock, "fix")
+        assertEquals(LocalDate(2026, 9, 14), fixed.recurringExpenses.single().createdOn)
+        // an expense with none, as from a Sci-Fin backup, reads as created on its first due date
+        assertEquals(LocalDate(2026, 3, 5), Recurring.createdOn(d.recurringExpenses.single().copy(createdOn = null)))
+    }
+
     // ---- every recurring expense has a category (owner answer 2 of 2026-11-24) ----------------
 
     // SPEC:R67

@@ -45,6 +45,7 @@ object Fixture {
         dueDate2: LocalDate? = null, endDate: LocalDate? = null, intervalDays: Int? = null, share: String? = null,
         linkedAccountId: String? = null, lastSweptMonth: String? = null, finishedAt: LocalDate? = null,
         categoryId: String = "c1", name: String = id, reminderEnabled: Boolean = false, reminderLeadDays: Int = 3,
+        createdOn: LocalDate? = null,
     ) = RecurringExpense(
         id = id, profileId = PROFILE, name = name, amount = cents(amount), cadence = cadence, categoryId = categoryId,
         firstDueDate = firstDue, dueDate = dueDate, dueDate2 = dueDate2,
@@ -52,6 +53,6 @@ object Fixture {
         intervalDays = intervalDays ?: if (dateMode == DateMode.INTERVAL) Recurring.defaultIntervalDays(cadence) else null,
         apportionedShare = share?.let(::cents), endDate = endDate, linkedAccountId = linkedAccountId,
         lastSweptMonth = lastSweptMonth, finishedAt = finishedAt,
-        reminderEnabled = reminderEnabled, reminderLeadDays = reminderLeadDays,
+        reminderEnabled = reminderEnabled, reminderLeadDays = reminderLeadDays, createdOn = createdOn,
     )
 }

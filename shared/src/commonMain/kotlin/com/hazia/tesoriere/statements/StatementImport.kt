@@ -65,8 +65,9 @@ import kotlin.math.abs
  * - An outflow is RECURRING also when its amount is a recurring expense's amount, or what its rows
  *   dated on that due date hold, within [RECURRING_DAYS] of one of its due dates (SPEC R107);
  *   Sci-Fin matched the expense's name only. A card's payment is left out of both matches, the
- *   name match included, which Sci-Fin applied to every expense. Neither match finds a row more
- *   than [RECURRING_DAYS] before the expense's first due date: Sci-Fin's name match had no date.
+ *   name match included, which Sci-Fin applied to every expense. Neither match finds a row dated
+ *   before the later of the expense's first due date and its creation day (SPEC R60, owner
+ *   ruling of 2026-11-25): Sci-Fin's name match had no date.
  * - No wording: Sci-Fin's review notes are dropped (the status is the code, SPEC R16), and its
  *   target lists with their labels (`inflowTargets`, `outflowTargets`) are the design pass's.
  * - Names: ImportRow is BankRow, ImportStatus is RowStatus (with PAIR, set by pairing, SPEC R37),
@@ -378,19 +379,21 @@ object StatementImport {
         /**
          * Whether an outflow [r] with payee words [pw] names a recurring expense (SPEC R107): whole
          * words either way round, "Rent" is in "Affitto casa rent", not in "Parent teacher assoc";
-         * never for a row more than 3 days before the expense's first due date (SPEC R61).
+         * never for a row dated before the later of its first due date and its creation day
+         * (Recurring.billFloor, SPEC R60, R61).
          */
         fun named(r: BankRow, pw: List<String>): Boolean = pw.isNotEmpty() && recurring.any { (e, nw) ->
-            r.date >= e.firstDueDate.minusDays(RECURRING_DAYS) &&
+            r.date >= Recurring.billFloor(e) &&
                 (pw.windowed(nw.size).any { it == nw } || nw.windowed(pw.size).any { it == pw })
         }
         /**
          * Whether an outflow [r] is a recurring expense's bill by its amount and day (SPEC R107):
-         * only due dates on the chain count, none before the first due date (SPEC R61).
+         * only due dates on the chain count (SPEC R61), and never for a row dated before the later
+         * of its first due date and its creation day (SPEC R60).
          */
         fun billOf(r: BankRow): Boolean = byAmount.any { e ->
+            if (r.date < Recurring.billFloor(e)) return@any false
             Recurring.dueDatesBetween(e, r.date.minusDays(RECURRING_DAYS), r.date.plusDays(RECURRING_DAYS)).any { due ->
-                if (due < e.firstDueDate) return@any false
                 // what its rows dated on that due date hold: an edit with the difference declined leaves the old amount there
                 val swept = d.transactions.filter { it.key == TransactionKey.RecurringKey(e.id).stored && it.date == due }.sumOf { it.amount }
                 -r.amount == e.amount || (swept > 0 && -r.amount == swept)
