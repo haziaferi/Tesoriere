@@ -137,6 +137,12 @@ data class Account(
     val termMonths: Int? = null,
     val rateType: RateType? = null,
     val originationDate: LocalDate? = null,
+    /**
+     * Loan only: the category a payment off it by hand counts in while nothing is charged to it,
+     * unless the payment picks another (SPEC R89). Optional. Schema 1 is edited in place: the
+     * first migration (plan Task 22) must add this column, a missing value meaning none.
+     */
+    val loanCategoryId: String? = null,
 )
 
 /**

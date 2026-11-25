@@ -37,6 +37,8 @@ object AccountEditing {
         PAYOFF_CATEGORY_MISSING,
         /** The fees category names no category that exists (SPEC R110). */
         FEES_CATEGORY_UNKNOWN,
+        /** A Loan's own category names no category that exists (SPEC R86, R89); having none is allowed. */
+        LOAN_CATEGORY_UNKNOWN,
         /** A card's balance rises and the user has not chosen interest or fees or a correction (SPEC R110). */
         RISE_CHOICE_MISSING,
         /** A card's balance rises as interest or fees with no category that exists (SPEC R110). */
@@ -56,6 +58,7 @@ object AccountEditing {
             (draft.type != AccountType.CREDIT || draft.payoffCategoryId == null || d.categories.none { it.id == draft.payoffCategoryId })
         ) return AccountProblem.PAYOFF_CATEGORY_MISSING
         if (draft.feesCategoryId != null && d.categories.none { it.id == draft.feesCategoryId }) return AccountProblem.FEES_CATEGORY_UNKNOWN
+        if (draft.loanCategoryId != null && d.categories.none { it.id == draft.loanCategoryId }) return AccountProblem.LOAN_CATEGORY_UNKNOWN
         if (cardRise(d, draft)) {
             if (rise == null) return AccountProblem.RISE_CHOICE_MISSING
             if (rise == BalanceRise.FEES && !Accounts.canRise(d, draft, riseCategoryId)) return AccountProblem.RISE_CATEGORY_MISSING

@@ -262,6 +262,38 @@ class AccountsTest {
         assertEquals(cents("3,800.00"), none.accounts.single().balance)
     }
 
+    // SPEC:R89 SPEC:R85
+    @Test fun `R89 a Loan with Car as its own category paid 200_00 from Savings counts in Car, Groceries picked wins, and its linked payment's sweeps stay under Bills`() {
+        val clock = TestClock(today); val ids = Ids()
+        val d0 = profile(categories = listOf(category("car", "Car"), category("groc", "Groceries"), category("bills", "Bills")))
+        val loan = Account("l", Fixture.PROFILE, "Loan", type = AccountType.LOAN, balance = cents("4,000.00"), loanCategoryId = "car")
+        val d = d0.copy(accounts = listOf(loan))
+        assertTrue(Accounts.canPayOff(d, loan, Accounts.PayoffFrom.Savings))
+        val paid = Accounts.quickAdd(d, "l", cents("200.00"), Accounts.Direction.PAYMENT, null, from = Accounts.PayoffFrom.Savings, clock = clock) { ids.next() }
+        assertEquals(cents("200.00"), Spent.of(paid, "car", "2026-09"))
+        val picked = Accounts.quickAdd(d, "l", cents("200.00"), Accounts.Direction.PAYMENT, null, from = Accounts.PayoffFrom.Savings, clock = clock, categoryId = "groc") { ids.next() }
+        assertEquals(cents("200.00"), Spent.of(picked, "groc", "2026-09")); assertEquals(0L, Spent.of(picked, "car", "2026-09"))
+        // linked to a payment under Bills: the Loan's own category wins for a payment by hand, the sweeps keep Bills
+        val pay = recurring("pay", "260.00", Cadence.MONTHLY, LocalDate(2026, 9, 20), categoryId = "bills", linkedAccountId = "l")
+        var linked = d.copy(accounts = listOf(loan.copy(linkedRecurringExpenseId = "pay")), recurringExpenses = listOf(pay))
+        linked = Accounts.quickAdd(linked, "l", cents("100.00"), Accounts.Direction.PAYMENT, null, from = Accounts.PayoffFrom.Savings, clock = clock) { ids.next() }
+        linked = com.hazia.tesoriere.engine.Recurring.sweepOccurrences(linked, "pay", LocalDate(2026, 9, 1), clock) { ids.next() }.first
+        assertEquals(cents("100.00"), Spent.of(linked, "car", "2026-09"))
+        assertEquals(cents("260.00"), Spent.of(linked, "bills", "2026-09"))
+    }
+
+    // SPEC:R86 SPEC:R94 SPEC:R91
+    @Test fun `R86 a Loan saves with no category of its own but not with one that does not exist, changed to a card it has none, and taken from the calculator it has its payment's`() {
+        val clock = TestClock(today)
+        val loan = Account("l", Fixture.PROFILE, "Loan", type = AccountType.LOAN)
+        assertTrue(AccountEditing.canSave(world(), loan))
+        assertFalse(AccountEditing.canSave(world(), loan.copy(loanCategoryId = "nowhere")))
+        assertTrue(AccountEditing.canSave(world(), loan.copy(loanCategoryId = "c1")))
+        assertNull(Accounts.retype(loan.copy(loanCategoryId = "c1"), AccountType.CREDIT).loanCategoryId)
+        val taken = Accounts.getLoan(world(), cents("9,800.00"), 0.059, 48, RateType.FIXED, "", "", "c1", false, clock) { Ids().next() }
+        assertEquals("c1", taken.accounts.single().loanCategoryId)
+    }
+
     // SPEC:R89 SPEC:R22
     @Test fun `R89 a Loan of 4,000_00 increased by 500_00 reads 4,500_00 and an increase on a card is refused`() {
         val clock = TestClock(today); val ids = Ids()

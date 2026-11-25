@@ -491,6 +491,10 @@ class StatementImportTest {
         assertEquals(cents("60.00"), Spent.of(after, "books", "2026-03"))
         // from nowhere it needs no category
         assertTrue(StatementImport.canConfirm(d, review.map { it.copy(payoffFrom = Accounts.PayoffFrom.None) }))
+        // a Loan with a category of its own needs none picked
+        val own = d.copy(accounts = d.accounts.map { if (it.id == "loan") it.copy(loanCategoryId = "books") else it })
+        assertTrue(StatementImport.canConfirm(own, review))
+        assertEquals(cents("60.00"), Spent.of(StatementImport.confirm(own, review, clock, ids::next), "books", "2026-03"))
     }
 
     // SPEC:R107, R50

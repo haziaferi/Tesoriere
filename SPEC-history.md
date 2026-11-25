@@ -214,3 +214,8 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R60 · changed · an expense keeps the day it was created; one from a Sci-Fin backup takes its first due date; Task 22's migration adds it · owner
 - 2026-11-25 · R64 · changed · creating an expense, a Loan's payment or a card's fixed payment keeps today as its creation day · owner
 - 2026-11-25 · R107 · changed · neither recurring match finds a row dated before the later of the first due date and the creation day · owner
+- 2026-11-25 · R89 · changed · a Loan's payment by hand counts under the picked category, else the Loan's own, else its linked payment's · owner
+- 2026-11-25 · R85 · changed · a Loan holds a category of its own; Task 22's migration adds it · owner
+- 2026-11-25 · R86 · changed · a Loan is saved with or without its own category, never with one that does not exist · owner
+- 2026-11-25 · R91 · changed · a Loan taken from the calculator takes its payment's category as its own · owner
+- 2026-11-25 · R94 · changed · a Loan changed to a card clears its own category · owner

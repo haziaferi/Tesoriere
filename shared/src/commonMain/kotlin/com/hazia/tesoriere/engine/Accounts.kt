@@ -110,7 +110,7 @@ object Accounts {
         val acct = Account(
             acctId, d.profileId, accountName.trim().ifEmpty { StoredLabels.LOAN }, type = AccountType.LOAN, balance = principal,
             linkedRecurringExpenseId = expId, autoUpdateFromPayments = autoUpdate, principal = principal,
-            interestRate = annualRate, termMonths = m.months, rateType = rateType, originationDate = today,
+            interestRate = annualRate, termMonths = m.months, rateType = rateType, originationDate = today, loanCategoryId = categoryId,
         )
         val exp = RecurringExpense(
             expId, d.profileId, expenseName.trim().ifEmpty { StoredLabels.LOAN_PAYMENT }, amount = m.monthly, cadence = Cadence.MONTHLY,
@@ -248,7 +248,7 @@ object Accounts {
      * card is its interest or fees, filed under [categoryId] if picked, else its fees category
      * (SPEC R110); with neither, it is refused, unless the card's charges are not logged. A
      * payment off a Loan with nothing charged to it is filed under [categoryId] if picked, else
-     * its linked payment's category, and refused with neither ([canPayOff], SPEC R89).
+     * the Loan's own category, else its linked payment's, and refused with none of them ([canPayOff], SPEC R89).
      */
     fun quickAdd(
         d: ProfileData, accountId: String, amount: Money, direction: Direction, payee: String?, from: PayoffFrom,
@@ -303,21 +303,21 @@ object Accounts {
     /**
      * The category the `savings` or `spend:` row of a payment off [a] is filed under as it is
      * written, or null for a transfer: a card's payoff category while its charges are not logged
-     * (SPEC R109); for a Loan with nothing charged to it, [picked], else its linked payment's
+     * (SPEC R109); for a Loan with nothing charged to it, [picked], else the Loan's own, else its linked payment's
      * category, when it exists (SPEC R89).
      */
     fun payoffFiling(d: ProfileData, a: Account, picked: String? = null): String? = when (a.type) {
         AccountType.CREDIT -> payoffCategory(d, a)
         AccountType.LOAN -> if (hasCharges(d, a)) null else {
             val linked = a.linkedRecurringExpenseId?.let { id -> d.recurringExpenses.firstOrNull { it.id == id }?.categoryId }
-            (picked ?: linked)?.takeIf { id -> d.categories.any { it.id == id } }
+            listOfNotNull(picked, a.loanCategoryId, linked).firstOrNull { id -> d.categories.any { it.id == id } }
         }
     }
 
     /**
      * Whether a payment off [a] from [from] can be logged (SPEC R89): a payment off a Loan from
      * Savings or a Goal while nothing is charged to it counts as spending, so it needs a category,
-     * [picked] or the linked payment's; every other payment can.
+     * [picked], the Loan's own or the linked payment's; every other payment can.
      */
     fun canPayOff(d: ProfileData, a: Account, from: PayoffFrom, picked: String? = null): Boolean =
         a.type != AccountType.LOAN || from == PayoffFrom.None || hasCharges(d, a) || payoffFiling(d, a, picked) != null
@@ -330,7 +330,7 @@ object Accounts {
         if (a.type == next) return a
         return if (next == AccountType.CREDIT) a.copy(
             type = next, autoUpdateFromPayments = false,
-            principal = null, interestRate = null, termMonths = null, rateType = null, originationDate = null,
+            principal = null, interestRate = null, termMonths = null, rateType = null, originationDate = null, loanCategoryId = null,
         ) else a.copy(type = next, apr = null, chargesNotLogged = false, payoffCategoryId = null, feesCategoryId = null)
     }
 
