@@ -254,3 +254,7 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R117 · changed · size and depth caps; numbers only as JSON numbers; total above zero, no negative price, quantity 1 or more; blanks refused · builder
 - 2026-11-25 · R114 · changed · a line moved back to the category it would hold unmoved counts as not moved · builder
 - 2026-11-25 · R117 · changed · the order is size and depth, then format, then the rest; an empty pack is none; currency read in capitals · builder
+- 2026-11-25 · R120 · added · a store link keeps the first paired row's rule name; a row matches when its rule name equals it · builder
+- 2026-11-25 · R118 · added · which receipt payments and bank rows are suggested as pairs; PAIR rows are unticked and never recorded by Confirm · builder
+- 2026-11-25 · R119 · added · pairing edits the first payment through the payment path into one; what each field becomes; what cannot pair · builder
+- 2026-11-25 · R107 · changed · the PAIR status joins the table, checked after INCOMING and before RECURRING · builder
