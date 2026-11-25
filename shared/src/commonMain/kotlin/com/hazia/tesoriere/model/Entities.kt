@@ -121,6 +121,8 @@ data class Account(
      */
     val chargesNotLogged: Boolean = false,
     val payoffCategoryId: String? = null,
+    /** Credit only: where a rise of the balance that is not a payment, its interest or fees, is filed unless one is picked (SPEC R110). */
+    val feesCategoryId: String? = null,
     val linkedRecurringExpenseId: String? = null,
     /** Loan only. */
     val autoUpdateFromPayments: Boolean = false,
@@ -157,7 +159,8 @@ data class Transaction(
     /**
      * The category a row counting as spending is filed under, as written (SPEC R25, R51): a
      * recurring sweep's at sweep time (owner answer 2 of 2026-11-24), and the payoff category on a
-     * card's payoff rows while its charges are not logged (SPEC R109); null on every other row.
+     * card's payoff rows while its charges are not logged (SPEC R109), and a card's interest or
+     * fees on its `acct:` row (SPEC R110); null on every other row.
      */
     val categoryId: String? = null,
     /**

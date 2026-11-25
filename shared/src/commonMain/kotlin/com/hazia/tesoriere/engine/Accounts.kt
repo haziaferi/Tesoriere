@@ -25,8 +25,9 @@ import kotlin.math.roundToLong
  *
  * Changed from Sci-Fin:
  * - No charge direction: a charge to a card is a payment with an Account source (SPEC R22, R54,
- *   payments/Payments.kt), so `Direction` is PAYMENT and INCREASE only, and an increase is refused
- *   on a card (SPEC R89).
+ *   payments/Payments.kt), so `Direction` is PAYMENT and INCREASE only. An increase on a card is
+ *   its interest or fees, filed under a category, and refused with none (SPEC R89, R110, owner
+ *   answer E of 2026-11-25).
  * - quickAdd writes its own row note when the user gave none (`Paid off`, `Increased`, Sci-Fin's
  *   stored words), where Sci-Fin took it from its entry sentence's `rowLabel`.
  * - A payment off an Account takes its money from Savings, a Goal or nowhere ([PayoffFrom]), where
@@ -184,16 +185,43 @@ object Accounts {
 
     // ---- accounts (SPEC R85-R89, R94) --------------------------------------------------------------
 
-    /** A direct balance edit: logs the change as an `acct:` row; Savings is untouched (SPEC R51, R86). */
-    fun balanceEdit(d: ProfileData, accountId: String, newBalance: Money, payee: String?, clock: Clock, txId: String, date: LocalDate? = null): ProfileData {
+    /**
+     * A direct balance edit: logs the change as an `acct:` row; Savings is untouched (SPEC R51,
+     * R86). [categoryId] files the row as a card's interest or fees (SPEC R110); the callers that
+     * mean a rise on a card pass it, every other edit leaves the row in no category.
+     */
+    fun balanceEdit(
+        d: ProfileData, accountId: String, newBalance: Money, payee: String?, clock: Clock, txId: String,
+        date: LocalDate? = null, categoryId: String? = null,
+    ): ProfileData {
         val a = d.accounts.first { it.id == accountId }
         val delta = newBalance - a.balance
         val next = d.copy(accounts = d.accounts.map { if (it.id == accountId) it.copy(balance = newBalance) else it })
         if (delta == 0L) return next
-        return Ledger.logAccountEdit(next, a.id, a.name, delta, payee ?: StoredLabels.CORRECTION, clock, txId, date)
+        return Ledger.logAccountEdit(next, a.id, a.name, delta, payee ?: StoredLabels.CORRECTION, clock, txId, date, categoryId)
     }
 
-    /** A quick-add's direction: PAYMENT lowers the balance, INCREASE (a Loan only) raises it. A charge is a payment (SPEC R22). */
+    /**
+     * The category a rise of card [a]'s balance that is not a payment is filed under as interest
+     * or fees (SPEC R110): [picked], else the card's fees category, when it exists; null when
+     * none does. A card whose charges are not logged files its rises under none (SPEC R109).
+     */
+    fun riseCategory(d: ProfileData, a: Account, picked: String? = null): String? {
+        if (a.type != AccountType.CREDIT || a.chargesNotLogged) return null
+        return (picked ?: a.feesCategoryId)?.takeIf { id -> d.categories.any { it.id == id } }
+    }
+
+    /**
+     * Whether [a]'s balance may rise other than by a payment charged to it (SPEC R89, R110): a
+     * Loan always; a card as its interest or fees, filed under a category that exists, or under
+     * none while its charges are not logged (SPEC R109).
+     */
+    fun canRise(d: ProfileData, a: Account, picked: String? = null): Boolean = when (a.type) {
+        AccountType.LOAN -> true
+        AccountType.CREDIT -> a.chargesNotLogged || riseCategory(d, a, picked) != null
+    }
+
+    /** A quick-add's direction: PAYMENT lowers the balance, INCREASE raises it: a Loan, or a card's interest or fees (SPEC R89, R110). */
     enum class Direction { PAYMENT, INCREASE }
 
     /** Where a payment off an Account takes its money from (SPEC R89). An increase takes it from nowhere. */
@@ -215,21 +243,26 @@ object Accounts {
     /**
      * Account quick-add (SPEC R89): one `acct:` row; on a payment, the row of where its money
      * came from [from] too, since the `acct:` row moved the balance and nothing else: a `savings`
-     * row, or a `spend:` row that lowers a Goal, which must hold the amount.
+     * row, or a `spend:` row that lowers a Goal, which must hold the amount. An increase on a
+     * card is its interest or fees, filed under [categoryId] if picked, else its fees category
+     * (SPEC R110); with neither, it is refused, unless the card's charges are not logged.
      */
     fun quickAdd(
         d: ProfileData, accountId: String, amount: Money, direction: Direction, payee: String?, from: PayoffFrom,
-        clock: Clock, date: LocalDate? = null, ids: () -> String,
+        clock: Clock, date: LocalDate? = null, categoryId: String? = null, ids: () -> String,
     ): ProfileData {
         val a = d.accounts.first { it.id == accountId }
-        require(direction == Direction.PAYMENT || a.type == AccountType.LOAN) { "only a Loan takes an increase; a charge is a payment (SPEC R22)" }
+        require(direction == Direction.PAYMENT || canRise(d, a, categoryId)) {
+            "a card takes an increase only as interest or fees in a category that exists; a charge is a payment (SPEC R22, R110)"
+        }
         val goal = (from as? PayoffFrom.Goal)?.takeIf { direction == Direction.PAYMENT }?.let { f -> d.goals.firstOrNull { it.id == f.id } }
         if (direction == Direction.PAYMENT && from is PayoffFrom.Goal) {
             require(goal != null && amount <= goal.saved) { "a payoff from a Goal takes at most what it holds (SPEC R89)" }
         }
         val signed = if (direction == Direction.PAYMENT) -amount else amount
         val note = payee ?: if (direction == Direction.PAYMENT) StoredLabels.PAID_OFF else StoredLabels.INCREASED
-        var next = balanceEdit(d, accountId, a.balance + signed, note, clock, ids(), date)
+        val rise = if (direction == Direction.INCREASE) riseCategory(d, a, categoryId) else null
+        var next = balanceEdit(d, accountId, a.balance + signed, note, clock, ids(), date, rise)
         if (direction != Direction.PAYMENT) return next
         val fromNote = payee ?: StoredLabels.fill(StoredLabels.PAYMENT_TO, a.name)
         // a card whose charges are not logged files its payoff under its payoff category, as written (SPEC R109)
@@ -266,7 +299,7 @@ object Accounts {
         return if (next == AccountType.CREDIT) a.copy(
             type = next, autoUpdateFromPayments = false,
             principal = null, interestRate = null, termMonths = null, rateType = null, originationDate = null,
-        ) else a.copy(type = next, apr = null, chargesNotLogged = false, payoffCategoryId = null)
+        ) else a.copy(type = next, apr = null, chargesNotLogged = false, payoffCategoryId = null, feesCategoryId = null)
     }
 
     /** A Loan is finished when its linked expense is (SPEC R87, R72). */
@@ -299,7 +332,7 @@ object Accounts {
         val linked = before.linkedRecurringExpenseId?.let { eid -> d.recurringExpenses.firstOrNull { it.id == eid } }
         var next = if (reverse && linked != null) Recurring.applyReversal(d, linked, clock, ids) else d
         if (linked != null) next = next.copy(recurringExpenses = next.recurringExpenses.filter { it.id != linked.id })
-        return AccountEditing.save(next, draft.copy(linkedRecurringExpenseId = null), clock, ids)
+        return AccountEditing.save(next, draft.copy(linkedRecurringExpenseId = null), clock, ids = ids)
     }
 
     /** An Account leaves with a closing row for the balance it still showed (SPEC R87, R66). */

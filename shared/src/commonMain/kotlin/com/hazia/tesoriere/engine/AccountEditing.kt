@@ -20,21 +20,31 @@ import com.hazia.tesoriere.model.StoredLabels
 object AccountEditing {
 
     /**
-     * Whether [draft] can be saved: it has a name (SPEC R86), and its switch for charges not
-     * logged is on only on a card with a payoff category that exists (SPEC R109).
+     * Whether [draft] can be saved: it has a name (SPEC R86); its switch for charges not logged
+     * is on only on a card with a payoff category that exists (SPEC R109); a fees category it
+     * names exists; and a rise of a stored card's balance, its interest or fees, has a category
+     * that exists, [riseCategoryId] if picked, else the fees category, unless its charges are not
+     * logged (SPEC R110).
      */
-    fun canSave(d: ProfileData, draft: Account): Boolean {
+    fun canSave(d: ProfileData, draft: Account, riseCategoryId: String? = null): Boolean {
         if (draft.name.isBlank()) return false
         if (draft.chargesNotLogged) {
             if (draft.type != AccountType.CREDIT) return false
             if (draft.payoffCategoryId == null || d.categories.none { it.id == draft.payoffCategoryId }) return false
         }
+        if (draft.feesCategoryId != null && d.categories.none { it.id == draft.feesCategoryId }) return false
+        val existing = d.accounts.firstOrNull { it.id == draft.id }
+        if (existing != null && draft.balance > existing.balance && !Accounts.canRise(d, draft, riseCategoryId)) return false
         return true
     }
 
-    /** Saves [draft], or returns [d] unchanged when it cannot be saved ([canSave]). */
-    fun save(d: ProfileData, draft: Account, clock: Clock, ids: () -> String): ProfileData {
-        if (!canSave(d, draft)) return d
+    /**
+     * Saves [draft], or returns [d] unchanged when it cannot be saved ([canSave]). A rise of a
+     * card's balance is logged as its interest or fees, filed under [riseCategoryId] if picked,
+     * else the card's fees category (SPEC R110); an opening balance and a fall are filed under none.
+     */
+    fun save(d: ProfileData, draft: Account, clock: Clock, riseCategoryId: String? = null, ids: () -> String): ProfileData {
+        if (!canSave(d, draft, riseCategoryId)) return d
         val name = draft.name.trim()
         val existing = d.accounts.firstOrNull { it.id == draft.id }
         val cleaned = draft.copy(
@@ -48,7 +58,10 @@ object AccountEditing {
             n
         } else {
             var n = d
-            if (cleaned.balance != existing.balance) n = Accounts.balanceEdit(n, existing.id, cleaned.balance, StoredLabels.CORRECTION, clock, ids())
+            if (cleaned.balance != existing.balance) {
+                val rise = if (cleaned.balance > existing.balance) Accounts.riseCategory(d, cleaned, riseCategoryId) else null
+                n = Accounts.balanceEdit(n, existing.id, cleaned.balance, StoredLabels.CORRECTION, clock, ids(), categoryId = rise)
+            }
             n.copy(accounts = n.accounts.map { if (it.id == existing.id) cleaned else it })
         }
         // both ways, and one way at a time: an expense this Account no longer links loses its

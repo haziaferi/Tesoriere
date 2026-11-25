@@ -189,3 +189,11 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R94 · changed · a card changed to a Loan clears its switch for charges not logged · owner
 - 2026-11-25 · R99 · changed · a card's payoff rows filed under its payoff category are in that slice · owner
 - 2026-11-25 · R101 · changed · a card's payoff rows filed under its payoff category are expenses · owner
+- 2026-11-25 · R110 · added · a rise in a card's balance that is not a payment is interest or fees, counted as spending in its category · owner
+- 2026-11-25 · R25 · changed · a card's interest and fees count in their category · owner
+- 2026-11-25 · R85 · changed · a card holds a fees category · owner
+- 2026-11-25 · R86 · changed · a rise in a card's balance in the editor is interest or fees · owner
+- 2026-11-25 · R89 · changed · a card takes an increase as interest or fees, filed under a category · owner
+- 2026-11-25 · R94 · changed · a card changed to a Loan clears its fees category · owner
+- 2026-11-25 · R99 · changed · a card's interest and fees are in their category's slice · owner
+- 2026-11-25 · R101 · changed · a card's interest and fees are expenses · owner

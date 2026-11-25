@@ -85,14 +85,16 @@ object Ledger {
      * What [tx] counts as spending, read as it was written (SPEC R25, R109), or null for none: a
      * `cat:` adjustment in its own category; a sweep in the category it was filed under, unless it
      * is a card payoff (SPEC R67); a `savings` or `spend:` row filed under a card's payoff
-     * category by minus its amount, the money that left Savings or the Goal (SPEC R109). Every
-     * other row, income, transfers and corrections, counts nowhere.
+     * category by minus its amount, the money that left Savings or the Goal (SPEC R109); an
+     * `acct:` row filed under a category by its amount, a card's interest or fees (SPEC R110).
+     * Every other row, income, transfers and corrections, counts nowhere.
      */
     fun spent(tx: Transaction): RowSpent? = when (val k = TransactionKey.parse(tx.key)) {
         is TransactionKey.CategoryKey -> RowSpent(k.id, tx.amount)
         is TransactionKey.RecurringKey -> if (tx.cardPayoff) null else RowSpent(tx.categoryId, tx.amount)
         TransactionKey.SavingsKey, is TransactionKey.GoalSpendKey -> tx.categoryId?.let { RowSpent(it, -tx.amount) }
-        is TransactionKey.GoalKey, is TransactionKey.AccountKey -> null
+        is TransactionKey.AccountKey -> tx.categoryId?.let { RowSpent(it, tx.amount) }
+        is TransactionKey.GoalKey -> null
     }
 
     /**
@@ -129,9 +131,12 @@ object Ledger {
         return next to tx
     }
 
-    /** A movement on an Account alone: logged, never touching Savings (SPEC R51). */
-    fun logAccountEdit(d: ProfileData, accountId: String, accountName: String, delta: Money, payee: String?, clock: Clock, id: String, date: LocalDate? = null): ProfileData =
-        logAndMove(d, Movement(delta, TransactionKey.AccountKey(accountId), accountName, payee, date = date), clock, id).first
+    /** A movement on an Account alone: logged, never touching Savings (SPEC R51); [categoryId] files a card's interest or fees (SPEC R110). */
+    fun logAccountEdit(
+        d: ProfileData, accountId: String, accountName: String, delta: Money, payee: String?, clock: Clock, id: String,
+        date: LocalDate? = null, categoryId: String? = null,
+    ): ProfileData =
+        logAndMove(d, Movement(delta, TransactionKey.AccountKey(accountId), accountName, payee, date = date, categoryId = categoryId), clock, id).first
 
     /**
      * SPEC R53's conditions, found once against the ledger as it stands. Returns each row that
