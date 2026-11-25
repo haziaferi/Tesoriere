@@ -685,6 +685,21 @@ class StatementImportTest {
         assertFalse(StatementImport.canConfirm(d, refund.map { it.copy(incomingGoalId = "cash") }))
     }
 
+    // SPEC:R111 SPEC:R107 SPEC:R26
+    @Test fun `R111 a -60_00 statement payoff undone arrives DUPLICATE and unticked on the next import, and ticked and filed again it is recorded`() {
+        val d = world()
+        val after = StatementImport.confirm(d, marchFiled(d), clock, ids::next)
+        assertEquals(cents("240.00"), after.accounts.single().balance)
+        val group = requireNotNull(after.transactions.single { it.key == "acct:orbita" }.groupId)
+        val undone = Accounts.undoQuickAdd(after, group)
+        assertEquals(cents("300.00"), undone.accounts.single().balance)
+        val again = StatementImport.review(undone, march(), clock.today).row("PAGAMENTO CARTA ORBITA")
+        assertEquals(RowStatus.DUPLICATE, again.status)
+        assertFalse(again.include)
+        val ticked = listOf(again.copy(include = true, payoffAccountId = "orbita"))
+        assertEquals(cents("240.00"), StatementImport.confirm(undone, ticked, clock, ids::next).accounts.single().balance)
+    }
+
     // SPEC:R109 SPEC:R107 SPEC:R21
     @Test fun `R109 a 25_00 statement refund to a card whose charges are not logged carries CHARGES_NOT_LOGGED, as a payment charged to it does`() {
         val d = world().let { w -> w.copy(accounts = w.accounts.map { it.copy(chargesNotLogged = true, payoffCategoryId = "home") }) }
