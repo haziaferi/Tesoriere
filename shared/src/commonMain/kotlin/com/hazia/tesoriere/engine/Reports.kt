@@ -24,21 +24,24 @@ import kotlin.time.Instant
  * - Spending counts what was spent, composed by category from Spent.of (SPEC R25): the parts of
  *   payments from any source, so a split payment counts in each of its categories, the `cat:`
  *   adjustments, and the sweep rows filed under the category (SPEC R67). Sci-Fin's slice per
- *   recurring expense and its Goals slice are gone, and `savings` rows count in no slice: money
- *   into a Goal or paid off an Account is a transfer, counted when a payment spends it (owner,
- *   2026-11-25). Parts and sweep rows with no category (both only from a Sci-Fin backup) are
- *   Uncategorised (SPEC R99). A card's payment's sweeps, and a Loan's once a payment is charged to it, are an Account payoff, in no slice and no
- *   expense: the charges they pay count through their parts (SPEC R67, R93, R101); a card whose
- *   charges are not logged has its payoff rows filed under its payoff category, counted there
- *   (SPEC R109). Every row is read as written, through Ledger.spent.
+ *   recurring expense and its Goals slice are gone, and a `savings`, `spend:` or `acct:` row
+ *   counts in no slice unless it was filed under a category when written: money into a Goal or
+ *   paid off an Account is a transfer, counted when a payment spends it (owner, 2026-11-25).
+ *   Parts and sweep rows with no category (both only from a Sci-Fin backup) are Uncategorised
+ *   (SPEC R99). A card's payment's sweeps, and a Loan's once a payment is charged to it, are an
+ *   Account payoff, in no slice and no expense: the charges they pay count through their parts
+ *   (SPEC R67, R93, R101). The rows filed under a category count there: the `savings` and
+ *   `spend:` rows of a payoff of a card whose charges are not logged (SPEC R109) or of a Loan's
+ *   payment by hand while nothing is charged to it (SPEC R89), and a card's interest and fees on
+ *   its `acct:` row (SPEC R110). Every row is read as written, through Ledger.spent.
  * - A slice is a code and an id, not a label and an icon: names are the caller's to look up and
  *   how they read is the design pass's (SPEC R16).
  * - Savings vs Owed's trend adds the payments charged to an Account to what is owed and the
  *   payments from Savings to the Savings side (SPEC R100).
  * - Income vs Expenses' expenses are the month's Spending total: every payment's parts, from any
- *   source, the `cat:` adjustments and the sweep rows; transfers into Goals and off Accounts and
- *   Sci-Fin's `spend:` rows are not counted, since a Sci-Fin goal spend arrives as a payment
- *   (SPEC R19, R101). It returns its figures whatever the Income switch says: showing the report only while
+ *   source, the `cat:` adjustments, the sweep rows and the rows filed under a category above;
+ *   transfers into Goals and off Accounts are not counted, nor a `spend:` row filed under no
+ *   category, such as Sci-Fin's, since a Sci-Fin goal spend arrives as a payment (SPEC R19, R101). It returns its figures whatever the Income switch says: showing the report only while
  *   Income is on (SPEC R18) is the caller's, so the return type is no longer nullable.
  * - Coverage divides in whole cents with a half rounded to the even day, the result Sci-Fin's
  *   Double division and `round` give, with no floating point on money (SPEC R20, R98). No other
@@ -174,8 +177,9 @@ object Reports {
 
     /**
      * The current month by slice: each category's spent figure (SPEC R25), and Uncategorised for
-     * parts and sweeps with no category. `goal:`, `savings`, `acct:` and `spend:` rows are in no
-     * slice: transfers, income and corrections, not spending. Zero slices are left out; the rest
+     * parts and sweeps with no category. `goal:` rows, and `savings`, `acct:` and `spend:` rows
+     * filed under no category, are in no slice: transfers, income and corrections, not spending;
+     * one filed under a category counts there (SPEC R89, R109, R110). Zero slices are left out; the rest
      * go largest first, ties in the categories' order.
      */
     fun spendingComposition(d: ProfileData, today: LocalDate): SpendingComposition {
