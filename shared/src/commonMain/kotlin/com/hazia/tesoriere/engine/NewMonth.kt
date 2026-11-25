@@ -15,9 +15,10 @@ import kotlin.math.roundToLong
 /*
  * Ported from Sci-Fin native/shared/src/commonMain/kotlin/app/scifin/engine/NewMonth.kt at 2892110.
  *
- * The month cycle (SPEC R70): on each open, move the due dates on, then process every month
- * between the last month processed (or an older month a recurring expense last swept) and the
- * current one, in order and with real dates; a month already processed is left alone. The
+ * The month cycle (SPEC R70): on each open, process every month between the last month
+ * processed (or an older month a recurring expense last swept) and the current one, in order and
+ * with real dates, the due dates moved on to each month's 1st first; then move them on to today.
+ * A month already processed is left alone. The
  * automatic deposits catch up on their own payday clock in the same open (SPEC R71); neither
  * depends on the other.
  *
@@ -30,7 +31,13 @@ import kotlin.math.roundToLong
  * - An ended expense gives a code ([EndedKind]) in place of Sci-Fin's sentence, with its id and
  *   name as typed, and the kept summary stores `expenseId<TAB>code<TAB>name` per line in place of
  *   `name<TAB>note`, so an expense deleted since can still be named; a line of `expenseId<TAB>code`
- *   alone reads with no name (SPEC R72, R74).
+ *   alone, or with an empty name, reads with no name (SPEC R72, R74).
+ * - Each past month is processed with the due dates moved on to its 1st, not to the day of the
+ *   open (SPEC R70): Sci-Fin moved them on first, so a bimonthly or yearly cycle that ended while
+ *   the app was closed swept its last months at the next cycle's share. This follows Sci-Fin's
+ *   spec, section 3.11, which wants a late catch-up to give the share a live rollover would.
+ * - An expense finished by a Loan its payments took to 0 gives the `loanPaidOff` notice (SPEC
+ *   R72, R73); Sci-Fin finished it with none.
  * - `completionNoticeFor` is `endedKind`; the closing row's note comes from StoredLabels.
  */
 
@@ -91,6 +98,8 @@ object NewMonth {
         var next = d
         var sweptTotal = 0L
         val ending = ArrayList<RecurringExpense>()
+        // finished by a Loan its payments took to 0 (SPEC R73): the notice of R72, loanPaidOff
+        val paidOff = ArrayList<Ended>()
         val sweptIds = HashSet<String>()
 
         for (id in d.recurringExpenses.map { it.id }) {
@@ -135,27 +144,30 @@ object NewMonth {
             val nowBalance = next.accounts.first { it.id == acct.id }.balance
             if (nowBalance == 0L && e.finishedAt == null) {
                 next = next.copy(recurringExpenses = next.recurringExpenses.map { if (it.id == e.id) it.copy(finishedAt = first) else it })
+                paidOff.add(Ended(e.id, EndedKind.LOAN_PAID_OFF, e.name))
             }
         }
         // read after this month's payment, so a variable-rate Loan that payment cleared is paid off
-        val ended = ending.map { Ended(it.id, endedKind(next, it), it.name) }
+        val ended = ending.map { Ended(it.id, endedKind(next, it), it.name) } + paidOff
         return next to MonthResult(ym, sweptTotal, ended)
     }
 
     /**
-     * The month cycle, run on every open (SPEC R70): move the due dates on, then process every
-     * month after the oldest month swept up to the current one, then the automatic deposits
-     * (SPEC R71). Returns a null summary when no month was processed. The summary is kept only
-     * after two or more months, or when an expense finished (SPEC R74).
+     * The month cycle, run on every open (SPEC R70): process every month after the oldest month
+     * swept up to the current one, each with the due dates moved on to its 1st, so a bimonthly or
+     * yearly expense sweeps the share in force that month (SPEC R62); then move the due dates on
+     * to today, then the automatic deposits (SPEC R71). Returns a null summary when no month was
+     * processed. The summary is kept only after two or more months, or when an expense finished
+     * (SPEC R74).
      */
     fun runCatchUp(d: ProfileData, clock: Clock, ids: () -> String): Pair<ProfileData, CatchUpSummary?> {
         val today = clock.today()
-        var next = Recurring.advanceDueDates(d, today)
+        var next = d
         val nowYm = today.ymKey()
         val marks = (listOfNotNull(next.settings.lastMonthProcessed) + next.recurringExpenses.mapNotNull { it.lastSweptMonth }).sorted()
         if (marks.isEmpty() || marks.first() >= nowYm) {
             // the payday clock still runs: a payday may have passed inside the month
-            val (afterIncome, _) = Income.runCatchUp(markProcessed(next, nowYm), clock, ids)
+            val (afterIncome, _) = Income.runCatchUp(markProcessed(Recurring.advanceDueDates(next, today), nowYm), clock, ids)
             return afterIncome to null
         }
         val months = ArrayList<LocalDate>()
@@ -165,9 +177,11 @@ object NewMonth {
         var swept = 0L
         val ended = ArrayList<Ended>()
         for (m in months) {
-            val (after, r) = processMonth(next, m, clock, ids)
+            // a due date passes from the day after it: on its own 1st it still belongs to the old cycle (SPEC R61)
+            val (after, r) = processMonth(Recurring.advanceDueDates(next, m), m, clock, ids)
             next = after; swept += r.sweptTotal; ended.addAll(r.endedNow)
         }
+        next = Recurring.advanceDueDates(next, today)
         val (afterIncome, deposits) = Income.runCatchUp(markProcessed(next, nowYm), clock, ids)
         val summary = CatchUpSummary(months.size, swept, ended, deposits)
         // Kept until dismissed, so a restart cannot lose it; a summary not yet read grows, and
@@ -186,7 +200,7 @@ object NewMonth {
         val base = if (s.catchUpSummaryPending) s else dismissed(s)
         // a line break in a name would split its line: it is kept as a space
         val lines = run.endedNow.map { e ->
-            listOfNotNull(e.expenseId, e.kind.token, e.name?.replace('\r', ' ')?.replace('\n', ' ')).joinToString(FIELD.toString())
+            listOfNotNull(e.expenseId, e.kind.token, e.name?.takeIf { it.isNotEmpty() }?.replace('\r', ' ')?.replace('\n', ' ')).joinToString(FIELD.toString())
         }
         return base.copy(
             catchUpSummaryPending = true,
@@ -204,7 +218,8 @@ object NewMonth {
         val ended = s.catchUpEnded.lines().filter { it.isNotEmpty() }.mapNotNull { l ->
             // the name is the rest of the line, a tab in it kept; a two-field line has none
             val f = l.split(FIELD, limit = 3)
-            EndedKind.of(f.getOrElse(1) { "" })?.let { Ended(f[0], it, f.getOrNull(2)) }
+            // an empty name, as a line `id<TAB>code<TAB>` holds, is no name
+            EndedKind.of(f.getOrElse(1) { "" })?.let { Ended(f[0], it, f.getOrNull(2)?.takeIf { n -> n.isNotEmpty() }) }
         }
         return CatchUpSummary(s.catchUpMonths, s.catchUpSwept, ended, CatchUp(s.catchUpDepositCount, s.catchUpDepositTotal))
     }

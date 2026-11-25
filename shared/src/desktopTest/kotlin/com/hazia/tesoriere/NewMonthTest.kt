@@ -3,6 +3,7 @@ package com.hazia.tesoriere
 import com.hazia.tesoriere.Fixture.category
 import com.hazia.tesoriere.Fixture.profile
 import com.hazia.tesoriere.Fixture.recurring
+import com.hazia.tesoriere.engine.Ended
 import com.hazia.tesoriere.engine.EndedKind
 import com.hazia.tesoriere.engine.NewMonth
 import com.hazia.tesoriere.engine.Recurring
@@ -146,6 +147,32 @@ class NewMonthTest {
         val (d, _) = NewMonth.runCatchUp(w, clock) { Ids().next() }
         assertEquals(0L, d.accounts[0].balance)
         assertEquals(LocalDate(2026, 9, 1), d.recurringExpenses[0].finishedAt)
+    }
+
+    // SPEC:R73 SPEC:R72 SPEC:R74
+    @Test fun `R73 the payment of a Loan of 200_00 at 0 percent paid to 0_00 gives a loanPaidOff notice with its name`() {
+        val clock = TestClock(LocalDate(2026, 9, 1))
+        val w = world(monthly("pay", "260.00", 15, linked = "loan", endDate = LocalDate(2030, 1, 1)))
+            .copy(accounts = listOf(loan("200.00", null, autoUpdate = true, rate = 0.0)))
+        val (d, s) = NewMonth.runCatchUp(w, clock) { Ids().next() }
+        assertEquals(listOf(Ended("pay", EndedKind.LOAN_PAID_OFF, "pay")), s!!.endedNow)
+        assertTrue(d.settings.catchUpSummaryPending)                                   // an expense finished: the summary is kept
+        assertEquals(listOf(Ended("pay", EndedKind.LOAN_PAID_OFF, "pay")), NewMonth.persistedSummary(d.settings)!!.endedNow)
+    }
+
+    // SPEC:R70 SPEC:R62 SPEC:R61
+    @Test fun `R70 a 1,000_00 yearly expense due 1 April 2026 at 333_34, swept for February and opened 10 May, sweeps 333_34 for March and April and 83_34 for May`() {
+        val e = recurring("ins", "1,000.00", Cadence.YEARLY, LocalDate(2025, 4, 1), dueDate = LocalDate(2026, 4, 1),
+            share = "333.34", lastSweptMonth = "2026-02", categoryId = "housing")
+        val (d, s) = NewMonth.runCatchUp(world(e), TestClock(LocalDate(2026, 5, 10))) { Ids().next() }
+        val rows = d.transactions.filter { it.key == "rec:ins" }
+        assertEquals(listOf(LocalDate(2026, 3, 1), LocalDate(2026, 4, 1), LocalDate(2026, 5, 1)), rows.map { it.date })
+        assertEquals(listOf(cents("333.34"), cents("333.34"), cents("83.34")), rows.map { it.amount })
+        assertEquals(cents("750.02"), s!!.sweptTotal)
+        val after = d.recurringExpenses.single()
+        assertEquals(LocalDate(2027, 4, 1), after.dueDate)
+        assertEquals(cents("83.34"), after.apportionedShare)
+        assertEquals("2026-05", after.lastSweptMonth)
     }
 
     // SPEC:R71 SPEC:R70

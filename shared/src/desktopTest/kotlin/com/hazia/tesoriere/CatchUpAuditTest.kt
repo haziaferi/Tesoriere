@@ -114,6 +114,12 @@ class CatchUpAuditTest {
     }
 
     // SPEC:R74
+    @Test fun `R74 a notice kept with an empty name reads with no name, as one kept as id and code alone`() {
+        val s = world().settings.copy(catchUpSummaryPending = true, catchUpMonths = 2, catchUpEnded = "pay\tloanPaidOff\t\ngym\tended")
+        assertEquals(listOf(Ended("pay", EndedKind.LOAN_PAID_OFF, null), Ended("gym", EndedKind.ENDED, null)), NewMonth.persistedSummary(s)!!.endedNow)
+    }
+
+    // SPEC:R74
     @Test fun `R74 a notice kept as id and code alone reads with no name, and a name with a tab keeps it`() {
         val s = world().settings.copy(catchUpSummaryPending = true, catchUpMonths = 2, catchUpEnded = "pay\tloanPaidOff\ngym\tended\tGym\tdowntown")
         assertEquals(
