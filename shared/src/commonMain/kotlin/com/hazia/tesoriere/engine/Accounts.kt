@@ -12,6 +12,7 @@ import com.hazia.tesoriere.model.RateType
 import com.hazia.tesoriere.model.RecurringExpense
 import com.hazia.tesoriere.model.StoredLabels
 import com.hazia.tesoriere.model.ceilDiv
+import com.hazia.tesoriere.payments.PaymentSource
 import kotlinx.datetime.LocalDate
 import kotlin.math.pow
 import kotlin.math.roundToLong
@@ -245,7 +246,9 @@ object Accounts {
      * came from [from] too, since the `acct:` row moved the balance and nothing else: a `savings`
      * row, or a `spend:` row that lowers a Goal, which must hold the amount. An increase on a
      * card is its interest or fees, filed under [categoryId] if picked, else its fees category
-     * (SPEC R110); with neither, it is refused, unless the card's charges are not logged.
+     * (SPEC R110); with neither, it is refused, unless the card's charges are not logged. A
+     * payment off a Loan with nothing charged to it is filed under [categoryId] if picked, else
+     * its linked payment's category, and refused with neither ([canPayOff], SPEC R89).
      */
     fun quickAdd(
         d: ProfileData, accountId: String, amount: Money, direction: Direction, payee: String?, from: PayoffFrom,
@@ -254,6 +257,9 @@ object Accounts {
         val a = d.accounts.first { it.id == accountId }
         require(direction == Direction.PAYMENT || canRise(d, a, categoryId)) {
             "a card takes an increase only as interest or fees in a category that exists; a charge is a payment (SPEC R22, R110)"
+        }
+        require(direction == Direction.INCREASE || canPayOff(d, a, from, categoryId)) {
+            "a payment off a Loan with nothing charged to it counts as spending and needs a category (SPEC R89)"
         }
         val goal = (from as? PayoffFrom.Goal)?.takeIf { direction == Direction.PAYMENT }?.let { f -> d.goals.firstOrNull { it.id == f.id } }
         if (direction == Direction.PAYMENT && from is PayoffFrom.Goal) {
@@ -265,8 +271,9 @@ object Accounts {
         var next = balanceEdit(d, accountId, a.balance + signed, note, clock, ids(), date, rise)
         if (direction != Direction.PAYMENT) return next
         val fromNote = payee ?: StoredLabels.fill(StoredLabels.PAYMENT_TO, a.name)
-        // a card whose charges are not logged files its payoff under its payoff category, as written (SPEC R109)
-        val filed = payoffCategory(d, a)
+        // filed as written: a card whose charges are not logged under its payoff category (SPEC R109),
+        // a Loan with nothing charged to it under the picked or linked payment's category (SPEC R89)
+        val filed = payoffFiling(d, a, categoryId)
         when (from) {
             PayoffFrom.Savings ->
                 next = Ledger.logAndMove(next, Movement(-amount, TransactionKey.SavingsKey, StoredLabels.SAVINGS, fromNote, date = date, categoryId = filed), clock, ids()).first
@@ -289,6 +296,31 @@ object Accounts {
         if (a.type != AccountType.CREDIT || !a.chargesNotLogged) return null
         return a.payoffCategoryId?.takeIf { id -> d.categories.any { it.id == id } }
     }
+
+    /** Whether a payment is charged to [a] (SPEC R54): a Loan's payments are then transfers (SPEC R67, R89). */
+    fun hasCharges(d: ProfileData, a: Account): Boolean = d.payments.any { it.source == PaymentSource.Account(a.id) }
+
+    /**
+     * The category the `savings` or `spend:` row of a payment off [a] is filed under as it is
+     * written, or null for a transfer: a card's payoff category while its charges are not logged
+     * (SPEC R109); for a Loan with nothing charged to it, [picked], else its linked payment's
+     * category, when it exists (SPEC R89).
+     */
+    fun payoffFiling(d: ProfileData, a: Account, picked: String? = null): String? = when (a.type) {
+        AccountType.CREDIT -> payoffCategory(d, a)
+        AccountType.LOAN -> if (hasCharges(d, a)) null else {
+            val linked = a.linkedRecurringExpenseId?.let { id -> d.recurringExpenses.firstOrNull { it.id == id }?.categoryId }
+            (picked ?: linked)?.takeIf { id -> d.categories.any { it.id == id } }
+        }
+    }
+
+    /**
+     * Whether a payment off [a] from [from] can be logged (SPEC R89): a payment off a Loan from
+     * Savings or a Goal while nothing is charged to it counts as spending, so it needs a category,
+     * [picked] or the linked payment's; every other payment can.
+     */
+    fun canPayOff(d: ProfileData, a: Account, from: PayoffFrom, picked: String? = null): Boolean =
+        a.type != AccountType.LOAN || from == PayoffFrom.None || hasCharges(d, a) || payoffFiling(d, a, picked) != null
 
     /** A Loan with no rate cannot follow its payment: the update has nothing to work out from (SPEC R86). */
     fun loanInputsComplete(a: Account): Boolean = a.type == AccountType.LOAN && a.interestRate != null

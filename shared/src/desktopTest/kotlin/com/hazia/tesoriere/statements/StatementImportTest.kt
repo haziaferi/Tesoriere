@@ -456,6 +456,21 @@ class StatementImportTest {
         assertEquals(RowStatus.RECURRING, StatementImport.review(unlinked, listOf(row), clock.today).single().status)
     }
 
+    // SPEC:R107 SPEC:R89
+    @Test fun `R107 a -60_00 payoff of a Loan linked to nothing keeps Confirm off until a category is picked, then counts 60_00 in it`() {
+        val d = world().let { w -> w.copy(accounts = w.accounts + Account("loan", Fixture.PROFILE, "Bike loan", type = AccountType.LOAN, balance = cents("900.00"))) }
+        val review = StatementImport.review(d, listOf(BankRow(LocalDate(2026, 3, 18), -6000, "RATA PRESTITO", null)), clock.today)
+            .map { it.copy(payoffAccountId = "loan") }
+        assertFalse(StatementImport.canConfirm(d, review))
+        val picked = review.map { it.copy(payoffCategoryId = "books") }
+        assertTrue(StatementImport.canConfirm(d, picked))
+        val after = StatementImport.confirm(d, picked, clock, ids::next)
+        assertEquals(cents("840.00"), after.accounts.single { it.id == "loan" }.balance)
+        assertEquals(cents("60.00"), Spent.of(after, "books", "2026-03"))
+        // from nowhere it needs no category
+        assertTrue(StatementImport.canConfirm(d, review.map { it.copy(payoffFrom = Accounts.PayoffFrom.None) }))
+    }
+
     // SPEC:R107, R50
     @Test fun `R107 the 1,450_00 salary sent on into a Goal holding 110_00 leaves it 1,560_00 and Savings 885_30`() {
         val d = world()

@@ -8,7 +8,6 @@ import com.hazia.tesoriere.model.ProfileData
 import com.hazia.tesoriere.model.RecurringExpense
 import com.hazia.tesoriere.model.StoredLabels
 import com.hazia.tesoriere.model.Transaction
-import com.hazia.tesoriere.payments.PaymentSource
 import com.hazia.tesoriere.model.ceilDiv
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.number
@@ -450,7 +449,7 @@ object Recurring {
         val account = e.linkedAccountId?.let { id -> d.accounts.firstOrNull { it.id == id } } ?: return e.categoryId to false
         return when (account.type) {
             AccountType.CREDIT -> Accounts.payoffCategory(d, account)?.let { it to false } ?: (e.categoryId to true)
-            AccountType.LOAN -> e.categoryId to d.payments.any { it.source == PaymentSource.Account(account.id) }
+            AccountType.LOAN -> e.categoryId to Accounts.hasCharges(d, account)
         }
     }
 

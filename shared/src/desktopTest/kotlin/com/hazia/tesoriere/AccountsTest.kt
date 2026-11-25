@@ -227,6 +227,41 @@ class AccountsTest {
         }
     }
 
+    // SPEC:R89 SPEC:R67 SPEC:R25
+    @Test fun `R89 a Loan with nothing charged to it paid 200_00 by hand adds 200_00 to Car, after a 9,800_00 car is charged 100_00 from a Goal adds nothing, and removing the car changes neither`() {
+        val clock = TestClock(today); val ids = Ids()
+        val loan = Account("l", Fixture.PROFILE, "Car loan", type = AccountType.LOAN, balance = cents("4,000.00"), linkedRecurringExpenseId = "pay")
+        val pay = recurring("pay", "260.00", Cadence.MONTHLY, LocalDate(2026, 9, 20), categoryId = "c1", linkedAccountId = "l", lastSweptMonth = "2026-09")
+        var d = world(accounts = listOf(loan)).copy(recurringExpenses = listOf(pay), goals = listOf(Fixture.goal("trip", "Trip", saved = "150.00")))
+        d = Accounts.quickAdd(d, "l", cents("200.00"), Accounts.Direction.PAYMENT, null, from = Accounts.PayoffFrom.Savings, clock = clock) { ids.next() }
+        assertEquals(cents("200.00"), Spent.of(d, "c1", "2026-09"))
+        assertEquals("c1", d.transactions.last().categoryId)
+        val car = PaymentDraft(today, cents("9,800.00"), PaymentSource.Account("l"), "Car dealer", listOf(Part("c1", cents("9,800.00"))))
+        d = Payments.record(d, car, clock, "car")
+        d = Accounts.quickAdd(d, "l", cents("100.00"), Accounts.Direction.PAYMENT, null, from = Accounts.PayoffFrom.Goal("trip"), clock = clock) { ids.next() }
+        assertEquals(cents("10,000.00"), Spent.of(d, "c1", "2026-09"))                    // the car and the first payment
+        assertNull(d.transactions.last().categoryId)
+        d = Payments.remove(d, "car", clock, "t-remove")
+        assertEquals(cents("200.00"), Spent.of(d, "c1", "2026-09"))                       // rows as written
+        // a category picked for the payment wins over the linked payment's
+        val picked = Accounts.quickAdd(world(accounts = listOf(loan)).copy(recurringExpenses = listOf(pay)), "l", cents("50.00"),
+            Accounts.Direction.PAYMENT, null, from = Accounts.PayoffFrom.Savings, clock = clock, categoryId = "groc") { ids.next() }
+        assertEquals(cents("50.00"), Spent.of(picked, "groc", "2026-09"))
+    }
+
+    // SPEC:R89
+    @Test fun `R89 a Loan linked to nothing paid 200_00 from Savings with no category picked is refused, from nowhere it is not`() {
+        val clock = TestClock(today); val ids = Ids()
+        val loan = Account("l", Fixture.PROFILE, "Loan", type = AccountType.LOAN, balance = cents("4,000.00"))
+        val d = world(accounts = listOf(loan))
+        assertFalse(Accounts.canPayOff(d, loan, Accounts.PayoffFrom.Savings))
+        assertFailsWith<IllegalArgumentException> {
+            Accounts.quickAdd(d, "l", cents("200.00"), Accounts.Direction.PAYMENT, null, from = Accounts.PayoffFrom.Savings, clock = clock) { ids.next() }
+        }
+        val none = Accounts.quickAdd(d, "l", cents("200.00"), Accounts.Direction.PAYMENT, null, from = Accounts.PayoffFrom.None, clock = clock) { ids.next() }
+        assertEquals(cents("3,800.00"), none.accounts.single().balance)
+    }
+
     // SPEC:R89 SPEC:R22
     @Test fun `R89 a Loan of 4,000_00 increased by 500_00 reads 4,500_00 and an increase on a card is refused`() {
         val clock = TestClock(today); val ids = Ids()

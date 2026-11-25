@@ -204,3 +204,8 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R23 · changed · a pair's difference part, at most one, may have either sign; every other part keeps the total's · owner
 - 2026-11-25 · R39 · changed · the difference part is marked as such and is negative when the bank row is below the receipt · owner
 - 2026-11-25 · R21 · changed · a part says whether it is a pair's difference part · owner
+- 2026-11-25 · R89 · changed · a hand payment off a Loan counts as spending while nothing is charged to it, a transfer once something is, as written · owner
+- 2026-11-25 · R25 · changed · a Loan's hand payments count in their category while nothing is charged to it · owner
+- 2026-11-25 · R99 · changed · a Loan's hand payments are in their category's slice while nothing is charged to it · owner
+- 2026-11-25 · R101 · changed · a Loan's hand payments are expenses while nothing is charged to it · owner
+- 2026-11-25 · R107 · changed · a statement payoff of a Loan that counts as spending needs a category · owner

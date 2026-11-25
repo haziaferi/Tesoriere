@@ -103,6 +103,11 @@ data class ReviewRow(
      * expense; the user can set it per row.
      */
     val payoffFrom: Accounts.PayoffFrom? = null,
+    /**
+     * The category picked for a payoff of a Loan with nothing charged to it, which counts as
+     * spending (SPEC R89, R107); null takes the Loan's linked payment's category.
+     */
+    val payoffCategoryId: String? = null,
 )
 
 /**
@@ -463,7 +468,10 @@ object StatementImport {
                     }
                     rr.incomingGoalId != null -> ok = false
                     payoff != null && draft == null -> {
-                        if (d.accounts.none { it.id == payoff }) ok = false
+                        val acct = d.accounts.firstOrNull { it.id == payoff }
+                        if (acct == null) ok = false
+                        // a Loan's payoff that counts as spending needs a category (SPEC R89, R107)
+                        else if (!Accounts.canPayOff(d, acct, rr.payoffFrom ?: Accounts.payoffFromDefault(acct), rr.payoffCategoryId)) ok = false
                         // a payoff from a Goal takes at most what it holds after the rows before it (SPEC R89)
                         (rr.payoffFrom as? Accounts.PayoffFrom.Goal)?.let { f ->
                             val left = holds[f.id]
@@ -524,7 +532,7 @@ object StatementImport {
                 payoff != null -> {
                     // R89's default: a linked Account's sweep already took the money from Savings
                     val from = rr.payoffFrom ?: Accounts.payoffFromDefault(next.accounts.first { it.id == payoff })
-                    Accounts.quickAdd(next, payoff, amt, Accounts.Direction.PAYMENT, r.description, from, clock, r.date, ids = ids)
+                    Accounts.quickAdd(next, payoff, amt, Accounts.Direction.PAYMENT, r.description, from, clock, r.date, rr.payoffCategoryId, ids = ids)
                 }
                 else -> {
                     val draft = requireNotNull(recorded(rr))
