@@ -187,6 +187,13 @@ data class Transaction(
      * groups were kept or read from a Sci-Fin backup. Part of schema 1, still edited in place.
      */
     val groupId: String? = null,
+    /**
+     * A `rec:` row of a bimonthly or yearly expense's monthly share, or an accepted difference of
+     * one (SPEC R62, R63, R65): money set aside toward a bill still to come, which the import
+     * review never takes as a bill already paid (SPEC R107). Part of schema 1, still edited in
+     * place; false on every other row and on a Sci-Fin backup's rows.
+     */
+    val share: Boolean = false,
 )
 
 /** One per Profile. The defaults are a fresh install's: every piece SPEC R18 starts off is off. */

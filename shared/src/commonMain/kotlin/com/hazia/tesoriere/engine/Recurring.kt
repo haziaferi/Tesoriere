@@ -435,7 +435,8 @@ object Recurring {
      */
     private fun row(d: ProfileData, e: RecurringExpense, amount: Money, note: String, date: LocalDate?): Movement {
         val (categoryId, payoff) = filing(d, e)
-        return Movement(amount, TransactionKey.RecurringKey(e.id), e.name, note, date = date, categoryId = categoryId, accountPayoff = payoff)
+        // a bimonthly or yearly expense's rows are shares set aside toward a bill still to come (SPEC R63)
+        return Movement(amount, TransactionKey.RecurringKey(e.id), e.name, note, date = date, categoryId = categoryId, accountPayoff = payoff, share = e.cadence.apportioned)
     }
 
     /**
@@ -465,13 +466,20 @@ object Recurring {
     fun billFloor(d: ProfileData, e: RecurringExpense): LocalDate {
         val floor = maxOf(e.firstDueDate, createdOn(e))
         // an edit of the schedule starts the chain again (SPEC R65); a bill a sweep already paid stays findable
-        val firstSweep = sweepRows(d, e).minOfOrNull { it.date } ?: return floor
+        val firstSweep = dueDateRows(d, e).filter { it.amount > 0 }.minOfOrNull { it.date } ?: return floor
         return minOf(floor, firstSweep)
     }
 
     /** The expense's `rec:` rows in the ledger, sweeps and returns alike. */
     fun sweepRows(d: ProfileData, e: RecurringExpense): List<Transaction> =
         d.transactions.filter { it.key == TransactionKey.RecurringKey(e.id).stored }
+
+    /**
+     * The expense's `rec:` rows of a due date: every one but a share, which a bimonthly or yearly
+     * expense sets aside toward a bill still to come (SPEC R63). Only these stand for a bill
+     * already paid (SPEC R107).
+     */
+    fun dueDateRows(d: ProfileData, e: RecurringExpense): List<Transaction> = sweepRows(d, e).filter { !it.share }
 
     /** Whether [e] is a card's payment (SPEC R93): linked to an Account of type credit. */
     fun paysCard(d: ProfileData, e: RecurringExpense): Boolean =

@@ -65,6 +65,8 @@ data class Movement(
     val accountPayoff: Boolean = false,
     /** The group of the rows of one Account quick-add, undone together (SPEC R111). */
     val groupId: String? = null,
+    /** A bimonthly or yearly expense's share row (SPEC R63). */
+    val share: Boolean = false,
 )
 
 object Ledger {
@@ -120,6 +122,7 @@ object Ledger {
             categoryId = m.categoryId,
             accountPayoff = m.accountPayoff,
             groupId = m.groupId,
+            share = m.share,
         )
         val effect = savingsEffect(tx)
         var next = d.copy(transactions = d.transactions + tx)

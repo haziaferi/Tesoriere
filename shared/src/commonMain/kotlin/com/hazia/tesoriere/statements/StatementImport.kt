@@ -394,7 +394,7 @@ object StatementImport {
         fun billOf(r: BankRow): Boolean = byAmount.any { e ->
             if (r.date < Recurring.billFloor(d, e)) return@any false
             val from = r.date.minusDays(RECURRING_DAYS); val to = r.date.plusDays(RECURRING_DAYS)
-            val rows = Recurring.sweepRows(d, e)
+            val rows = Recurring.dueDateRows(d, e)                                         // a share pays toward a bill still to come (SPEC R63)
             // what its rows dated a day hold: an edit with the difference declined leaves the old amount there
             fun held(day: LocalDate) = rows.filter { it.date == day }.sumOf { it.amount }.let { it > 0 && -r.amount == it }
             // on a due date the amount matches too; on a sweep row's day only what the rows hold,

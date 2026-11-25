@@ -235,3 +235,5 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R111 · added · an Account quick-add can be undone as a whole, its rows sharing one group; refused for a deleted Account or Goal · owner
 - 2026-11-25 · R53 · changed · the rows of one Account quick-add are deleted together when it is undone · owner
 - 2026-11-25 · R51 · changed · the rows of one Account quick-add share a group · owner
+- 2026-11-25 · R63 · changed · a bimonthly or yearly expense's share row is marked as a share · builder
+- 2026-11-25 · R107 · changed · a share row lowers no floor and matches no bill: only sweeps of a due date do · builder

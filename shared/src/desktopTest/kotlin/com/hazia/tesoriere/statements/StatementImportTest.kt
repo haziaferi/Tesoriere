@@ -450,6 +450,28 @@ class StatementImportTest {
         assertEquals(RowStatus.READY, early.single().status)
     }
 
+    // SPEC:R107 SPEC:R62 SPEC:R63
+    @Test fun `R107 a yearly Assicurazione auto first due 15 July 2027 with shares swept on 1 October and 1 November leaves ASSICURAZIONE AUTO RCA -45_00 and BONIFICO -120_00 READY`() {
+        val c = TestClock(LocalDate(2026, 9, 14))
+        var d = world().copy(recurringExpenses = emptyList())
+        d = com.hazia.tesoriere.engine.Recurring.create(
+            d, Fixture.recurring("ins", "1,200.00", Cadence.YEARLY, firstDue = LocalDate(2027, 7, 15), categoryId = "home", name = "Assicurazione auto"), c, ids::next,
+        )
+        for (m in listOf(LocalDate(2026, 10, 1), LocalDate(2026, 11, 1))) {
+            d = com.hazia.tesoriere.engine.Recurring.sweepOccurrences(d, "ins", m, c, ids::next).first
+        }
+        val shares = d.transactions.filter { it.key == "rec:ins" }
+        assertEquals(listOf(cents("120.00"), cents("120.00")), shares.map { it.amount })        // the share from 14 September (SPEC R62)
+        assertTrue(shares.all { it.share })
+        val rows = listOf(
+            BankRow(LocalDate(2026, 11, 12), -4500, "ASSICURAZIONE AUTO RCA", null),
+            BankRow(LocalDate(2026, 10, 2), -12000, "BONIFICO", null),                           // the share's amount, the day after it
+        )
+        val review = StatementImport.review(d, rows, LocalDate(2026, 11, 14))
+        assertEquals(listOf(RowStatus.READY, RowStatus.READY), review.map { it.status })
+        assertTrue(review.all { it.include })
+    }
+
     // SPEC:R107 SPEC:R65
     @Test fun `R107 -29_90 on 10 March arrives RECURRING after the swept Telefono was edited to 34_90 with the difference declined`() {
         val c = TestClock(LocalDate(2026, 3, 1))
