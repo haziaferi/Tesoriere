@@ -2,7 +2,11 @@ package com.hazia.tesoriere.statements
 
 import com.hazia.tesoriere.engine.Accounts
 import com.hazia.tesoriere.engine.Clock
+import com.hazia.tesoriere.engine.Recurring
+import com.hazia.tesoriere.engine.TransactionKey
 import com.hazia.tesoriere.engine.Writes
+import com.hazia.tesoriere.engine.minusDays
+import com.hazia.tesoriere.engine.plusDays
 import com.hazia.tesoriere.model.Money
 import com.hazia.tesoriere.model.ProfileData
 import com.hazia.tesoriere.model.StoredLabels
@@ -52,6 +56,9 @@ import kotlin.math.abs
  *   and an outflow sent into a Goal holds it back, as Sci-Fin's `goal:` target on an outflow did.
  *   confirmSummary() gives the count and the money out and in apart, the figures of Sci-Fin's
  *   `importSummary()` line, as figures with no sentence (SPEC R16, R107).
+ * - An outflow is RECURRING also when its amount is a recurring expense's amount, or what its rows
+ *   dated on that due date hold, within [RECURRING_DAYS] of one of its due dates, unless the
+ *   expense is a card's payment (SPEC R107); Sci-Fin matched the expense's name only.
  * - No wording: Sci-Fin's review notes are dropped (the status is the code, SPEC R16), and its
  *   target lists with their labels (`inflowTargets`, `outflowTargets`) are the design pass's.
  * - Names: ImportRow is BankRow, ImportStatus is RowStatus (with PAIR, set by pairing, SPEC R37),
@@ -96,6 +103,9 @@ data class ReviewRow(
 data class ConfirmSummary(val count: Int, val moneyOut: Money, val moneyIn: Money)
 
 object StatementImport {
+
+    /** How many days either side of a due date a bank row of the expense's amount is its bill (SPEC R107). */
+    const val RECURRING_DAYS = 3
 
     /**
      * A statement amount in cents (SPEC R104), with whole-number arithmetic only (SPEC R20). When
@@ -346,6 +356,16 @@ object StatementImport {
         val seen = d.importState.importedKeys.toHashSet()
         for (p in d.payments) p.bankKeys?.let { seen.addAll(keyStrings(it)) }
         val recurring = d.recurringExpenses.map { words(normalisePayee(it.name)) }.filter { it.isNotEmpty() }
+        // a card's payment is left out: its bank row is the payoff that lowers the card (SPEC R89, R93, R107)
+        val byAmount = d.recurringExpenses.filter { !Recurring.paysCard(d, it) }
+        /** Whether an outflow [r] is a recurring expense's bill by its amount and day (SPEC R107). */
+        fun billOf(r: BankRow): Boolean = byAmount.any { e ->
+            Recurring.dueDatesBetween(e, r.date.minusDays(RECURRING_DAYS), r.date.plusDays(RECURRING_DAYS)).any { due ->
+                // what its rows dated on that due date hold: an edit with the difference declined leaves the old amount there
+                val swept = d.transactions.filter { it.key == TransactionKey.RecurringKey(e.id).stored && it.date == due }.sumOf { it.amount }
+                -r.amount == e.amount || (swept > 0 && -r.amount == swept)
+            }
+        }
         return rows.map { r ->
             val keys = keys(r)
             val payee = normalisePayee(r.description)
@@ -356,6 +376,8 @@ object StatementImport {
                 // whole words either way round: "Rent" is in "Affitto casa rent", not in "Parent teacher assoc"
                 pw.isNotEmpty() && recurring.any { nw -> pw.windowed(nw.size).any { it == nw } || nw.windowed(pw.size).any { it == pw } } ->
                     RowStatus.RECURRING
+                // a bank seldom writes the expense's name: its amount within 3 days of a due date finds it too
+                billOf(r) -> RowStatus.RECURRING
                 else -> RowStatus.READY
             }
             // a category is never guessed: only a rule the user taught pre-fills one, kept under the

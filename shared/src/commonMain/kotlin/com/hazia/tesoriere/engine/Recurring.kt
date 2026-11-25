@@ -113,6 +113,32 @@ object Recurring {
         }
     }
 
+    /**
+     * The due dates from [from] to [to], both included, ascending (SPEC R61): never before the
+     * first due date, never after the end date. Bimonthly and yearly expenses fall due too, though
+     * they sweep shares; a statement row of the bill is read against these (SPEC R107).
+     */
+    fun dueDatesBetween(e: RecurringExpense, from: LocalDate, to: LocalDate): List<LocalDate> {
+        if (to < from) return emptyList()
+        if (!e.cadence.apportioned) {
+            val out = ArrayList<LocalDate>()
+            var m = from.firstOfMonth()
+            while (m <= to) {
+                occurrenceDatesInMonth(e, m.year, m.month.number)?.filterTo(out) { it >= from && it <= to }
+                m = m.firstOfNextMonth()
+            }
+            return out
+        }
+        val out = ArrayList<LocalDate>()
+        var cur = e.firstDueDate
+        var guard = 0
+        while (cur <= to && (e.endDate == null || cur <= e.endDate) && guard++ < 2000) {
+            if (cur >= from) out.add(cur)
+            cur = nextOccurrenceAfter(e, cur)
+        }
+        return out
+    }
+
     /** The month's scheduled total: what is committed, not what has swept so far (SPEC R63, R56, R68). */
     fun scheduledTotal(d: ProfileData, today: LocalDate): Money =
         d.recurringExpenses.sumOf { sweepAmountForMonth(it, today.year, today.month.number) }

@@ -340,6 +340,66 @@ class StatementImportTest {
         assertEquals(cents("2,395.30"), StatementImport.confirm(world(), off, clock, ids::next).savings.amount)
     }
 
+    // SPEC:R107 SPEC:R61
+    @Test fun `R107 TIM S_P_A -29_90 within 3 days of Telefono's due date on the 10th arrives RECURRING, 10 days off READY`() {
+        val d = world().let { w ->
+            w.copy(
+                recurringExpenses = w.recurringExpenses + Fixture.recurring(
+                    "tel", "29.90", Cadence.MONTHLY, firstDue = LocalDate(2026, 1, 10), dueDate = LocalDate(2026, 4, 10),
+                    categoryId = "home", name = "Telefono", lastSweptMonth = "2026-03",
+                ),
+            )
+        }
+        val rows = listOf(
+            BankRow(LocalDate(2026, 3, 12), -2990, "TIM S.P.A.", null),           // 2 days after
+            BankRow(LocalDate(2026, 3, 7), -2990, "TIM S.P.A. FATTURA", null),    // 3 days before
+            BankRow(LocalDate(2026, 3, 20), -2990, "TIM S.P.A. RICARICA", null),  // 10 days after
+            BankRow(LocalDate(2026, 3, 11), -3000, "TIM S.P.A. ALTRO", null),     // another amount
+            BankRow(LocalDate(2026, 3, 5), -95000, "AFFITTO CASA RENT", null),     // the name still matches
+        )
+        val review = StatementImport.review(d, rows, clock.today)
+        assertEquals(
+            listOf(
+                LocalDate(2026, 3, 20) to RowStatus.READY, LocalDate(2026, 3, 12) to RowStatus.RECURRING,
+                LocalDate(2026, 3, 11) to RowStatus.READY, LocalDate(2026, 3, 7) to RowStatus.RECURRING,
+                LocalDate(2026, 3, 5) to RowStatus.RECURRING,
+            ),
+            review.map { it.row.date to it.status },
+        )
+        assertEquals(listOf(true, false, true, false, false), review.map { it.include })
+    }
+
+    // SPEC:R107 SPEC:R65
+    @Test fun `R107 -29_90 on 10 March arrives RECURRING after the swept Telefono was edited to 34_90 with the difference declined`() {
+        val c = TestClock(LocalDate(2026, 3, 1))
+        var d = world().copy(recurringExpenses = emptyList())
+        d = com.hazia.tesoriere.engine.Recurring.create(
+            d, Fixture.recurring("tel", "29.90", Cadence.MONTHLY, firstDue = LocalDate(2026, 3, 10), categoryId = "home", name = "Telefono"), c, ids::next,
+        )
+        c.setDay(LocalDate(2026, 3, 5))
+        val (edited, offer) = com.hazia.tesoriere.engine.Recurring.edit(d, d.recurringExpenses.single().copy(amount = cents("34.90")), c.today)
+        assertEquals(cents("5.00"), offer?.delta)                                       // declined: not applied
+        val review = StatementImport.review(edited, listOf(BankRow(LocalDate(2026, 3, 10), -2990, "TIM S.P.A.", null)), c.today)
+        assertEquals(RowStatus.RECURRING, review.single().status)
+        assertFalse(review.single().include)
+    }
+
+    // SPEC:R107 SPEC:R93 SPEC:R89
+    @Test fun `R107 a card's 60_00 fixed payment's bank row on its due date arrives READY, so the payoff can lower the card`() {
+        val linked = world().let { w ->
+            w.copy(
+                accounts = w.accounts.map { it.copy(linkedRecurringExpenseId = "orbita-pay") },
+                recurringExpenses = w.recurringExpenses + Fixture.recurring(
+                    "orbita-pay", "60.00", Cadence.MONTHLY, firstDue = LocalDate(2026, 2, 18), categoryId = "home",
+                    name = "Orbita card payment", linkedAccountId = "orbita", lastSweptMonth = "2026-03",
+                ),
+            )
+        }
+        val review = StatementImport.review(linked, march(), clock.today)
+        assertEquals(RowStatus.READY, review.row("PAGAMENTO CARTA ORBITA").status)
+        assertTrue(review.row("PAGAMENTO CARTA ORBITA").include)
+    }
+
     // SPEC:R107, R50
     @Test fun `R107 the 1,450_00 salary sent on into a Goal holding 110_00 leaves it 1,560_00 and Savings 885_30`() {
         val d = world()
