@@ -277,3 +277,4 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R42 · changed · restoring the category brings back its removed links not relinked since · builder
 - 2026-11-25 · R99 · changed · a category in the Trash is its own slice marked deleted; one deleted for good is Uncategorised · builder
 - 2026-11-25 · R112 · changed · a Profile restored while another holds the folder keeps its receipt settings with no folder · builder
+- 2026-11-25 · R118 · changed · each possible pair taken in order and named when as many rows can still name a payment · builder
