@@ -159,17 +159,19 @@ class ReceiptPickupTest {
         val base = File("build/tmp").apply { mkdirs() }
         val dir = Files.createTempDirectory(base.toPath(), "receipt-folder").toFile()
         try {
-            File(dir, "chatelaine-receipt-rc-a.json").writeText("a")
+            // written out of name order: names() sorts them, whatever order the file system lists
             File(dir, "chatelaine-receipt-rc-b.part").writeText("b")
+            File(dir, "zz-notes.txt").writeText("z")
+            File(dir, "chatelaine-receipt-rc-a.json").writeText("a")
             File(dir, "inner").mkdir()
             val folder = FileReceiptFolder(dir)
-            assertEquals(listOf("chatelaine-receipt-rc-a.json", "chatelaine-receipt-rc-b.part"), folder.names())
+            assertEquals(listOf("chatelaine-receipt-rc-a.json", "chatelaine-receipt-rc-b.part", "zz-notes.txt"), folder.names())
             assertContentEquals("a".encodeToByteArray(), folder.read("chatelaine-receipt-rc-a.json"))
             assertNull(folder.read("missing.json"))
             assertNull(folder.read("inner"))
             assertNull(folder.read("../outside.json"))
             assertEquals(listOf("rc-a"), names(ReceiptPickup.scan(world(), folder, parse)))
-            assertEquals(setOf("chatelaine-receipt-rc-a.json", "chatelaine-receipt-rc-b.part", "inner"), dir.list()!!.toSet())
+            assertEquals(setOf("chatelaine-receipt-rc-a.json", "chatelaine-receipt-rc-b.part", "zz-notes.txt", "inner"), dir.list()!!.toSet())
             assertEquals("a", File(dir, "chatelaine-receipt-rc-a.json").readText())
             assertTrue(File(dir, "chatelaine-receipt-rc-b.part").exists())
         } finally {

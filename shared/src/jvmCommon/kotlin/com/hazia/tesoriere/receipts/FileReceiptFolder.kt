@@ -13,7 +13,8 @@ import java.io.IOException
 /** The files directly in [dir]; a sub-folder, or a name that leaves [dir], is not one of them. */
 class FileReceiptFolder(private val dir: File) : ReceiptFolder {
 
-    override fun names(): List<String> = dir.listFiles()?.filter { it.isFile }?.map { it.name } ?: emptyList()
+    /** The files' names in name order: java.io lists them in no set order. */
+    override fun names(): List<String> = dir.listFiles()?.filter { it.isFile }?.map { it.name }?.sorted() ?: emptyList()
 
     override fun read(name: String): ByteArray? {
         if (name.isEmpty() || name.contains('/') || name.contains('\\') || name == "." || name == "..") return null
