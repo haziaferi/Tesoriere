@@ -278,3 +278,7 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R99 · changed · a category in the Trash is its own slice marked deleted; one deleted for good is Uncategorised · builder
 - 2026-11-25 · R112 · changed · a Profile restored while another holds the folder keeps its receipt settings with no folder · builder
 - 2026-11-25 · R118 · changed · each possible pair taken in order and named when as many rows can still name a payment · builder
+- 2026-11-25 · R125 · changed · a receipt payment may come back as the pair of its bank row's payment; no warning for a source deleted before it · builder
+- 2026-11-25 · R122 · changed · CANNOT_PAIR refuses a restore as a pair that R119 would refuse · builder
+- 2026-11-25 · R123 · changed · finished expenses and a logged card's payoff category count as filing under the category; fees and Loan categories move too · builder
+- 2026-11-25 · R41 · changed · a deleted receipt payment whose bank row was recorded meanwhile may be restored as its pair · builder
