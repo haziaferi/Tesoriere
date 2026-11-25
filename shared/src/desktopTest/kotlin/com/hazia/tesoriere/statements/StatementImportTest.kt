@@ -538,6 +538,27 @@ class StatementImportTest {
         assertNull(after.transactions.single { it.key == "savings" && it.amount == cents("-100.00") }.categoryId)
     }
 
+    // SPEC:R107 SPEC:R50 SPEC:R54 SPEC:R89
+    @Test fun `R107 1,450_00 sent into a Goal holding 110_00 on 7 March pays -200_00 from it on 8 March with no warning and a -300_00 card payoff from it on 9 March`() {
+        val d = world()
+        val rows = listOf(
+            BankRow(LocalDate(2026, 3, 7), 145000, "STIPENDIO MARZO", null),
+            BankRow(LocalDate(2026, 3, 8), -20000, "PRELIEVO SPORTELLO 0412", null),
+            BankRow(LocalDate(2026, 3, 9), -30000, "PAGAMENTO CARTA ORBITA", null),
+        )
+        val filed = StatementImport.review(d, rows, clock.today)
+            .map { if (it.row.amount > 0) it.copy(incomingGoalId = "cash") else it }
+            .file("PRELIEVO SPORTELLO 0412", "groc" to "200.00", source = PaymentSource.Goal("cash"))
+            .payoff("PAGAMENTO CARTA ORBITA", "orbita")
+            .map { if (it.payoffAccountId != null) it.copy(payoffFrom = Accounts.PayoffFrom.Goal("cash")) else it }
+        assertTrue(StatementImport.canConfirm(d, filed))
+        assertEquals(listOf<PaymentNotice?>(null, null, null), StatementImport.rowNotices(d, filed))
+        val after = StatementImport.confirm(d, filed, clock, ids::next)
+        assertEquals(cents("1,060.00"), after.goals.single().saved)              // 110.00 + 1,450.00 - 200.00 - 300.00
+        assertEquals(cents("1,000.00"), after.savings.amount)
+        assertEquals(0L, after.accounts.single().balance)
+    }
+
     // SPEC:R107, R50
     @Test fun `R107 the 1,450_00 salary sent on into a Goal holding 110_00 leaves it 1,560_00 and Savings 885_30`() {
         val d = world()

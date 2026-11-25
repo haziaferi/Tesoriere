@@ -229,3 +229,4 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R107 · changed · the floor and the amount match also read the expense's sweep rows, so an edit of its schedule keeps a swept bill found · builder
 - 2026-11-25 · R94 · changed · a Loan changed to a card that cannot be saved changes nothing: its payment and the return stay · builder
 - 2026-11-25 · R107 · changed · Confirm records and checks the ticked rows oldest first, one day's rows in the review's order · builder
+- 2026-11-25 · R107 · changed · money sent into a Goal counts for the later rows paid from it in the same Confirm · builder
