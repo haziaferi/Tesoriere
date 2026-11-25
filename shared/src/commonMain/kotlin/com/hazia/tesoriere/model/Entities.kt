@@ -104,8 +104,8 @@ data class RecurringExpense(
     val linkedAccountId: String? = null,
     /**
      * The day it was created (SPEC R60, R64); null for one read from a Sci-Fin backup, which
-     * reads as its first due date (Recurring.createdOn). Schema 1 is edited in place: the first
-     * migration (plan Task 22) must add this column with that reading.
+     * reads as its first due date (Recurring.createdOn). Part of schema 1, which is still edited
+     * in place until the first install.
      */
     val createdOn: LocalDate? = null,
 )
@@ -139,8 +139,8 @@ data class Account(
     val originationDate: LocalDate? = null,
     /**
      * Loan only: the category a payment off it by hand counts in while nothing is charged to it,
-     * unless the payment picks another (SPEC R89). Optional. Schema 1 is edited in place: the
-     * first migration (plan Task 22) must add this column, a missing value meaning none.
+     * unless the payment picks another (SPEC R89). Optional; a Sci-Fin backup has none. Part of
+     * schema 1, which is still edited in place until the first install.
      */
     val loanCategoryId: String? = null,
 )

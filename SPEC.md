@@ -826,7 +826,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 | bimonthly | fixed date: the same day every 2 months; interval: every 60 days | fixed date or interval |
 | yearly | fixed date: the same day every 12 months; interval: every 365 days | fixed date or interval |
 
-**Evidence:** Sci-Fin's spec, section 3.11, and `engine/Recurring.kt` at `2892110`. The stored creation day: owner, 2026-11-25; schema 1 is edited in place, so the first migration (Task 22) must add it, a missing value read as the first due date.
+**Evidence:** Sci-Fin's spec, section 3.11, and `engine/Recurring.kt` at `2892110`. The stored creation day: owner, 2026-11-25; schema 1 is still edited in place until the first install, so the field is part of it, and a Sci-Fin backup has none and reads it as the first due date.
 
 **Acceptance:** A weekly expense first due 2 January 2026 falls due 5 times in January and 4 times in February; a biweekly one falls due 3 times in January (2, 16 and 30) and twice in February. A monthly interval expense first due 1 January 2026 falls due on 1 and 31 January, none in February, then 2 March. A weekly expense saved with fixed-date mode keeps no date mode. An expense with no creation day, as from a Sci-Fin backup, first due 5 March 2026, reads as created on 5 March.
 
@@ -1061,7 +1061,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 | credit | a yearly rate, at most one linked recurring expense: a fixed payment (R93), whether its charges are not logged, with the payoff category its payoffs then count in (R109), and a fees category for its interest and fees (R110) |
 | loan | the principal, a yearly rate, a term in months, a rate type (fixed, variable or interest-only), the day it started, whether it follows its payment (R73), at most one linked recurring expense: its payment, and a category of its own for its payments by hand (R89) |
 
-**Evidence:** Sci-Fin's spec, sections 7.1 and 7.2, and `engine/Accounts.kt` at `2892110`. A Loan's own category: owner, 2026-11-25; schema 1 is edited in place, so the first migration (Task 22) must add it, a missing value meaning none.
+**Evidence:** Sci-Fin's spec, sections 7.1 and 7.2, and `engine/Accounts.kt` at `2892110`. A Loan's own category: owner, 2026-11-25; schema 1 is still edited in place until the first install, so the field is part of it, and a Sci-Fin backup has none and reads it as no category of its own.
 
 **Acceptance:** A fresh Profile has Accounts off. A card at 100.00 with a 40.00 payment charged to it reads 140.00, and Savings is unchanged.
 

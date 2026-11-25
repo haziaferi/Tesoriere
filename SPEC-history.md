@@ -224,3 +224,5 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R67 · changed · restated to the owner's rule; the rows of an expense linked to an Account move to R87 · owner
 - 2026-11-25 · R87 · changed · how a linked expense's rows count, by link at write time, moved here from R67 · owner
 - 2026-11-25 · R110 · changed · rule restated in two sentences; its cases are in the table · owner
+- 2026-11-25 · R60 · changed · the creation day is part of schema 1, still edited in place; no migration adds it · builder
+- 2026-11-25 · R85 · changed · a Loan's own category is part of schema 1, still edited in place; no migration adds it · builder
