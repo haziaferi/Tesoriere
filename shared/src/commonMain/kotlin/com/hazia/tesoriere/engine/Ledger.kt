@@ -63,6 +63,8 @@ data class Movement(
     val categoryId: String? = null,
     /** A `rec:` row of an expense linked to a card, or to a Loan with a payment charged to it: counted in no spent (SPEC R67, R93). */
     val accountPayoff: Boolean = false,
+    /** The group of the rows of one Account quick-add, undone together (SPEC R111). */
+    val groupId: String? = null,
 )
 
 object Ledger {
@@ -117,6 +119,7 @@ object Ledger {
             rate = m.rate,
             categoryId = m.categoryId,
             accountPayoff = m.accountPayoff,
+            groupId = m.groupId,
         )
         val effect = savingsEffect(tx)
         var next = d.copy(transactions = d.transactions + tx)
@@ -134,9 +137,9 @@ object Ledger {
     /** A movement on an Account alone: logged, never touching Savings (SPEC R51); [categoryId] files a card's interest or fees (SPEC R110). */
     fun logAccountEdit(
         d: ProfileData, accountId: String, accountName: String, delta: Money, payee: String?, clock: Clock, id: String,
-        date: LocalDate? = null, categoryId: String? = null,
+        date: LocalDate? = null, categoryId: String? = null, groupId: String? = null,
     ): ProfileData =
-        logAndMove(d, Movement(delta, TransactionKey.AccountKey(accountId), accountName, payee, date = date, categoryId = categoryId), clock, id).first
+        logAndMove(d, Movement(delta, TransactionKey.AccountKey(accountId), accountName, payee, date = date, categoryId = categoryId, groupId = groupId), clock, id).first
 
     /**
      * SPEC R53's conditions, found once against the ledger as it stands. Returns each row that

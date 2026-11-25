@@ -181,6 +181,12 @@ data class Transaction(
      * (SPEC R67, R93, owner answers A and F of 2026-11-25). Written once, never read from the link.
      */
     val accountPayoff: Boolean = false,
+    /**
+     * The group shared by the rows of one Account quick-add, so it can be undone as a whole
+     * (SPEC R111): the id of its `acct:` row. Null on every other row, and on rows written before
+     * groups were kept or read from a Sci-Fin backup. Part of schema 1, still edited in place.
+     */
+    val groupId: String? = null,
 )
 
 /** One per Profile. The defaults are a fresh install's: every piece SPEC R18 starts off is off. */

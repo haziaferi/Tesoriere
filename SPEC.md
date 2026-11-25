@@ -75,6 +75,7 @@ Kinds: O owner rule · D decided · I inherited · A assumed · Q open.
 | D-R87 | An Account and its linked payment | 10. Credit and Loan accounts |
 | D-R88 | Deleting an Account with payments charged to it | 10. Credit and Loan accounts |
 | D-R89 | Quick-add on an Account | 10. Credit and Loan accounts |
+| D-R111 | Undoing an Account quick-add | 10. Credit and Loan accounts |
 | D-R90 | Loan calculator | 10. Credit and Loan accounts |
 | D-R91 | Taking the loan or saving for it | 10. Credit and Loan accounts |
 | D-R92 | Card payoff outlook | 10. Credit and Loan accounts |
@@ -431,7 +432,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R51 · The ledger
 
-**Rule:** Every movement of money other than a payment is a ledger row: a key naming what it changes, the signed change to it, a date, the instant it was logged, the target's name at that instant and, for a row that counts as spending, the category it is filed under (R25). How Savings moves follows from the key, as below. The date places the row in its month and in reports; the figure it changes moves when the row is written, whatever its date.
+**Rule:** Every movement of money other than a payment is a ledger row: a key naming what it changes, the signed change to it, a date, the instant it was logged, the target's name at that instant, for a row that counts as spending the category it is filed under (R25), and for the rows of one Account quick-add the group they share (R111). How Savings moves follows from the key, as below. The date places the row in its month and in reports; the figure it changes moves when the row is written, whatever its date.
 
 **Values:**
 
@@ -466,7 +467,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R53 · Undoing a mistaken entry
 
-**Rule:** The ledger's rows are never edited or deleted one by one. The one exception is a pair: two rows deleted together when the second cancels the first under every condition below. Deleting a pair changes no balance; the date of the last logged income is recomputed from the rows left.
+**Rule:** The ledger's rows are never edited or deleted one by one. The exceptions are a pair, two rows deleted together when the second cancels the first under every condition below, and the rows of one Account quick-add, undone together (R111). Deleting a pair changes no balance; the date of the last logged income is recomputed from the rows left.
 
 **Values:**
 
@@ -1133,6 +1134,29 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 **Acceptance:** A card at 100.00 paid 60.00 from Savings of 1,000.00 reads 40.00 with Savings at 940.00 and a `savings` row of -60.00 noted `Payment to Card`; from nowhere, Savings stays 1,000.00. Paid 60.00 from a Goal holding 80.00 it reads 40.00, the Goal 20.00 and Savings 1,000.00, with a `spend:` row of -60.00 noted `Payment to Card`; 90.00 from that Goal is refused. A Loan of 4,000.00 increased by 500.00 reads 4,500.00 with Savings unchanged. An increase on a card with no fees category and none picked is refused. A Loan linked to its 260.00 payment under Car, with nothing charged to it, paid 200.00 by hand from Savings adds 200.00 to Car; after a 9,800.00 car is charged to it, 100.00 paid from a Goal adds nothing; with the car removed again, Car keeps the 200.00 and the 100.00 still counts nowhere. A Loan linked to nothing, paid from Savings with no category picked and none of its own, is refused; with Car as its own category, 200.00 counts in Car, and with Groceries picked for the payment, in Groceries; with a picked category that does not exist it is refused, not counted in Car. A Loan with Car as its own category and a linked payment under Bills counts a payment by hand in Car, and the payment's sweeps in Bills. Savings is the default for an Account linked to nothing and nowhere for a linked one.
 
 **Not:** Requiring a Loan's own category to save the Loan: a Loan whose purchase is charged to it, or that is paid only from nowhere, never needs one, so the category is asked for only by the payment that would count under it, which is refused rather than counted under no category. A purchase as a quick-add: it would raise the card with no parts, which R22 rules out; interest and fees, filed under one category, are the one rise a card takes (R110). A payoff that takes a Goal below zero: unlike a payment (R54), nothing here is filed in a category, so the rest would leave Savings with nowhere to show it.
+
+**Since:** 2026-11-25 · owner · agreed rewording
+
+### D-R111 · Undoing an Account quick-add
+
+**Rule:** An Account quick-add (R89), a payment off it from Savings, a Goal or nowhere, an increase, or a card's interest or fees (R110), can be undone as a whole: every ledger row it wrote shares one group and is deleted with the others, and Savings, the Goal, the Account's balance and any category's spent go back to what they were without it. A row with no group, as one written before groups were kept or read from a Sci-Fin backup, is not undone this way, nor a group holding an income row or a sweep (`rec:`) row. When the Account or the Goal it moved has been deleted since, the undo is refused with a code and nothing changes.
+
+**Why:** A mistyped payoff moves an Account and Savings or a Goal under two keys, so no pair (R53) can cancel it, and a correction row would leave the mistake in the month's figures.
+
+**Values:**
+
+| Row of the quick-add | Undoing it |
+|---|---|
+| its `acct:` row | moves the Account's balance back by its amount |
+| its `savings` row | moves Savings back by its amount |
+| its `spend:` row | gives the Goal back its amount |
+| any of them filed under a category (R89, R109, R110) | takes it out of that category's spent for its month, the row being gone (R25) |
+
+**Evidence:** Owner, 2026-11-25; the refusal for a deleted Account or Goal: builder, 2026-11-25. The group is stored on each row, part of schema 1, which is still edited in place until the first install; a Sci-Fin backup's rows have none.
+
+**Acceptance:** A card at 100.00 paid 60.00 from Savings of 1,000.00 and undone reads 100.00 with Savings at 1,000.00 and neither row left; paid 60.00 from a Goal holding 80.00 and undone, the Goal holds 80.00; a card whose charges are not logged, paid 60.00 under Shopping and undone, leaves Shopping's spent as it was; a 12.50 fee filed under Fees, undone, leaves the card at 300.00 and Fees as it was. A quick-add on a card deleted since, or from a Goal deleted since, is refused with a code and changes nothing; a row with no group and a sweep are not undone.
+
+**Not:** Following R54's deleted-source pattern: the closing row of a deleted Account (R87) or the return of a deleted Goal (R58) already settled its figure with the quick-add in it, so an undo would need a compensating row on a target that is gone, and would not remove what the quick-add did.
 
 **Since:** 2026-11-25 · owner · agreed rewording
 
@@ -1894,6 +1918,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R87 · An Account and its linked payment: A Loan linked to a 200.00 payment and linked again to a 250.00 one leaves the 200.00 payment linked to nothing, and deleting it keeps the Loan. A Loan of 4,000.00 whose 260.00 payment, due the 20th, swept on creation on 10 September 2026 from Savings of 5,000.00, deleted with the return accepted, leaves no Account, no expense and Savings at 5,000.00. A Loan of 9,800.00 deleted removes its payment too and logs a -9,800.00 row noted `Account closed`. With 40.00 charged to a card under Food in September 2026 and the card's 40.00 payment, filed under Food, sweeping that month, Food's spent is 40.00; a Loan's 260.00 payment under Car adds 260.00 to Car in September 2026, and after a 9,800.00 car is charged to that Loan in October, Car's October spent is 9,800.00 with the payment's October sweep a transfer, and its September stays 260.00.
 - R88 · Deleting an Account with payments charged to it: A card opened at 100.00 with a 40.00 payment charged to it under Groceries in September 2026, deleted, logs a -140.00 closing row; the payment stays, Groceries' spent for September is 40.00, and Savings is unchanged; the payment removed afterwards logs a +40.00 `acct:` row, and the card's rows add up to zero.
 - R89 · Quick-add on an Account: A card at 100.00 paid 60.00 from Savings of 1,000.00 reads 40.00 with Savings at 940.00 and a `savings` row of -60.00 noted `Payment to Card`; from nowhere, Savings stays 1,000.00. Paid 60.00 from a Goal holding 80.00 it reads 40.00, the Goal 20.00 and Savings 1,000.00, with a `spend:` row of -60.00 noted `Payment to Card`; 90.00 from that Goal is refused. A Loan of 4,000.00 increased by 500.00 reads 4,500.00 with Savings unchanged. An increase on a card with no fees category and none picked is refused. A Loan linked to its 260.00 payment under Car, with nothing charged to it, paid 200.00 by hand from Savings adds 200.00 to Car; after a 9,800.00 car is charged to it, 100.00 paid from a Goal adds nothing; with the car removed again, Car keeps the 200.00 and the 100.00 still counts nowhere. A Loan linked to nothing, paid from Savings with no category picked and none of its own, is refused; with Car as its own category, 200.00 counts in Car, and with Groceries picked for the payment, in Groceries; with a picked category that does not exist it is refused, not counted in Car. A Loan with Car as its own category and a linked payment under Bills counts a payment by hand in Car, and the payment's sweeps in Bills. Savings is the default for an Account linked to nothing and nowhere for a linked one.
+- R111 · Undoing an Account quick-add: A card at 100.00 paid 60.00 from Savings of 1,000.00 and undone reads 100.00 with Savings at 1,000.00 and neither row left; paid 60.00 from a Goal holding 80.00 and undone, the Goal holds 80.00; a card whose charges are not logged, paid 60.00 under Shopping and undone, leaves Shopping's spent as it was; a 12.50 fee filed under Fees, undone, leaves the card at 300.00 and Fees as it was. A quick-add on a card deleted since, or from a Goal deleted since, is refused with a code and changes nothing; a row with no group and a sweep are not undone.
 - R90 · Loan calculator: 12,000.00 at 6.5 % over 48 months, fixed: 284.58 a month, 13,659.84 repaid, 1,659.84 of interest, nothing left. Interest-only: 65.00 a month, 3,120.00 repaid, 12,000.00 left. At 0 %: 250.00 a month.
 - R91 · Taking the loan or saving for it: 9,800.00 at 5.9 % over 48 months, taken on 14 September 2026 from Savings of 1,000.00, creates a Loan of 9,800.00 with one +9,800.00 `Opening balance` row and a payment of 229.70 first due 14 October 2026, ending 14 September 2030, marked swept for September 2026, the Loan taking the payment's category as its own; Savings stays 1,000.00. With no category, or one that does not exist, nothing is created. Saving for 12,000.00 over 48 months on 14 September 2026 creates a goal of 12,000.00 by 14 September 2030 named `Savings goal`.
 - R92 · Card payoff outlook: 640.00 at 21.9 % paid 50.00 a month clears in 15 months with 95.63 of interest; at 11.00 a month it is never cleared; at 0 % it clears in 13 months; a balance of 0.00 clears in 0 months. The minimum on 640.00 at 21.9 % starts at 25.00 and clears in 35 months with 230.40 of interest; on 3,000.00 at 0 % it starts at 60.00; 1,000.00 at 5 % a month is never cleared.

@@ -193,13 +193,13 @@ object Accounts {
      */
     fun balanceEdit(
         d: ProfileData, accountId: String, newBalance: Money, payee: String?, clock: Clock, txId: String,
-        date: LocalDate? = null, categoryId: String? = null,
+        date: LocalDate? = null, categoryId: String? = null, groupId: String? = null,
     ): ProfileData {
         val a = d.accounts.first { it.id == accountId }
         val delta = newBalance - a.balance
         val next = d.copy(accounts = d.accounts.map { if (it.id == accountId) it.copy(balance = newBalance) else it })
         if (delta == 0L) return next
-        return Ledger.logAccountEdit(next, a.id, a.name, delta, payee ?: StoredLabels.CORRECTION, clock, txId, date, categoryId)
+        return Ledger.logAccountEdit(next, a.id, a.name, delta, payee ?: StoredLabels.CORRECTION, clock, txId, date, categoryId, groupId)
     }
 
     /**
@@ -291,7 +291,9 @@ object Accounts {
         val signed = if (direction == Direction.PAYMENT) -amount else amount
         val note = payee ?: if (direction == Direction.PAYMENT) StoredLabels.PAID_OFF else StoredLabels.INCREASED
         val rise = if (direction == Direction.INCREASE) riseCategory(d, a, categoryId) else null
-        var next = balanceEdit(d, accountId, a.balance + signed, note, clock, ids(), date, rise)
+        // every row of this quick-add shares one group, the id of its acct: row, so it can be undone as a whole (SPEC R111)
+        val group = ids()
+        var next = balanceEdit(d, accountId, a.balance + signed, note, clock, group, date, rise, groupId = group)
         if (direction != Direction.PAYMENT) return next
         val fromNote = payee ?: StoredLabels.fill(StoredLabels.PAYMENT_TO, a.name)
         // filed as written: a card whose charges are not logged under its payoff category (SPEC R109),
@@ -299,14 +301,65 @@ object Accounts {
         val filed = payoffFiling(d, a, categoryId)
         when (from) {
             PayoffFrom.Savings ->
-                next = Ledger.logAndMove(next, Movement(-amount, TransactionKey.SavingsKey, StoredLabels.SAVINGS, fromNote, date = date, categoryId = filed), clock, ids()).first
+                next = Ledger.logAndMove(next, Movement(-amount, TransactionKey.SavingsKey, StoredLabels.SAVINGS, fromNote, date = date, categoryId = filed, groupId = group), clock, ids()).first
             is PayoffFrom.Goal -> {
                 val g = requireNotNull(goal)
                 next = next.copy(goals = next.goals.map { if (it.id == g.id) it.copy(saved = it.saved - amount) else it })
-                next = Ledger.logAndMove(next, Movement(-amount, TransactionKey.GoalSpendKey(g.id), g.name, fromNote, date = date, categoryId = filed), clock, ids()).first
+                next = Ledger.logAndMove(next, Movement(-amount, TransactionKey.GoalSpendKey(g.id), g.name, fromNote, date = date, categoryId = filed, groupId = group), clock, ids()).first
             }
             PayoffFrom.None -> Unit
         }
+        return next
+    }
+
+    /** Why an Account quick-add cannot be undone, as a code (SPEC R111); how it reads is the design pass's (SPEC R16). */
+    enum class UndoProblem {
+        /** No row carries this group: an old row, a row from a Sci-Fin backup, or no such quick-add. */
+        NO_SUCH_GROUP,
+        /** The group holds a row no quick-add writes: an income row, a sweep, or another key. */
+        NOT_A_QUICK_ADD,
+        /** The Account it moved has been deleted since; its closing row settled the balance with it (SPEC R87). */
+        ACCOUNT_DELETED,
+        /** The Goal it took from has been deleted since; its return settled the Goal with it (SPEC R58). */
+        GOAL_DELETED,
+    }
+
+    /** Why the quick-add whose rows share [groupId] cannot be undone, or null when it can (SPEC R111). */
+    fun undoQuickAddProblem(d: ProfileData, groupId: String): UndoProblem? {
+        val rows = d.transactions.filter { it.groupId == groupId }
+        if (rows.isEmpty()) return UndoProblem.NO_SUCH_GROUP
+        for (t in rows) {
+            if (t.isIncome) return UndoProblem.NOT_A_QUICK_ADD
+            when (val k = TransactionKey.parse(t.key)) {
+                is TransactionKey.AccountKey -> if (d.accounts.none { it.id == k.id }) return UndoProblem.ACCOUNT_DELETED
+                is TransactionKey.GoalSpendKey -> if (d.goals.none { it.id == k.id }) return UndoProblem.GOAL_DELETED
+                TransactionKey.SavingsKey -> Unit
+                else -> return UndoProblem.NOT_A_QUICK_ADD
+            }
+        }
+        return null
+    }
+
+    /**
+     * Undoes the Account quick-add whose rows share [groupId] (SPEC R111): its rows are deleted
+     * together and every figure they moved moves back, the Account's balance, Savings and the
+     * Goal's saved money; a category's spent follows, being worked out from the rows left (SPEC
+     * R25). Refused unless [undoQuickAddProblem] finds nothing.
+     */
+    fun undoQuickAdd(d: ProfileData, groupId: String): ProfileData {
+        val problem = undoQuickAddProblem(d, groupId)
+        require(problem == null) { "the quick-add cannot be undone: $problem (SPEC R111)" }
+        val rows = d.transactions.filter { it.groupId == groupId }
+        var next = d.copy(transactions = d.transactions.filter { it.groupId != groupId })
+        for (t in rows) {
+            when (val k = TransactionKey.parse(t.key)) {
+                is TransactionKey.AccountKey -> next = next.copy(accounts = next.accounts.map { if (it.id == k.id) it.copy(balance = it.balance - t.amount) else it })
+                is TransactionKey.GoalSpendKey -> next = next.copy(goals = next.goals.map { if (it.id == k.id) it.copy(saved = it.saved - t.amount) else it })
+                else -> Unit
+            }
+        }
+        val effect = rows.sumOf { Ledger.savingsEffect(it) }
+        if (effect != 0L) next = next.copy(savings = next.savings.copy(amount = (next.savings.amount ?: 0) - effect))
         return next
     }
 

@@ -232,3 +232,6 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R107 · changed · money sent into a Goal counts for the later rows paid from it in the same Confirm · builder
 - 2026-11-25 · R89 · changed · a picked category that does not exist refuses a Loan's payment by hand instead of being passed over · builder
 - 2026-11-25 · R110 · changed · a picked category that does not exist refuses a rise instead of being passed over · builder
+- 2026-11-25 · R111 · added · an Account quick-add can be undone as a whole, its rows sharing one group; refused for a deleted Account or Goal · owner
+- 2026-11-25 · R53 · changed · the rows of one Account quick-add are deleted together when it is undone · owner
+- 2026-11-25 · R51 · changed · the rows of one Account quick-add share a group · owner
