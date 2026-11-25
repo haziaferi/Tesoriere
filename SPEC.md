@@ -535,14 +535,15 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 | Goal | lowers the Goal's saved money; a total above what the Goal holds cannot be saved | unchanged |
 | Account | raises the Account's balance | unchanged |
 | a Goal deleted since (R58) | keeps the Goal as its recorded source; undoing, editing or removing it moves Savings in the Goal's place, after a warning the user can dismiss | moves as for a Savings source |
+| an Account deleted since (R88) | keeps the Account as its recorded source; it can be edited, re-filed or removed after a warning the user can dismiss, and moves no balance | unchanged |
 
-**Evidence:** Sci-Fin's spec, sections 3.6 and 7.2, at `2892110`. The deleted-Goal row: owner, 2026-11-24, after review of PR 2.
+**Evidence:** Sci-Fin's spec, sections 3.6 and 7.2, at `2892110`. The deleted-Goal row: owner, 2026-11-24, after review of PR 2. The deleted-Account row: owner, 2026-11-25.
 
-**Acceptance:** A 42.30 payment from Savings lowers Savings by 42.30; a 30.00 payment from a Goal holding 50.00 leaves it 20.00 and Savings unchanged, and one of 60.00 cannot be saved; a 40.00 payment charged to a card with a 0.00 balance leaves the balance at 40.00. With Savings at 1,000.00: 100.00 into a Goal, a 30.00 payment from it, the Goal deleted with its 70.00 returned leaves 970.00; removing the payment then gives 1,000.00, and re-filing its parts leaves 970.00.
+**Acceptance:** A 42.30 payment from Savings lowers Savings by 42.30; a 30.00 payment from a Goal holding 50.00 leaves it 20.00 and Savings unchanged, and one of 60.00 cannot be saved; a 40.00 payment charged to a card with a 0.00 balance leaves the balance at 40.00. With Savings at 1,000.00: 100.00 into a Goal, a 30.00 payment from it, the Goal deleted with its 70.00 returned leaves 970.00; removing the payment then gives 1,000.00, and re-filing its parts leaves 970.00. A 40.00 payment charged to a card that is deleted since carries a warning, can be re-filed into two parts or removed with Savings unchanged, and a new payment charged to that card cannot be saved.
 
-**Not:** Spending past what a Goal holds: the Goal would hold less than nothing. Leaving a deleted Goal's payment with nowhere to return its money: Savings would stay short by the payment.
+**Not:** Spending past what a Goal holds: the Goal would hold less than nothing. Leaving a deleted Goal's payment with nowhere to return its money: Savings would stay short by the payment. Locking a deleted Account's payments: their parts could not be filed again when a receipt arrives late (R38).
 
-**Since:** 2026-11-24 · owner · agreed rewording
+**Since:** 2026-11-25 · owner · agreed rewording
 
 ### D-R23 · Parts add up
 
@@ -1771,7 +1772,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R53 · Undoing a mistaken entry: Rows of +40.00 and -40.00 on one Goal logged 47 hours apart pair; 49 hours apart they do not; four rows +40.00, -40.00, +40.00, -40.00 logged in that order make two pairs, the first two and the last two.
 - R21 · Payment: A recorded receipt payment holds every receipt line; a paired payment holds both its `receiptId` and its `bankKeys`; a recurring expense's sweep records no payment.
 - R22 · Source and parts are separate: A EUR 40 receipt charged to a card adds its parts to their categories' spent figures and EUR 40 to the card's balance, and moves nothing in Savings.
-- R54 · What a payment's source moves: A 42.30 payment from Savings lowers Savings by 42.30; a 30.00 payment from a Goal holding 50.00 leaves it 20.00 and Savings unchanged, and one of 60.00 cannot be saved; a 40.00 payment charged to a card with a 0.00 balance leaves the balance at 40.00. With Savings at 1,000.00: 100.00 into a Goal, a 30.00 payment from it, the Goal deleted with its 70.00 returned leaves 970.00; removing the payment then gives 1,000.00, and re-filing its parts leaves 970.00.
+- R54 · What a payment's source moves: A 42.30 payment from Savings lowers Savings by 42.30; a 30.00 payment from a Goal holding 50.00 leaves it 20.00 and Savings unchanged, and one of 60.00 cannot be saved; a 40.00 payment charged to a card with a 0.00 balance leaves the balance at 40.00. With Savings at 1,000.00: 100.00 into a Goal, a 30.00 payment from it, the Goal deleted with its 70.00 returned leaves 970.00; removing the payment then gives 1,000.00, and re-filing its parts leaves 970.00. A 40.00 payment charged to a card that is deleted since carries a warning, can be re-filed into two parts or removed with Savings unchanged, and a new payment charged to that card cannot be saved.
 - R23 · Parts add up: A EUR 42.30 payment with parts of EUR 30.00 and EUR 12.00 shows EUR 0.30 left and cannot be saved; with a third part of EUR 0.30 it can.
 - R24 · Any payment can be split: A bank row and a hand-logged payment can each be saved with two parts in two categories.
 - R25 · Spent is derived: Re-filing a payment's parts changes the spent figures of the categories involved, for the payment's month, and writes no correction row. A 60.00 sweep filed under Phone and dated in March adds 60.00 to Phone's spent for March, and no payment exists for it.
