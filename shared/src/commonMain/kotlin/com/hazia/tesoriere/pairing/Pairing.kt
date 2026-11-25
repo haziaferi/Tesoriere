@@ -93,13 +93,12 @@ object Pairing {
             .map { it.second.id to it.third }
 
     /**
-     * Which payment each row of [rows] names in the import review (SPEC R118): as many rows in
-     * [eligible] (money out, not recorded yet) as possible each name a receipt payment that [match]
-     * finds, each row and each payment once at most, and R118's order (the store's link, equal
-     * totals, the closest day, the earlier row, the row listed first, the payment recorded first)
-     * decides among such choices. Rows are taken in the order of their best option and each tries
-     * its options in that order, displacing an earlier row's payment only along an augmenting path,
-     * which leaves that row a payment too (Kuhn's matching). Indices into [rows] to payment ids.
+     * Which payment each row of [rows] names in the import review (SPEC R118): every option, a row
+     * in [eligible] (money out, not recorded yet) and a receipt payment that [match] finds, taken in
+     * R118's order (the store's link, equal totals, the closest day, the earlier row, the row listed
+     * first, the payment recorded first), is named when its row and payment are free and naming it
+     * still lets as many rows as possible name a payment. The result names the most pairs any
+     * choice can, and among those is the best in R118's order. Indices into [rows] to payment ids.
      */
     internal fun suggest(d: ProfileData, rows: List<BankRow>, eligible: Set<Int>): Map<Int, String> {
         class Option(val row: Int, val payment: Int, val match: Match)
@@ -112,21 +111,31 @@ object Pairing {
             { rank(d, payments[it.payment].payee ?: "", rows[it.row].description) }, { it.match.ordinal },
             { abs(payments[it.payment].date.daysTo(rows[it.row].date)) }, { rows[it.row].date }, { it.row }, { it.payment },
         ))
-        // each row's options in R118's order; rows in the order of their best option
-        val byRow = LinkedHashMap<Int, MutableList<Int>>()
-        for (o in options) byRow.getOrPut(o.row) { mutableListOf() } += o.payment
-        val holder = HashMap<Int, Int>()          // payment index to the row naming it
+        // the most pairs any choice names, then each option in R118's order, kept when its row and
+        // payment are free and the rest can still reach that count
+        val best = maxPairs(options.map { it.row to it.payment })
+        val kept = ArrayList<Option>()
+        for (o in options) {
+            if (kept.any { it.row == o.row || it.payment == o.payment }) continue
+            val rest = options.filter { r -> (kept + o).none { it.row == r.row || it.payment == r.payment } }
+            if (kept.size + 1 + maxPairs(rest.map { it.row to it.payment }) == best) kept += o
+        }
+        return kept.associate { it.row to payments[it.payment].id }
+    }
+
+    /** The most pairs [edges] (row, payment) can name, each row and each payment once at most (Kuhn's matching). */
+    private fun maxPairs(edges: List<Pair<Int, Int>>): Int {
+        val byRow = edges.groupBy({ it.first }, { it.second })
+        val holder = HashMap<Int, Int>()
         fun augment(row: Int, seen: MutableSet<Int>): Boolean {
-            // a free payment first, in order; only then displace another row's, which must find another
-            byRow.getValue(row).firstOrNull { it !in holder && it !in seen }?.let { seen += it; holder[it] = row; return true }
             for (p in byRow.getValue(row)) {
                 if (!seen.add(p)) continue
-                if (augment(holder.getValue(p), seen)) { holder[p] = row; return true }
+                val other = holder[p]
+                if (other == null || augment(other, seen)) { holder[p] = row; return true }
             }
             return false
         }
-        for (row in byRow.keys) augment(row, HashSet())
-        return holder.entries.associate { (p, row) -> row to payments[p].id }
+        return byRow.keys.count { augment(it, HashSet()) }
     }
 
     /** The difference part of a pair (SPEC R39): the bank amount less the receipt's total, negative when the bank row is below it. */

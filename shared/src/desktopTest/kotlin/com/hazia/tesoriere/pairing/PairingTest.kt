@@ -484,4 +484,14 @@ class PairingTest {
         assertEquals(2, d2.payments.size)
         assertEquals(cents("993.00"), d2.savings.amount)
     }
+
+    // SPEC:R118 SPEC:R37
+    @Test fun `R118 a 42_30 and a 42_50 receipt with rows of 42_30 on 10 and 12 March and 42_50 on 13 March keep both exact pairs`() {
+        val d1 = recordReceipt(recordReceipt(world(), shop("rc-1", on(10)), id = "pay-p"), shop("rc-2", on(11), home = "12.50"), id = "pay-q")
+        val review = reviewOf(
+            d1, row("42.30", on(10), fitid = "F-A"), row("42.30", on(12), fitid = "F-B"), row("42.50", on(13), fitid = "F-C"),
+        )
+        assertEquals(listOf(on(13) to "pay-q", on(12) to null, on(10) to "pay-p"), review.map { it.row.date to it.pairPaymentId })
+        assertEquals(RowStatus.READY, review[1].status)
+    }
 }
