@@ -9,7 +9,7 @@ import com.hazia.tesoriere.model.ProfileData
  * platform's; the count of waiting receipts is the engine's.
  */
 
-/** What the parser makes of one file's bytes (SPEC R30). */
+/** What the parser, ReceiptFileFormat.parse, makes of one file's bytes (SPEC R30, R117). */
 sealed interface ParseResult {
     data class Ok(val file: ReceiptFile) : ParseResult
 
