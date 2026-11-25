@@ -355,6 +355,20 @@ class RecurringTest {
     }
 
     // SPEC:R66 SPEC:R67 SPEC:R25
+    @Test fun `R66 a yearly 1,200_00 insurance deleted on 14 September 2026 returns 200_00 and leaves Insurance's September spent at -100_00`() {
+        val clock = TestClock(LocalDate(2026, 9, 14)); val ids = Ids()
+        val e = recurring("ins", "1,200.00", Cadence.YEARLY, LocalDate(2026, 7, 15), dueDate = LocalDate(2027, 7, 15), share = "100.00", categoryId = "ins", name = "Insurance")
+        var d = withExpenses(profile(savings = "2,000.00", categories = listOf(category("ins", "Insurance"))), e)
+        d = Recurring.sweepOccurrences(d, "ins", LocalDate(2026, 8, 1), clock) { ids.next() }.first
+        d = Recurring.sweepOccurrences(d, "ins", LocalDate(2026, 9, 1), clock) { ids.next() }.first
+        assertEquals(cents("100.00"), Spent.of(d, "ins", "2026-09"))
+        d = Recurring.delete(d, "ins", reverse = true, clock) { ids.next() }
+        assertEquals(cents("-100.00"), Spent.of(d, "ins", "2026-09"))                     // a month's spent may be below zero
+        assertEquals(cents("100.00"), Spent.of(d, "ins", "2026-08"))                      // the past month is left as it was
+        assertEquals(cents("2,000.00"), d.savings.amount)
+    }
+
+    // SPEC:R66 SPEC:R67 SPEC:R25
     @Test fun `R66 a semimonthly 300_00 swept under Phone, moved to Internet and deleted on 20 September returns 300_00 under Phone`() {
         val clock = TestClock(LocalDate(2026, 9, 1)); val ids = Ids()
         var d = Recurring.create(world("2,000.00"), recurring("s", "300.00", Cadence.SEMIMONTHLY, LocalDate(2026, 9, 15), dueDate2 = LocalDate(2026, 9, 30), categoryId = "phone"), clock) { ids.next() }

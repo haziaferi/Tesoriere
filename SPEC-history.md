@@ -158,3 +158,5 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R26 · changed · the synthetic key makes runs of spaces, tabs and non-breaking spaces one space and trims before taking 40 characters · builder
 - 2026-11-25 · R108 · changed · a payee rule is kept under a rule name that drops words holding a digit, masked card numbers and card-payment words · builder
 - 2026-11-25 · R107 · changed · an outflow of a recurring expense's amount within 3 days of one of its due dates is RECURRING too, unless the expense is a card's payment · builder
+- 2026-11-25 · R66 · changed · a return on deletion lowers its category's spent in the month of the delete, which may fall below zero · builder
+- 2026-11-25 · R67 · changed · a return can leave a month's spent below zero, as intended · builder
