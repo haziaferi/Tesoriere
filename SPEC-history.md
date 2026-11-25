@@ -134,3 +134,4 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R67 · changed · a return on deletion carries the reversed rows' category, not the expense's · owner
 - 2026-11-25 · R54 · changed · a payment charged to an Account deleted since: kept, editable after a warning, moves no balance · owner
 - 2026-11-25 · R54 · changed · a deleted Goal's payment logs the Savings it moves as a savings row · builder
+- 2026-11-25 · R70 · changed · the Profile keeps the last month processed, so a Profile with no recurring expense catches up too · builder
