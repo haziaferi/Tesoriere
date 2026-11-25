@@ -83,7 +83,8 @@ class ReceiptReviewTest {
             listOf(Part("groc", cents("4.29")), Part("fruit", cents("3.15")), Part("home", cents("9.06"))),
             Receipts.parts(r),
         )
-        assertFalse(Receipts.hasChanges(r))
+        // a moved line is a change that warns before close (owner answer A of 2026-11-25)
+        assertTrue(Receipts.hasChanges(r))
         val d1 = Receipts.confirm(d0, r, clock, "pay-1")
         assertEquals(mapOf("ch-groc" to "groc", "ch-home" to "home"), d1.receiptSettings!!.categoryLinks)
         assertEquals("fruit", d1.payments.single().receiptLines[2].categoryId)
@@ -92,16 +93,81 @@ class ReceiptReviewTest {
     }
 
     // SPEC:R31 SPEC:R33
-    @Test fun `R31 closing the review leaves no payment`() {
+    @Test fun `R31 closing the review leaves no payment, no link and no category`() {
         val d0 = world()
-        val r = Receipts.addAsNew(
-            Receipts.moveLine(Receipts.open(d0, receipt("rc-1", store, day, line("seeds", "4.00", "ch-garden", "Garden"), line("milk", "1.89", "ch-groc", "Groceries"))), 1, "fun"),
-            "ch-garden", "c-new", Fixture.PROFILE,
+        val file = receipt(
+            "rc-1", store, day,
+            line("seeds", "4.00", "ch-garden", "Garden"), line("milk", "1.89", "ch-groc", "Groceries"), line("crisps", "3.20", "ch-snack", "Snack"),
         )
+        var r = Receipts.open(d0, file)
+        r = Receipts.moveLine(r, 1, "fun")
+        r = Receipts.link(r, "ch-snack", "out")
+        r = Receipts.addAsNew(r, "ch-garden", "c-new", Fixture.PROFILE)
+        r = Receipts.setSource(r, PaymentSource.Account("card"))
         assertTrue(Receipts.canConfirm(d0, r))
-        // closed: confirm is never called, and d is what it was
+        assertTrue(Receipts.hasChanges(r))
+        // what Confirm would have recorded, to show the review held something
+        val confirmed = Receipts.confirm(d0, r, clock, "pay-1")
+        assertEquals(1, confirmed.payments.size)
+        assertEquals(setOf("ch-groc", "ch-snack", "ch-garden"), confirmed.receiptSettings!!.categoryLinks.keys)
+        // closed instead: the Profile the review was opened on is as it was
         assertEquals(world(), d0)
         assertTrue(d0.payments.isEmpty())
+        assertEquals(emptyMap(), d0.receiptSettings!!.categoryLinks)
+        assertEquals(emptyList(), d0.receiptSettings!!.recordedReceiptIds)
+        assertEquals(emptyMap(), d0.receiptSettings!!.storeSources)
+        assertTrue(d0.categories.none { it.id == "c-new" || it.name == "Garden" })
+        assertEquals(0L, d0.accounts.single { it.id == "card" }.balance)
+        assertEquals(cents("1,000.00"), d0.savings.amount)
+    }
+
+    // SPEC:R33 SPEC:R114
+    @Test fun `R33 moving one line or changing the source holds changes`() {
+        val d0 = world()
+        val r = Receipts.open(d0, fiveLines())
+        assertFalse(Receipts.hasChanges(r))
+        assertTrue(Receipts.hasChanges(Receipts.moveLine(r, 0, "fruit")))
+        assertTrue(Receipts.hasChanges(Receipts.setSource(r, PaymentSource.Account("card"))))
+        // the source it opened with, picked again, is no change
+        assertFalse(Receipts.hasChanges(Receipts.setSource(r, PaymentSource.Savings)))
+    }
+
+    // SPEC:R32 SPEC:R114 SPEC:R115
+    @Test fun `R32 an unlinked Garden whose only line is moved by hand to Household can be confirmed and the next receipt asks again`() {
+        val d0 = world()
+        val r = Receipts.moveLine(Receipts.open(d0, receipt("rc-1", store, day, line("seeds", "4.00", "ch-garden", "Garden"))), 0, "home")
+        assertEquals(listOf<ReviewNote>(ReviewNote.Unlinked("ch-garden")), Receipts.notes(d0, r))
+        assertNull(Receipts.problem(d0, r))
+        val d1 = Receipts.confirm(d0, r, clock, "pay-1")
+        assertEquals(listOf(Part("home", cents("4.00"))), d1.payments.single().parts)
+        assertTrue("ch-garden" !in d1.receiptSettings!!.categoryLinks)
+        val next = Receipts.open(d1, receipt("rc-2", store, day, line("seeds", "4.00", "ch-garden", "Garden")))
+        assertEquals(listOf<String?>(null), next.lineCategories)
+        assertEquals(ReceiptProblem.UNLINKED, Receipts.problem(d1, next))
+    }
+
+    // SPEC:R114 SPEC:R32
+    @Test fun `R114 Snack opened under Eating out and linked in the review to Groceries files its lines under Groceries`() {
+        val d0 = world()
+        val first = Receipts.link(Receipts.open(d0, receipt("rc-1", store, day, line("crisps", "3.20", "ch-snack", "Snack"))), "ch-snack", "out")
+        val d1 = Receipts.confirm(d0, first, clock, "pay-1")
+        val r0 = Receipts.open(d1, receipt("rc-2", store, day, line("crisps", "3.20", "ch-snack", "Snack"), line("nuts", "2.10", "ch-snack", "Snack")))
+        assertEquals(listOf<String?>("out", "out"), r0.lineCategories)
+        val moved = Receipts.moveLine(r0, 1, "fun")
+        val relinked = Receipts.link(moved, "ch-snack", "groc")
+        assertEquals(listOf<String?>("groc", "fun"), relinked.lineCategories)
+        assertEquals(listOf(Part("groc", cents("3.20")), Part("fun", cents("2.10"))), Receipts.parts(relinked))
+        assertEquals("groc", Receipts.confirm(d1, relinked, clock, "pay-2").receiptSettings!!.categoryLinks["ch-snack"])
+    }
+
+    // SPEC:R114 SPEC:R32
+    @Test fun `R114 Pulizia opened under pulizia by its name and added as new files its line under the new category`() {
+        val d0 = world()
+        val r0 = Receipts.open(d0, receipt("rc-1", store, day, line("bleach", "2.50", "ch-pul", "Pulizia")))
+        assertEquals(listOf<String?>("pul"), r0.lineCategories)
+        val added = Receipts.addAsNew(r0, "ch-pul", "c-new", Fixture.PROFILE)
+        assertEquals(listOf<String?>("c-new"), added.lineCategories)
+        assertEquals(listOf(Part("c-new", cents("2.50"))), Receipts.parts(added))
     }
 
     // SPEC:R32 SPEC:R113
@@ -226,6 +292,15 @@ class ReceiptReviewTest {
         val d0 = world()
         val d1 = Receipts.confirm(d0, Receipts.setSource(Receipts.open(d0, fiveLines()), PaymentSource.Account("card")), clock, "pay-1")
         val gone = d1.copy(accounts = d1.accounts.filter { it.id != "card" })
+        assertEquals(PaymentSource.Savings, Receipts.open(gone, fiveLines("rc-2")).source)
+    }
+
+    // SPEC:R113 SPEC:R35
+    @Test fun `R113 a store whose Goal is deleted opens with Savings`() {
+        val d0 = world().copy(goals = listOf(goal("trip", "Trip", saved = "100.00")))
+        val d1 = Receipts.confirm(d0, Receipts.setSource(Receipts.open(d0, fiveLines()), PaymentSource.Goal("trip")), clock, "pay-1")
+        assertEquals(PaymentSource.Goal("trip"), Receipts.open(d1, fiveLines("rc-2")).source)
+        val gone = d1.copy(goals = emptyList())
         assertEquals(PaymentSource.Savings, Receipts.open(gone, fiveLines("rc-2")).source)
     }
 

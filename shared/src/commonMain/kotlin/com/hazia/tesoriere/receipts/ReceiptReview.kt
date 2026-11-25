@@ -25,7 +25,8 @@ import com.hazia.tesoriere.payments.ReceiptLine
  * filed under, null while it has none (SPEC R113); [newLinks] are the links the user made in this
  * review, Chatelaine category id to Tesoriere category id; [addedCategories] are the categories the
  * user added in it (SPEC R114). Links made by name are not held here: Confirm makes them again
- * from the Profile (SPEC R115).
+ * from the Profile (SPEC R115). [openedSource] is the source the review opened with and [moved] the
+ * indices of the lines the user moved by hand, so the review knows its changes (SPEC R33, R114).
  */
 data class ReceiptReview(
     val file: ReceiptFile,
@@ -33,6 +34,8 @@ data class ReceiptReview(
     val lineCategories: List<String?>,
     val newLinks: Map<String, String>,
     val addedCategories: List<Category>,
+    val openedSource: PaymentSource = source,
+    val moved: Set<Int> = emptySet(),
 )
 
 /** What a review notes for one Chatelaine category (SPEC R114). Codes, not wording (SPEC R16). */
@@ -43,7 +46,7 @@ sealed interface ReviewNote {
     /** Linked by the user in this review to an existing category of another name: rename it in Chatelaine. */
     data class RenameInChatelaine(val chatelaineId: String, val tesoriereCategoryId: String) : ReviewNote
 
-    /** No link, no equal name, no answer yet: Confirm stays off (SPEC R32). */
+    /** No link, no equal name, no answer yet: Confirm stays off while a line of it is in no category (SPEC R32). */
     data class Unlinked(val chatelaineId: String) : ReviewNote
 }
 
@@ -55,7 +58,7 @@ enum class ReceiptProblem {
     ALREADY_RECORDED,
     /** The receipt's currency is not the Profile's (SPEC R30, R47). */
     OTHER_CURRENCY,
-    /** A Chatelaine category on the receipt has no link (SPEC R32, R114). */
+    /** A line of a Chatelaine category with no link is in no category (SPEC R32, R114). */
     UNLINKED,
     /** A line has no category, or one that does not exist. */
     CATEGORY_MISSING,
@@ -85,9 +88,14 @@ object Receipts {
         addedCategories = emptyList(),
     )
 
-    /** Files line [index] under [categoryId], for this receipt only; no link changes (SPEC R31, R114). */
+    /**
+     * Files line [index] under [categoryId] by hand, for this receipt only; no link changes, and a
+     * later answer for its Chatelaine category leaves it where it is (SPEC R31, R114). Moving it to
+     * the category it is in already changes nothing.
+     */
     fun moveLine(r: ReceiptReview, index: Int, categoryId: String): ReceiptReview =
-        r.copy(lineCategories = r.lineCategories.toMutableList().also { it[index] = categoryId })
+        if (r.lineCategories[index] == categoryId) r
+        else r.copy(lineCategories = r.lineCategories.toMutableList().also { it[index] = categoryId }, moved = r.moved + index)
 
     /** Links Chatelaine category [chatelaineId] to the existing category [categoryId] (SPEC R32, R114). */
     fun link(r: ReceiptReview, chatelaineId: String, categoryId: String): ReceiptReview = answer(r, chatelaineId, categoryId, null)
@@ -133,7 +141,9 @@ object Receipts {
         if (s?.folder == null) return ReceiptProblem.NOT_RECEIPT_PROFILE
         if (r.file.receiptId in s.recordedReceiptIds) return ReceiptProblem.ALREADY_RECORDED
         if (!r.file.currency.equals(d.settings.currency, ignoreCase = true)) return ReceiptProblem.OTHER_CURRENCY
-        if (notes(d, r).any { it is ReviewNote.Unlinked }) return ReceiptProblem.UNLINKED
+        // an unlinked category blocks only while a line of it is in no category (SPEC R32, owner answer B of 2026-11-25)
+        val unlinked = notes(d, r).filterIsInstance<ReviewNote.Unlinked>().mapTo(HashSet()) { it.chatelaineId }
+        if (r.file.lines.indices.any { r.file.lines[it].categoryId in unlinked && r.lineCategories[it] == null }) return ReceiptProblem.UNLINKED
         val base = withAdded(d, r)
         if (r.lineCategories.any { c -> c == null || base.categories.none { it.id == c } }) return ReceiptProblem.CATEGORY_MISSING
         if (!Payments.canSave(base, draft(r))) return ReceiptProblem.CANNOT_SAVE
@@ -145,8 +155,12 @@ object Receipts {
     /** The warning the payment would carry, as for any payment: a Goal short of the total, a card whose charges are not logged (SPEC R54, R109). */
     fun notice(d: ProfileData, r: ReceiptReview): PaymentNotice? = Payments.draftNotice(withAdded(d, r), draft(r))
 
-    /** Whether closing the review loses something the user did: a link or an added category (SPEC R33, R114). */
-    fun hasChanges(r: ReceiptReview): Boolean = r.newLinks.isNotEmpty() || r.addedCategories.isNotEmpty()
+    /**
+     * Whether closing the review loses something the user did: a line moved, the source changed, a
+     * link made or a category added (SPEC R33, R114, owner answer A of 2026-11-25).
+     */
+    fun hasChanges(r: ReceiptReview): Boolean =
+        r.moved.isNotEmpty() || r.source != r.openedSource || r.newLinks.isNotEmpty() || r.addedCategories.isNotEmpty()
 
     /**
      * Records the review as payment [id] through Payments.record (SPEC R115), with the receipt's id
@@ -182,16 +196,14 @@ object Receipts {
     }
 
     /**
-     * An answer for [chatelaineId] (SPEC R114): its lines with no category, or with the one an
-     * earlier answer gave, go to [target]; a category an earlier answer added is dropped once no
-     * line and no link holds it.
+     * An answer for [chatelaineId] (SPEC R114): every line of it the user has not moved by hand goes
+     * to [target], whatever category it opened in or an earlier answer gave; a category an earlier
+     * answer added is dropped once no line and no link holds it.
      */
     private fun answer(r: ReceiptReview, chatelaineId: String, target: String, added: Category?): ReceiptReview {
         require(r.file.lines.any { it.categoryId == chatelaineId }) { "no line of that Chatelaine category" }
-        val earlier = r.newLinks[chatelaineId]
         val cats = r.file.lines.mapIndexed { i, l ->
-            val c = r.lineCategories[i]
-            if (l.categoryId == chatelaineId && (c == null || c == earlier)) target else c
+            if (l.categoryId == chatelaineId && i !in r.moved) target else r.lineCategories[i]
         }
         val links = r.newLinks + (chatelaineId to target)
         val addedCats = (r.addedCategories.filter { it.id != added?.id } + listOfNotNull(added))
