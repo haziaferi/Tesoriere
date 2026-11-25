@@ -150,3 +150,6 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R99 · changed · a card's payment's sweeps are in no slice · owner
 - 2026-11-25 · R101 · changed · a card's payment's sweeps are no expense · owner
 - 2026-11-25 · R107 · changed · a statement payoff pairs Savings by R89's default, off for an Account linked to a recurring expense · builder
+- 2026-11-25 · R70 · changed · each past month is processed with the due dates moved on to its 1st, so a share sweeps at the rate in force that month · builder
+- 2026-11-25 · R73 · changed · a Loan its payments take to 0 gives its expense the loanPaidOff notice · builder
+- 2026-11-25 · R74 · changed · a notice kept with an empty name reads with no name · builder
