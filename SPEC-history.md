@@ -312,3 +312,4 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-26 · R107 · changed · a row recorded since the review was built is not recorded or counted again by its Confirm · owner
 - 2026-11-26 · R118 · changed · a row paired by hand names its payment from then on, its twins left as they are · builder
 - 2026-11-26 · R26 · changed · rows recorded with a key: as kept by the import or as held by payments, whichever are more · owner
+- 2026-11-26 · R35 · changed · a store's kept source that does not exist counts as none for the pair's source, as R119 says · owner

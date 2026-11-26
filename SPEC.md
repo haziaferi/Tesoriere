@@ -1800,7 +1800,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R35 · A receipt's source
 
-**Rule:** A receipt's source is Savings unless the user changes it in the review, and the source last confirmed for a store is pre-filled on that store's next receipt. Pairing with a bank row keeps the receipt's source, except that a receipt paired with a bank row recorded first, from a store with no source kept and its source left as the review opened it, takes the bank payment's own source.
+**Rule:** A receipt's source is Savings unless the user changes it in the review, and the source last confirmed for a store is pre-filled on that store's next receipt. Pairing with a bank row keeps the receipt's source, except that a receipt paired with a bank row recorded first, from a store with no source kept, or one that does not exist, and its source left as the review opened it, takes the bank payment's own source.
 
 **Why:** The receipt file does not say how it was paid (Chatelaine's spec, rule 123), and a store is usually paid the same way.
 
