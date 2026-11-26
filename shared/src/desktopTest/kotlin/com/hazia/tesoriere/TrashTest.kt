@@ -1070,4 +1070,27 @@ class TrashTest {
             assertEquals(keys, paired.payments.single { it.id == "pay-r" }.bankKeys, "payoff $asPayoff")
         }
     }
+
+    // SPEC:R127 SPEC:R26 SPEC:R128
+    @Test fun `R127 a paired 4_50 coffee deleted, its row ticked as DUPLICATE, restored as that pair keeps the row once`() {
+        clock.setDay(mar10)
+        val row = coffeeRow.copy(fitid = null)
+        val d0 = recordReceipt(foodWorld(), coffee())
+        val first = StatementImport.review(d0, listOf(row), mar10)
+        val d1 = Pairing.pairBankWithPayment(d0, "pay-r", first.single(), null, clock, "tx-pair", first).data
+        val (after, p) = assertNotNull(Trash.deletePayment(d1, "pay-r", clock, ids))
+        val dup = StatementImport.review(after, listOf(row), mar10).single()
+        assertEquals(RowStatus.DUPLICATE, dup.status)
+        val d2 = StatementImport.confirm(after, listOf(dup.copy(include = true, draft = PaymentDraft(row.date, cents("4.50"), PaymentSource.Savings, dup.payee, listOf(Part("food", cents("4.50")))))), clock, ids)
+        val bankId = d2.payments.single().id
+        val paired = Trash.restore(d2, p, clock, ids, pairWith = bankId)
+        assertEquals(1, paired.payments.size)
+        assertEquals(cents("995.50"), paired.savingsAmount)
+        assertEquals(d1.importState.importedKeys, paired.importState.importedKeys, "the one row kept once")
+        // a second coffee of that day is a row of its own
+        assertEquals(1, StatementImport.review(paired, listOf(row, row), mar10).count { it.status == RowStatus.DUPLICATE })
+        // and unpaired, the row arrives as new (R128)
+        val un = Pairing.unpair(paired, bankId, clock, "tx-un", emptyList())
+        assertTrue(StatementImport.review(un, listOf(row), mar10).single().status != RowStatus.DUPLICATE)
+    }
 }

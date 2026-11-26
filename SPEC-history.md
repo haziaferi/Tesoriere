@@ -314,3 +314,4 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-26 · R26 · changed · rows recorded with a key: as kept by the import or as held by payments, whichever are more · owner
 - 2026-11-26 · R35 · changed · a store's kept source that does not exist counts as none for the pair's source, as R119 says · owner
 - 2026-11-26 · R128 · changed · a line whose category does not exist takes one given in its place, else CATEGORY_MISSING · owner
+- 2026-11-26 · R127 · changed · a receipt side holding bank keys restored as a pair leaves its one row kept once · builder

@@ -489,7 +489,9 @@ object Trash {
      * its lines in the categories they were filed under, a category gone taking [replacement], and
      * the links kept; a bank row's payment completes a receipt payment through
      * Pairing.pairBankWithPayment, with its keys and its amount. The recorded receipt ids and the
-     * import's keys stay as they were, the payment's among them.
+     * import's keys stay as they were, the payment's among them; a receipt side holding bank keys,
+     * whose row the payment it completes was recorded from too, takes its own kept row out, so the
+     * one row is kept once (SPEC R26, R127).
      */
     private fun restoreAsPair(
         d: ProfileData, p: TrashPayload, pay: Payment, pairWith: String, differenceCategoryId: String?, replacement: String?, clock: Clock, txId: String,
@@ -497,7 +499,11 @@ object Trash {
         Side.RECEIPT -> {
             val (review, parts) = requireNotNull(receiptSideOf(d, pay, replacement))
             val paired = Pairing.pairReceiptWithPayment(unrecorded(d, pay), pairWith, review, differenceFor(d, pay, differenceCategoryId), clock, txId, parts)
-            paired.copy(receiptSettings = paired.receiptSettings?.copy(recordedReceiptIds = d.receiptSettings!!.recordedReceiptIds))
+            val keys = pay.bankKeys?.let { StatementImport.withoutRow(d.importState.importedKeys, d.payments, it) } ?: d.importState.importedKeys
+            paired.copy(
+                receiptSettings = paired.receiptSettings?.copy(recordedReceiptIds = d.receiptSettings!!.recordedReceiptIds),
+                importState = paired.importState.copy(importedKeys = keys),
+            )
         }
         Side.BANK -> {
             val paired = Pairing.pairBankWithPayment(unimported(d, pay), pairWith, reviewRow(pay), differenceCategoryId, clock, txId, twinRows(d, p, pay)).data
