@@ -1972,7 +1972,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R119 · Recording a pair
 
-**Rule:** Pairing a receipt and a bank row, suggested or by hand (R40) and from either side, edits the payment the first one recorded, through the payment path (R54), into the one payment below. A difference other than zero (R39) must be filed under a category that exists before the pair can be recorded. A payment that already holds a receipt and bank keys, a refund, a row of money in and a row recorded already cannot be paired, a row being recorded already when its FITID key is among the import's keys or a payment holds its FITID, rows and payments that both have a FITID being compared by it alone; else when the payments holding its synthetic key, or with none the import's keys holding it, outnumber the other rows of its import review that hold that key and did not arrive `DUPLICATE`.
+**Rule:** Pairing a receipt and a bank row, suggested or by hand (R40) and from either side, edits the payment the first one recorded, through the payment path (R54), into the one payment below. A difference other than zero (R39) must be filed under a category that exists before the pair can be recorded. A payment that already holds a receipt and bank keys, a refund, a row of money in and a row recorded already cannot be paired, a row being recorded already as R26 counts, among the rows of its import review that did not arrive `DUPLICATE`.
 
 **Values:**
 
