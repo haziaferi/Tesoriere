@@ -310,3 +310,4 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-26 · R119 · changed · a row is recorded already as R26 counts · owner
 - 2026-11-26 · R127 · changed · a bank side with a FITID is told apart by it from the rows recorded with none · builder
 - 2026-11-26 · R107 · changed · a row recorded since the review was built is not recorded or counted again by its Confirm · owner
+- 2026-11-26 · R118 · changed · a row paired by hand names its payment from then on, its twins left as they are · builder

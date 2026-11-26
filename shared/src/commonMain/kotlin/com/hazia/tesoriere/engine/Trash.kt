@@ -500,7 +500,7 @@ object Trash {
             paired.copy(receiptSettings = paired.receiptSettings?.copy(recordedReceiptIds = d.receiptSettings!!.recordedReceiptIds))
         }
         Side.BANK -> {
-            val paired = Pairing.pairBankWithPayment(unimported(d, pay), pairWith, reviewRow(pay), differenceCategoryId, clock, txId, twinRows(d, p, pay))
+            val paired = Pairing.pairBankWithPayment(unimported(d, pay), pairWith, reviewRow(pay), differenceCategoryId, clock, txId, twinRows(d, p, pay)).data
             paired.copy(importState = paired.importState.copy(importedKeys = d.importState.importedKeys))
         }
         null -> error("not a side of a pair (SPEC R127)")

@@ -58,6 +58,12 @@ enum class PairProblem {
     CANNOT_SAVE,
 }
 
+/**
+ * A bank row paired with a receipt's payment (SPEC R119): the data after the pair, and the import
+ * review to confirm from now on, the paired row naming the payment (ReviewRow.pairPaymentId).
+ */
+data class BankPairing(val data: ProfileData, val review: List<ReviewRow>)
+
 /** Why a payment cannot be unpaired, as a code (SPEC R128). */
 enum class UnpairProblem {
     /** The payment does not exist, or does not hold both a receipt and bank keys. */
@@ -257,17 +263,22 @@ object Pairing {
      * R119): Payments.edit gives it the bank amount as its total and the difference part, keeping
      * its day and source; it gains the row's keys, which the import keeps too (SPEC R26), and the
      * store's link the first time the store pairs (SPEC R120). [txId] is the ledger row a deleted
-     * source's edit may write (SPEC R54); [review] is as for [bankPairProblem]. While
-     * [bankPairProblem] finds a problem, [d] comes back unchanged.
+     * source's edit may write (SPEC R54); [review] is as for [bankPairProblem]. The result holds
+     * the data and the review to confirm from now on, [row] in it naming [paymentId] as its pair,
+     * so its Confirm leaves that row, and not a twin of it, to the pair (SPEC R107, R119). While
+     * [bankPairProblem] finds a problem, both come back unchanged.
      */
     fun pairBankWithPayment(
         d: ProfileData, paymentId: String, row: ReviewRow, differenceCategoryId: String?, clock: Clock, txId: String,
         review: List<ReviewRow>,
-    ): ProfileData {
-        if (bankPairProblem(d, paymentId, row, differenceCategoryId, review) != null) return d
+    ): BankPairing {
+        if (bankPairProblem(d, paymentId, row, differenceCategoryId, review) != null) return BankPairing(d, review)
         val store = d.payments.first { it.id == paymentId }.payee
         val edited = Payments.edit(d, paymentId, bankPairDraft(d, paymentId, row, differenceCategoryId)!!, clock, txId, pairing = true)
-        return linkStore(withKeys(edited, paymentId, row), store, row.row.description)
+        // the row itself in the review, else the first equal to it: it names the payment from now on
+        val at = review.indexOfFirst { it === row }.takeIf { it >= 0 } ?: review.indexOf(row)
+        val named = review.mapIndexed { i, r -> if (i == at) r.copy(pairPaymentId = paymentId) else r }
+        return BankPairing(linkStore(withKeys(edited, paymentId, row), store, row.row.description), named)
     }
 
     // --- bank row first, then its receipt (SPEC R38 row 2) ---

@@ -112,7 +112,7 @@ class PairingTest {
         assertEquals(d1.savings, imported.savings)
 
         assertTrue(Pairing.canConfirmPair(Pairing.differencePart(cents("42.30"), cents("42.30")), null))
-        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", rr, null, clock, "tx-1", emptyList())
+        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", rr, null, clock, "tx-1", emptyList()).data
         val p = d2.payments.single()
         assertEquals(cents("42.30"), p.total)
         assertEquals(day, p.date)
@@ -166,9 +166,9 @@ class PairingTest {
         assertEquals(cents("0.20"), diff)
         assertFalse(Pairing.canConfirmPair(diff, null))
         assertEquals(PairProblem.DIFFERENCE_UNFILED, Pairing.bankPairProblem(d1, "pay-r", rr, null, emptyList()))
-        assertEquals(d1, Pairing.pairBankWithPayment(d1, "pay-r", rr, null, clock, "tx-1", emptyList()), "refused, it changes nothing, never a throw")
+        assertEquals(d1, Pairing.pairBankWithPayment(d1, "pay-r", rr, null, clock, "tx-1", emptyList()).data, "refused, it changes nothing, never a throw")
         assertTrue(Pairing.canConfirmPair(diff, "fun"))
-        val p = Pairing.pairBankWithPayment(d1, "pay-r", rr, "fun", clock, "tx-1", emptyList()).payments.single()
+        val p = Pairing.pairBankWithPayment(d1, "pay-r", rr, "fun", clock, "tx-1", emptyList()).data.payments.single()
         assertEquals(cents("42.30"), p.total)
         assertEquals(listOf(Part("groc", cents("30.00")), Part("home", cents("12.10")), Part("fun", cents("0.20"), difference = true)), p.parts)
     }
@@ -178,7 +178,7 @@ class PairingTest {
         val d1 = recordReceipt(world(), shop())
         val rr = reviewOf(d1, row("42.10", on(11))).single()
         assertEquals(cents("-0.20"), Pairing.differencePart(cents("42.30"), cents("42.10")))
-        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", rr, "fun", clock, "tx-1", emptyList())
+        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", rr, "fun", clock, "tx-1", emptyList()).data
         val p = d2.payments.single()
         assertEquals(cents("42.10"), p.total)
         assertEquals(Part("fun", cents("-0.20"), difference = true), p.parts.last())
@@ -196,7 +196,7 @@ class PairingTest {
         val rr = reviewOf(d1, bank).single()
         assertEquals(RowStatus.READY, rr.status)
         assertNull(rr.pairPaymentId)
-        val p = Pairing.pairBankWithPayment(d1, "pay-r", rr, "home", clock, "tx-1", emptyList()).payments.single()
+        val p = Pairing.pairBankWithPayment(d1, "pay-r", rr, "home", clock, "tx-1", emptyList()).data.payments.single()
         assertEquals(cents("41.20"), p.total)
         assertEquals(Part("home", cents("1.20"), difference = true), p.parts.last())
     }
@@ -220,7 +220,7 @@ class PairingTest {
     @Test fun `R36 after pairing Esselunga with POS ESSELUNGA MI 0423, the next Esselunga receipt is suggested first with rows matching that payee and then with the others`() {
         val d0 = recordReceipt(world(), shop())
         val first = row("42.30", on(11), "POS ESSELUNGA MI 0423")
-        val d1 = Pairing.pairBankWithPayment(d0, "pay-r", reviewOf(d0, first).single(), null, clock, "tx-1", emptyList())
+        val d1 = Pairing.pairBankWithPayment(d0, "pay-r", reviewOf(d0, first).single(), null, clock, "tx-1", emptyList()).data
         assertEquals("esselunga mi", d1.receiptSettings!!.storeLinks[store])
 
         val next = on(20)
@@ -239,13 +239,13 @@ class PairingTest {
     // SPEC:R120 SPEC:R40
     @Test fun `R120 a later pair by hand with ESSELUNGA SPA keeps the link esselunga mi`() {
         val d0 = recordReceipt(world(), shop())
-        val d1 = Pairing.pairBankWithPayment(d0, "pay-r", reviewOf(d0, row("42.30", on(11))).single(), null, clock, "tx-1", emptyList())
+        val d1 = Pairing.pairBankWithPayment(d0, "pay-r", reviewOf(d0, row("42.30", on(11))).single(), null, clock, "tx-1", emptyList()).data
         val d2 = recordReceipt(d1, shop("rc-2", on(20)), id = "pay-r2")
         val other = reviewOf(d2, row("42.30", on(21), "ESSELUNGA SPA", "FIT-X")).single()
         // not matching the link, it is still named, there being no better row (R36, R120)
         assertEquals(RowStatus.PAIR, other.status)
         assertEquals("pay-r2", other.pairPaymentId)
-        val d3 = Pairing.pairBankWithPayment(d2, "pay-r2", other, null, clock, "tx-2", emptyList())
+        val d3 = Pairing.pairBankWithPayment(d2, "pay-r2", other, null, clock, "tx-2", emptyList()).data
         assertEquals("esselunga mi", d3.receiptSettings!!.storeLinks[store])
     }
 
@@ -280,7 +280,7 @@ class PairingTest {
         assertEquals(RowStatus.READY, reviewOf(d1, row("42.30", on(14))).single().status)
         assertEquals(RowStatus.INCOMING, reviewOf(d1, BankRow(on(11), cents("42.30"), "POS ESSELUNGA MI 0423", "F-IN")).single().status)
 
-        val paired = Pairing.pairBankWithPayment(d1, "pay-r", two[1], null, clock, "tx-1", emptyList())
+        val paired = Pairing.pairBankWithPayment(d1, "pay-r", two[1], null, clock, "tx-1", emptyList()).data
         assertEquals(RowStatus.READY, reviewOf(paired, row("42.30", on(12), fitid = "F-12b", description = "POS ESSELUNGA MI 0424")).single().status)
         assertEquals(PairProblem.PAYMENT_NOT_PAIRABLE, Pairing.bankPairProblem(paired, "pay-r", two[0], null, emptyList()))
     }
@@ -300,7 +300,7 @@ class PairingTest {
         assertEquals(0L, d1.goals.single().saved)
         val rr = reviewOf(d1, row("42.30", on(11))).single()
         assertEquals(PaymentNotice.GOAL_SHORT, Pairing.bankPairNotice(d1, "pay-r", rr, "fun"))
-        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", rr, "fun", clock, "tx-1", emptyList())
+        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", rr, "fun", clock, "tx-1", emptyList()).data
         assertEquals(0L, d2.goals.single().saved)
         assertEquals(cents("999.80"), d2.savings.amount)
         assertEquals(cents("0.20"), d2.payments.single().fromSavings)
@@ -347,7 +347,7 @@ class PairingTest {
         val review = reviewOf(d1, bank).map { it.copy(draft = StatementImport.draft(it.row, listOf(Part("groc", cents("42.30"))))) }
         assertEquals(RowStatus.READY, review.single().status)
         assertTrue(review.single().include)
-        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", review.single(), null, clock, "tx-1", emptyList())
+        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", review.single(), null, clock, "tx-1", emptyList()).data
         assertTrue(StatementImport.canConfirm(d2, review))
         assertEquals(0, StatementImport.confirmSummary(d2, review).count)
         val d3 = StatementImport.confirm(d2, review, clock) { "imp-1" }
@@ -398,7 +398,7 @@ class PairingTest {
         val d1 = recordReceipt(world(), shop(date = on(30)))
         val rr = reviewOf(d1, row("42.30", LocalDate(2026, 4, 2))).single()
         assertEquals("pay-r", rr.pairPaymentId)
-        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", rr, null, clock, "tx-1", emptyList())
+        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", rr, null, clock, "tx-1", emptyList()).data
         assertEquals(on(30), d2.payments.single().date)
         assertEquals(cents("30.00"), Spent.of(d2, "groc", "2026-03"))
         assertEquals(0L, Spent.of(d2, "groc", "2026-04"))
@@ -420,7 +420,7 @@ class PairingTest {
         val d1 = recordReceipt(world(), shop(home = "12.10"), PaymentSource.Goal("trip"))
         val gone = d1.copy(goals = emptyList())
         val rr = reviewOf(gone, row("42.30", on(11))).single()
-        val d2 = Pairing.pairBankWithPayment(gone, "pay-r", rr, "fun", clock, "tx-1", emptyList())
+        val d2 = Pairing.pairBankWithPayment(gone, "pay-r", rr, "fun", clock, "tx-1", emptyList()).data
         assertEquals(cents("999.80"), d2.savings.amount)
         val t = d2.transactions.single()
         assertEquals(cents("-0.20"), t.amount)
@@ -446,7 +446,7 @@ class PairingTest {
         val d1 = recordReceipt(world(), shop(), PaymentSource.Account("card"))
         val gone = d1.copy(accounts = emptyList())
         val rr = reviewOf(gone, row("42.50", on(11))).single()
-        val d2 = Pairing.pairBankWithPayment(gone, "pay-r", rr, "fun", clock, "tx-1", emptyList())
+        val d2 = Pairing.pairBankWithPayment(gone, "pay-r", rr, "fun", clock, "tx-1", emptyList()).data
         assertEquals(cents("1,000.00"), d2.savings.amount)
         val t = d2.transactions.single()
         assertEquals("acct:card", t.key)
@@ -520,7 +520,7 @@ class PairingTest {
         val other = review.single { it.status != RowStatus.PAIR }
         assertTrue(other.include)
         val filed = other.copy(draft = PaymentDraft(coffee.date, cents("4.50"), PaymentSource.Savings, other.payee, listOf(Part("food", cents("4.50")))))
-        val paired = Pairing.pairBankWithPayment(d1, "pay-r", pairRow, null, clock, "tx-1", emptyList())
+        val paired = Pairing.pairBankWithPayment(d1, "pay-r", pairRow, null, clock, "tx-1", emptyList()).data
         val rows = listOf(pairRow, filed)
         assertEquals(1, StatementImport.confirmSummary(paired, rows).count)
         var n = 0
@@ -548,10 +548,10 @@ class PairingTest {
         assertTrue(review.all { it.status == RowStatus.PAIR })
         val r1 = review.single { it.pairPaymentId == "pay-a" }
         val r2 = review.single { it.pairPaymentId == "pay-b" }
-        val d1 = Pairing.pairBankWithPayment(d, "pay-a", r1, null, clock, "tx-1", review)
+        val d1 = Pairing.pairBankWithPayment(d, "pay-a", r1, null, clock, "tx-1", review).data
         assertNull(Pairing.bankPairProblem(d1, "pay-b", r2, null, review), "the payment holding the shared key stands for one row only")
         assertEquals(PairProblem.ROW_RECORDED, Pairing.bankPairProblem(d1, "pay-b", r2, null, emptyList()), "without the review, the key held is the row")
-        val d2 = Pairing.pairBankWithPayment(d1, "pay-b", r2, null, clock, "tx-2", review)
+        val d2 = Pairing.pairBankWithPayment(d1, "pay-b", r2, null, clock, "tx-2", review).data
         assertTrue(StatementImport.rowRecorded(d2, r2, review), "both rows are recorded now")
         assertTrue(StatementImport.rowRecorded(d2, r1, review))
         val after = StatementImport.confirm(d2, review, clock) { "imp" }
@@ -570,10 +570,10 @@ class PairingTest {
         val review = reviewOf(d, c1, c2)
         val r1 = review.single { it.pairPaymentId == "pay-a" }
         val r2 = review.single { it.pairPaymentId == "pay-b" }
-        val d1 = Pairing.pairBankWithPayment(d, "pay-a", r1, null, clock, "tx-1", emptyList())
+        val d1 = Pairing.pairBankWithPayment(d, "pay-a", r1, null, clock, "tx-1", emptyList()).data
         assertNull(Pairing.bankPairProblem(d1, "pay-b", r2, null, emptyList()), "F2 is not recorded, though F1's payment holds the same synthetic key")
         assertEquals(PairProblem.ROW_RECORDED, Pairing.bankPairProblem(d1, "pay-b", r1, null, review), "F1 is")
-        val d2 = Pairing.pairBankWithPayment(d1, "pay-b", r2, null, clock, "tx-2", emptyList())
+        val d2 = Pairing.pairBankWithPayment(d1, "pay-b", r2, null, clock, "tx-2", emptyList()).data
         val after = StatementImport.confirm(d2, review, clock) { "imp" }
         assertEquals(listOf("F1", "F2"), after.payments.map { it.bankKeys?.fitid })
         assertEquals(cents("991.00"), after.savingsAmount)
@@ -588,8 +588,8 @@ class PairingTest {
         }, clock) { "pay-o" }
         val again = reviewOf(d1, row("42.30", on(11), fitid = "F-O")).single()
         assertEquals(PairProblem.ROW_RECORDED, Pairing.bankPairProblem(recorded, "pay-r", again, null, emptyList()))
-        assertEquals(recorded, Pairing.pairBankWithPayment(recorded, "pay-r", again, null, clock, "tx-1", emptyList()))
-        assertEquals(recorded, Pairing.pairBankWithPayment(recorded, "nope", again, null, clock, "tx-1", emptyList()))
+        assertEquals(recorded, Pairing.pairBankWithPayment(recorded, "pay-r", again, null, clock, "tx-1", emptyList()).data)
+        assertEquals(recorded, Pairing.pairBankWithPayment(recorded, "nope", again, null, clock, "tx-1", emptyList()).data)
         // the receipt side: a receipt whose payment holds no bank keys is no bank payment to complete
         assertEquals(PairProblem.PAYMENT_NOT_PAIRABLE, Pairing.receiptPairProblem(d1, "pay-r", Receipts.open(d1, shop("rc-2")), null))
         assertEquals(d1, Pairing.pairReceiptWithPayment(d1, "pay-r", Receipts.open(d1, shop("rc-2")), null, clock, "tx-2"))
@@ -649,7 +649,7 @@ class PairingTest {
         val pairRow = review.single { it.pairPaymentId == "pay-r" }
         val other = review.single { it.pairPaymentId == null }
         val filed = other.copy(include = true, draft = StatementImport.draft(other.row, listOf(Part("groc", cents("42.30")))))
-        val paired = Pairing.pairBankWithPayment(d1, "pay-r", pairRow, null, clock, "tx-1", review)
+        val paired = Pairing.pairBankWithPayment(d1, "pay-r", pairRow, null, clock, "tx-1", review).data
         val d2 = StatementImport.confirm(paired, listOf(pairRow, filed), clock) { "imp-1" }
         assertEquals(2, d2.payments.size)
         val un = Pairing.unpair(d2, "pay-r", clock, "tx-2", emptyList())
@@ -671,10 +671,27 @@ class PairingTest {
         val f2 = review.single { it.row.fitid == "F2" }
         assertEquals(RowStatus.PAIR to "pay-b", f2.status to f2.pairPaymentId)
         assertNull(Pairing.bankPairProblem(d2, "pay-b", f2, null, review), "F2 is a row of its own: F1 stands for the CSV coffee")
-        val d3 = Pairing.pairBankWithPayment(d2, "pay-b", f2, null, clock, "tx-1", review)
+        val d3 = Pairing.pairBankWithPayment(d2, "pay-b", f2, null, clock, "tx-1", review).data
         assertEquals("F2", d3.payments.single { it.id == "pay-b" }.bankKeys?.fitid)
         assertEquals(cents("9.00"), Spent.of(d3, "groc", "2026-03"))
         assertEquals(listOf(RowStatus.DUPLICATE, RowStatus.DUPLICATE), reviewOf(d3, *ofx.toTypedArray()).map { it.status })
+    }
+
+    // SPEC:R119 SPEC:R40 SPEC:R107
+    @Test fun `R119 of two equal coffees, the suggestion turned down, the first unticked and the second paired by hand, records one coffee`() {
+        val base = world().let { it.copy(categories = it.categories + category("food", "Food")) }
+        val d = recordReceipt(base, receipt("rc-a", "Bar Centrale", day, line("caffe", "4.50", "ch-food", "Food")), id = "pay-a")
+        val coffee = BankRow(on(11), -cents("4.50"), "BAR CENTRALE", null)
+        val rows = reviewOf(d, coffee, coffee).mapIndexed { i, r ->
+            if (i == 0) r.copy(include = false, pairPaymentId = null, draft = null) else r.copy(pairPaymentId = null)
+        }
+        val (paired, review) = Pairing.pairBankWithPayment(d, "pay-a", rows[1], null, clock, "tx-1", rows)
+        assertEquals(listOf(null, "pay-a"), review.map { it.pairPaymentId }, "the review says which twin was paired")
+        val ticked = review.mapIndexed { i, r -> if (i == 1) r.copy(include = true, draft = StatementImport.draft(r.row, listOf(Part("food", cents("4.50"))))) else r }
+        assertEquals(0, StatementImport.confirmSummary(paired, ticked).count)
+        val out = StatementImport.confirm(paired, ticked, clock) { "imp-1" }
+        assertEquals(1, out.payments.size)
+        assertEquals(cents("4.50"), Spent.of(out, "food", "2026-03"))
     }
 
     // --- R128: unpairing ---
@@ -683,7 +700,7 @@ class PairingTest {
     private fun pairedWithDifference(): Pair<ProfileData, BankRow> {
         val d1 = recordReceipt(world(), shop(home = "12.10"))
         val bank = row("42.30", on(12))
-        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", reviewOf(d1, bank).single(), "fun", clock, "tx-1", emptyList())
+        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", reviewOf(d1, bank).single(), "fun", clock, "tx-1", emptyList()).data
         assertEquals(cents("957.70"), d2.savingsAmount)
         return d2 to bank
     }
@@ -740,7 +757,7 @@ class PairingTest {
     // SPEC:R128 SPEC:R54
     @Test fun `R128 a pair from a Goal holding 0_00, unpaired, returns the 0_20 Savings paid and leaves the Goal at 0_00`() {
         val d1 = recordReceipt(world(), shop(home = "12.10"), PaymentSource.Goal("trip"))
-        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", reviewOf(d1, row("42.30", on(11))).single(), "fun", clock, "tx-1", emptyList())
+        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", reviewOf(d1, row("42.30", on(11))).single(), "fun", clock, "tx-1", emptyList()).data
         assertEquals(cents("999.80"), d2.savingsAmount)
         val un = Pairing.unpair(d2, "pay-r", clock, "tx-2", emptyList())
         assertEquals(cents("1,000.00"), un.savingsAmount)

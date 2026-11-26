@@ -306,7 +306,7 @@ class TrashTest {
         val row = BankRow(LocalDate(2026, 3, 12), -cents("42.30"), "POS MERCATO LUME 0423", "FIT-12")
         val rr = StatementImport.review(d1, listOf(row), mar10).single()
         assertEquals(RowStatus.PAIR, rr.status)
-        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", rr, null, clock, "tx-pair", emptyList())
+        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", rr, null, clock, "tx-pair", emptyList()).data
         val paired = d2.payments.single()
         assertNotNull(paired.bankKeys)
         val (after, p) = assertNotNull(Trash.deletePayment(d2, "pay-r", clock, ids))
@@ -857,7 +857,7 @@ class TrashTest {
         clock.setDay(mar10)
         val d1 = recordReceipt(receiptWorld(), shop())
         val row = BankRow(LocalDate(2026, 3, 12), -cents("42.30"), "POS MERCATO LUME 0423", "FIT-12")
-        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", StatementImport.review(d1, listOf(row), mar10).single(), null, clock, "tx-pair", emptyList())
+        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", StatementImport.review(d1, listOf(row), mar10).single(), null, clock, "tx-pair", emptyList()).data
         val (after, p) = assertNotNull(Trash.deletePayment(d2, "pay-r", clock, ids))
         assertEquals(RowStatus.DUPLICATE, StatementImport.review(after, listOf(row), mar10).single().status)
         val (d3, newId) = recordRow(after, row, "groc")
@@ -966,7 +966,7 @@ class TrashTest {
         clock.setDay(mar10)
         val d1 = recordReceipt(receiptWorld(), shop())
         val row = BankRow(LocalDate(2026, 3, 12), -cents("42.50"), "POS MERCATO LUME 0423", "FIT-12")
-        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", StatementImport.review(d1, listOf(row), mar10).single(), "fun", clock, "tx-pair", emptyList())
+        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", StatementImport.review(d1, listOf(row), mar10).single(), "fun", clock, "tx-pair", emptyList()).data
         val (after, p) = assertNotNull(Trash.deletePayment(d2, "pay-r", clock, ids))
         val (d3, newId) = recordRow(after, row, "groc")
         assertNull(Trash.restoreProblem(d3, p, pairWith = newId), "the old difference part's category is taken")
@@ -985,7 +985,7 @@ class TrashTest {
         clock.setDay(mar10)
         val d1 = recordReceipt(receiptWorld(), shop())
         val row = BankRow(LocalDate(2026, 3, 12), -cents("42.30"), "POS MERCATO LUME 0423", "FIT-12")
-        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", StatementImport.review(d1, listOf(row), mar10).single(), null, clock, "tx-pair", emptyList())
+        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", StatementImport.review(d1, listOf(row), mar10).single(), null, clock, "tx-pair", emptyList()).data
         val un = Pairing.unpair(d2, "pay-r", clock, "tx-un", emptyList())
         assertEquals(d1.payments, un.payments)
         val (after, p) = assertNotNull(Trash.deletePayment(un, "pay-r", clock, ids))
