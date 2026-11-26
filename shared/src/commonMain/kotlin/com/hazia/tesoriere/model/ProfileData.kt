@@ -1,6 +1,7 @@
 package com.hazia.tesoriere.model
 
 import com.hazia.tesoriere.payments.Payment
+import com.hazia.tesoriere.receipts.ReceiptSettings
 import kotlinx.datetime.LocalDate
 
 /*
@@ -26,6 +27,8 @@ data class ProfileData(
     val shifts: List<Shift> = emptyList(),
     /** Every expense (SPEC R21). */
     val payments: List<Payment> = emptyList(),
+    /** The receipt settings, held only by the receipt Profile (SPEC R112); null in every other. */
+    val receiptSettings: ReceiptSettings? = null,
 ) {
     val profileId: String get() = profile.id
 

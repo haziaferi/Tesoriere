@@ -10,8 +10,10 @@ import com.hazia.tesoriere.engine.plusDays
 import com.hazia.tesoriere.model.Money
 import com.hazia.tesoriere.model.ProfileData
 import com.hazia.tesoriere.model.StoredLabels
+import com.hazia.tesoriere.pairing.Pairing
 import com.hazia.tesoriere.payments.BankKeys
 import com.hazia.tesoriere.payments.Part
+import com.hazia.tesoriere.payments.Payment
 import com.hazia.tesoriere.payments.PaymentDraft
 import com.hazia.tesoriere.payments.PaymentNotice
 import com.hazia.tesoriere.payments.PaymentSource
@@ -70,14 +72,17 @@ import kotlin.math.abs
  *   ruling of 2026-11-25): Sci-Fin's name match had no date.
  * - No wording: Sci-Fin's review notes are dropped (the status is the code, SPEC R16), and its
  *   target lists with their labels (`inflowTargets`, `outflowTargets`) are the design pass's.
- * - Names: ImportRow is BankRow, ImportStatus is RowStatus (with PAIR, set by pairing, SPEC R37),
+ * - Names: ImportRow is BankRow, ImportStatus is RowStatus (with PAIR, SPEC R37, R118),
  *   annotate() is review(), parseCSV/parseOFX are parseCsv/parseOfx.
+ * - A row suggested as a receipt's pair (SPEC R118) arrives PAIR, unticked, naming the payment in
+ *   [ReviewRow.pairPaymentId]; Confirm records nothing for a row that names a pair, which only
+ *   Pairing.pairBankWithPayment records (SPEC R37, R119). Sci-Fin had no receipts.
  */
 
 /** One parsed statement row. [amount] is signed: negative is money out. */
 data class BankRow(val date: LocalDate, val amount: Money, val description: String, val fitid: String?)
 
-/** What the review thinks of a row (SPEC R107). PAIR is set by pairing with a receipt (SPEC R37), never here. */
+/** What the review thinks of a row (SPEC R107). PAIR: suggested as a receipt payment's pair (SPEC R37, R118). */
 enum class RowStatus { READY, INCOMING, DUPLICATE, RECURRING, PAIR }
 
 /**
@@ -86,7 +91,9 @@ enum class RowStatus { READY, INCOMING, DUPLICATE, RECURRING, PAIR }
  * SPEC R89), exactly one of them; both are null until the user files it or a payee rule
  * pre-fills a draft (SPEC R108). Money in goes to Savings, and on into the Goal [incomingGoalId]
  * when the user picks one, or, filed with a [draft] of negative total, is recorded as a refund
- * (SPEC R21, R107). [pairPaymentId] is filled by pairing (SPEC R37).
+ * (SPEC R21, R107). [pairPaymentId] names the receipt payment the row is suggested as the pair of
+ * (SPEC R118): while it is set, Confirm records nothing for the row, ticked or not; pairing records
+ * it (Pairing.pairBankWithPayment), and the user turning the suggestion down sets it to null.
  */
 data class ReviewRow(
     val row: BankRow,
@@ -109,6 +116,11 @@ data class ReviewRow(
      * spending (SPEC R89, R107); null takes the Loan's linked payment's category.
      */
     val payoffCategoryId: String? = null,
+    /**
+     * The payments holding this row's keys (StatementImport.sameRow) when the review was built:
+     * they stood for rows recorded before it, so none of them is a pair made since (SPEC R119).
+     */
+    val heldAtReview: Set<String> = emptySet(),
 )
 
 /**
@@ -328,8 +340,144 @@ object StatementImport {
         return BankKeys(r.fitid, "syn:${r.date}|${r.amount.toMajor2()}|${desc.take(40).lowercase()}")
     }
 
-    /** [k] as the strings kept in `ImportState.importedKeys`: `fit:<FITID>` when there is one, then the synthetic key. */
+    /** [k]'s two keys as strings (SPEC R26): `fit:<FITID>` when there is one, then the synthetic key. [withRow] keeps them. */
     fun keyStrings(k: BankKeys): List<String> = listOfNotNull(k.fitid?.let { "fit:$it" }, k.synKey)
+
+    /** How a row with a FITID keeps its synthetic key, right after its FITID key: `f` before it, `fsyn:…`. */
+    private const val FITID_SYN = "f"
+
+    /**
+     * Whether [a] and [b] key one bank row (SPEC R26, R119): by their FITIDs when both have one,
+     * so two equal purchases of one day with FITIDs of their own are two rows; else by the synthetic key.
+     */
+    fun sameRow(a: BankKeys, b: BankKeys): Boolean = if (a.fitid != null && b.fitid != null) a.fitid == b.fitid else a.synKey == b.synKey
+
+    /**
+     * One recorded row as `ImportState.importedKeys` keeps it (SPEC R26): each recorded row appends
+     * its FITID key, when it has one, then its synthetic key, marked `fsyn:` after a FITID key.
+     * [synKey] is the plain `syn:` key, null for a FITID key kept alone.
+     */
+    internal data class KeptRow(val fitid: String?, val synKey: String?)
+
+    /**
+     * The recorded rows [d]'s import keeps, in the order they were recorded (SPEC R26). A FITID key
+     * is followed by its own `fsyn:` key. Keys kept by the deduplicating code before every row kept
+     * its own have a plain `syn:` key after a FITID key, which may be another row's: it is read as
+     * the FITID's only when a payment holding that FITID holds that synthetic key, and else as a
+     * row recorded with no FITID, the FITID key standing alone.
+     */
+    internal fun keptRows(d: ProfileData): List<KeptRow> = keptRows(d.importState.importedKeys, d.payments)
+
+    /** The recorded rows of [kept] as [keptRows] reads them, [payments] telling an old list's FITID rows. */
+    internal fun keptRows(kept: List<String>, payments: List<Payment>): List<KeptRow> = keptSpans(kept, payments).map { it.first }
+
+    /** Each recorded row of [kept] with the entries that keep it, in order: the one reading of the list (SPEC R26). */
+    private fun keptSpans(kept: List<String>, payments: List<Payment>): List<Pair<KeptRow, IntRange>> {
+        val synOf = payments.mapNotNull { it.bankKeys }.filter { it.fitid != null }.groupBy({ it.fitid!! }, { it.synKey })
+        val out = ArrayList<Pair<KeptRow, IntRange>>()
+        var i = 0
+        while (i < kept.size) {
+            val k = kept[i]
+            val next = kept.getOrNull(i + 1)
+            when {
+                k.startsWith("fit:") -> {
+                    val fitid = k.removePrefix("fit:")
+                    val syn = when {
+                        next != null && next.startsWith(FITID_SYN + "syn:") -> next.removePrefix(FITID_SYN)
+                        next != null && next.startsWith("syn:") && synOf[fitid]?.contains(next) == true -> next
+                        else -> null
+                    }
+                    val width = if (syn != null) 2 else 1
+                    out += KeptRow(fitid, syn) to (i until i + width)
+                    i += width
+                }
+                // a marked key with no FITID key before it: a row recorded with a FITID, which is not known
+                k.startsWith(FITID_SYN + "syn:") -> { out += KeptRow("", k.removePrefix(FITID_SYN)) to (i..i); i++ }
+                else -> { out += KeptRow(null, k) to (i..i); i++ }
+            }
+        }
+        return out
+    }
+
+    /** [kept] with one recorded row of keys [k] appended (SPEC R26): every recorded row is kept once, a FITID row's synthetic key marked. */
+    internal fun withRow(kept: List<String>, k: BankKeys): List<String> =
+        kept + listOfNotNull(k.fitid?.let { "fit:$it" }, if (k.fitid != null) FITID_SYN + k.synKey else k.synKey)
+
+    /**
+     * [kept] less one recorded row of keys [k], read as [keptRows] reads it with [payments] (SPEC
+     * R26, R125, R128): the last row of its FITID, with the synthetic key kept with it; with no
+     * FITID, the last row recorded with none carrying its synthetic key. Nothing when none is kept.
+     */
+    internal fun withoutRow(kept: List<String>, payments: List<Payment>, k: BankKeys): List<String> {
+        val span = keptSpans(kept, payments).lastOrNull { (row, _) ->
+            if (k.fitid != null) row.fitid == k.fitid else row.fitid == null && row.synKey == k.synKey
+        }?.second ?: return kept
+        return kept.filterIndexed { i, _ -> i !in span }
+    }
+
+    /** Whether a recorded row of FITID [fitid] is kept or held by a payment (SPEC R26). */
+    private fun recordedByFitid(d: ProfileData, kept: List<KeptRow>, fitid: String): Boolean =
+        kept.any { it.fitid == fitid } || d.payments.any { it.bankKeys?.fitid == fitid }
+
+    /**
+     * How many recorded rows carry synthetic key [syn] (SPEC R26): those the import keeps and those
+     * payments hold, whichever are more, payments' keys being kept too; with [withoutFitid], only
+     * rows recorded with no FITID, the ones a row with a FITID is compared with by that key.
+     */
+    private fun heldBySyn(d: ProfileData, kept: List<KeptRow>, syn: String, withoutFitid: Boolean): Int = maxOf(
+        kept.count { it.synKey == syn && (!withoutFitid || it.fitid == null) },
+        d.payments.count { p -> p.bankKeys?.let { it.synKey == syn && (!withoutFitid || it.fitid == null) } == true },
+    )
+
+    /**
+     * Which rows of a statement are recorded already (SPEC R26, R107), indices into [rows]: a row
+     * whose FITID was recorded; else, by synthetic key in the statement's order, as many rows as
+     * recorded rows carry it, compared with the rows recorded with no FITID for a row with one,
+     * the rows of the statement recorded by their FITID taking theirs.
+     */
+    internal fun recordedRows(d: ProfileData, rows: List<BankKeys>): Set<Int> {
+        val kept = keptRows(d)
+        val done = rows.indices.filterTo(HashSet()) { i -> rows[i].fitid?.let { recordedByFitid(d, kept, it) } == true }
+        for ((syn, group) in rows.indices.filter { it !in done }.groupBy { rows[it].synKey }) {
+            val withFit = group.filter { rows[it].fitid != null }
+            val noFit = group.filter { rows[it].fitid == null }
+            val byFit = withFit.take(heldBySyn(d, kept, syn, withoutFitid = true))
+            done += byFit
+            val taken = done.count { rows[it].synKey == syn }
+            done += noFit.take(maxOf(0, heldBySyn(d, kept, syn, withoutFitid = false) - taken))
+        }
+        return done
+    }
+
+    /** How many rows recorded with no FITID carry synthetic key [syn]: the ones a row with a FITID is compared with (SPEC R26). */
+    internal fun recordedWithoutFitid(d: ProfileData, syn: String): Int =
+        heldBySyn(d, keptRows(d), syn, withoutFitid = true)
+
+    /**
+     * Whether [row] is recorded already (SPEC R26, R119), worked out as [recordedRows] works out the
+     * review's statuses, over the rows of [review] (with [row] among them): its FITID recorded; or
+     * every row of [review] it is counted with, of its synthetic key, with a FITID or without as it
+     * is, and whose own FITID is not recorded, recorded by count. Two equal coffees of one day are
+     * two rows, and one payment taking their key stands for one of them only. A row that arrived
+     * `DUPLICATE` is recorded while the count still takes it.
+     */
+    fun rowRecorded(d: ProfileData, row: ReviewRow, review: List<ReviewRow>): Boolean {
+        val at = review.indexOfFirst { it === row }.takeIf { it >= 0 } ?: review.indexOf(row)
+        val rows = if (at >= 0) review else review + row
+        val i = if (at >= 0) at else rows.lastIndex
+        val keys = rows.map { it.keys }
+        val kept = keptRows(d)
+        val k = keys[i]
+        if (k.fitid != null && recordedByFitid(d, kept, k.fitid)) return true
+        val recorded = recordedRows(d, keys)
+        if (rows[i].status == RowStatus.DUPLICATE) return i in recorded
+        // the rows counted with it, as recordedRows groups them; recorded when no slot is left free
+        val group = rows.indices.filter { j ->
+            keys[j].synKey == k.synKey && (keys[j].fitid == null) == (k.fitid == null) &&
+                keys[j].fitid?.let { recordedByFitid(d, kept, it) } != true
+        }
+        return group.all { it in recorded }
+    }
 
     private fun Money.toMajor2(): String {
         val a = abs(this)
@@ -371,8 +519,15 @@ object StatementImport {
      */
     @Suppress("UNUSED_PARAMETER")
     fun review(d: ProfileData, rows: List<BankRow>, today: LocalDate): List<ReviewRow> {
-        val seen = d.importState.importedKeys.toHashSet()
-        for (p in d.payments) p.bankKeys?.let { seen.addAll(keyStrings(it)) }
+        val rowKeys = rows.map(::keys)
+        // twins told apart: FITIDs first, then as many rows of a synthetic key as were recorded (SPEC R26)
+        val recorded = recordedRows(d, rowKeys)
+        val holders = d.payments.filter { it.bankKeys != null }.groupBy { it.bankKeys!!.synKey }
+        val byFitid = d.payments.filter { it.bankKeys?.fitid != null }.groupBy { it.bankKeys!!.fitid!! }
+        /** The payments holding [k]'s row's keys now, before anything in this review is recorded. */
+        fun heldBy(k: BankKeys): Set<String> =
+            (holders[k.synKey].orEmpty() + k.fitid?.let { byFitid[it] }.orEmpty())
+                .filterTo(HashSet()) { StatementImport.sameRow(it.bankKeys!!, k) }.mapTo(HashSet()) { it.id }
         // a card's payment is left out of both matches: its bank row is the payoff that lowers the card (SPEC R89, R93, R107)
         val byAmount = d.recurringExpenses.filter { !Recurring.paysCard(d, it) }
         val recurring = byAmount.map { it to words(normalisePayee(it.name)) }.filter { it.second.isNotEmpty() }
@@ -402,13 +557,16 @@ object StatementImport {
             Recurring.dueDatesBetween(e, from, to).any { due -> -r.amount == e.amount || held(due) } ||
                 rows.map { it.date }.filter { it >= from && it <= to }.distinct().any { held(it) }
         }
-        return rows.map { r ->
-            val keys = keys(r)
+        // money out not recorded yet may be a receipt payment's pair (SPEC R118)
+        val pairs = Pairing.suggest(d, rows, rows.indices.filterTo(HashSet()) { i -> rows[i].amount < 0 && i !in recorded })
+        return rows.mapIndexed { i, r ->
+            val keys = rowKeys[i]
             val payee = normalisePayee(r.description)
             val pw = words(payee)
             val status = when {
-                keyStrings(keys).any { it in seen } -> RowStatus.DUPLICATE
+                i in recorded -> RowStatus.DUPLICATE
                 r.amount > 0 -> RowStatus.INCOMING
+                i in pairs -> RowStatus.PAIR
                 named(r, pw) -> RowStatus.RECURRING
                 // a bank seldom writes the expense's name: its amount within 3 days of a due date finds it too
                 billOf(r) -> RowStatus.RECURRING
@@ -425,7 +583,7 @@ object StatementImport {
                 row = r, keys = keys, payee = payee, status = status,
                 include = status == RowStatus.READY || status == RowStatus.INCOMING,
                 draft = rule?.let { draft(r, listOf(Part(it, -r.amount))) },
-                payoffAccountId = null, pairPaymentId = null,
+                payoffAccountId = null, pairPaymentId = pairs[i], heldAtReview = heldBy(keys),
             )
         }.sortedByDescending { it.row.date }
     }
@@ -487,9 +645,12 @@ object StatementImport {
         val notices = MutableList<PaymentNotice?>(rows.size) { null }
         var rules = d.importState.payeeRules
         val keys = d.importState.importedKeys.toMutableList()
+        val since = recordedSince(d, rows)
         for (i in recordOrder(rows)) {
             val rr = rows[i]
-            if (!rr.include) continue
+            // a row named as a receipt's pair is recorded by pairing, never as new spending, and a row
+            // a payment took the keys of since the review was built, paired by hand, is recorded already (SPEC R107, R118, R119)
+            if (!rr.include || rr.pairPaymentId != null || i in since) continue
             val r = rr.row
             val amt = abs(r.amount)
             val payoff = rr.payoffAccountId
@@ -541,15 +702,78 @@ object StatementImport {
             }
             if (written == null) { ok = false; continue }
             next = written
-            for (k in keyStrings(rr.keys)) if (k !in keys) keys.add(k)
+            // every recorded row kept once, so twins are counted (SPEC R26)
+            keys.addAll(withRow(emptyList(), rr.keys))
         }
         val state = next.copy(importState = next.importState.copy(importedKeys = keys, payeeRules = rules, lastImportDate = clock.today()))
         return Run(ok, notices, state)
     }
 
-    /** What the Confirm names (SPEC R107): the ticked rows' count, the money out and the money in, each positive. */
-    fun confirmSummary(rows: List<ReviewRow>): ConfirmSummary {
-        val ticked = rows.filter { it.include }
+    /**
+     * The rows of [rows] paired since the review was built (SPEC R119), indices: each payment holding
+     * a row's keys now that held none of them then ([ReviewRow.heldAtReview]) took them since, and
+     * stands for one row only, so a twin row with the same keys, as two equal coffees on one day
+     * with no FITID, is still recorded. A payment's keys and a row's are of one
+     * row by [sameRow]: their FITIDs when both have one. Each payment takes the row naming it as
+     * its pair, else a row with the very keys it holds, else the first row of the same keys. A
+     * row that arrived DUPLICATE is recorded when ticked (SPEC R107). It runs in every check of the
+     * review, so the rows that did not arrive DUPLICATE are indexed once by FITID and by synthetic
+     * key, and only payments whose keys meet the index are looked at.
+     */
+    internal fun pairedSince(d: ProfileData, rows: List<ReviewRow>): Set<Int> {
+        val byFit = HashMap<String, MutableList<Int>>()
+        val bySyn = HashMap<String, MutableList<Int>>()
+        for (i in rows.indices) {
+            val k = rows[i].keys
+            if (rows[i].status == RowStatus.DUPLICATE) continue
+            k.fitid?.let { byFit.getOrPut(it) { ArrayList() }.add(i) }
+            bySyn.getOrPut(k.synKey) { ArrayList() }.add(i)
+        }
+        val before = rows.flatMapTo(HashSet()) { it.heldAtReview }
+        val taken = HashSet<Int>()
+        for (p in d.payments) {
+            val held = p.bankKeys ?: continue
+            // a payment that held the keys when the review was built stands for a row recorded before it
+            if (p.id in before) continue
+            val bySynHeld = bySyn[held.synKey].orEmpty()
+            // [sameRow]: a FITID meets rows of that FITID and rows with none sharing the synthetic key
+            val same = if (held.fitid == null) bySynHeld else (byFit[held.fitid].orEmpty() + bySynHeld.filter { rows[it].keys.fitid == null }).sorted()
+            if (same.isEmpty()) continue
+            val open = same.filter { it !in taken }
+            val pick = open.firstOrNull { rows[it].pairPaymentId == p.id } ?: open.firstOrNull { rows[it].keys == held } ?: open.firstOrNull() ?: continue
+            taken += pick
+        }
+        return taken
+    }
+
+    /**
+     * The rows of [rows] recorded since the review was built (SPEC R107, R119), which Confirm leaves
+     * alone: those [pairedSince] finds paired since, and, by synthetic key, as many more rows that
+     * did not arrive `DUPLICATE` as [recordedRows] now finds recorded beyond them, by another review's
+     * Confirm say, money in and payoffs included, which no payment shows; unticked rows are taken
+     * first, as they record nothing, then the rows in the review's order.
+     */
+    internal fun recordedSince(d: ProfileData, rows: List<ReviewRow>): Set<Int> {
+        val out = HashSet(pairedSince(d, rows))
+        val newly = recordedRows(d, rows.map { it.keys }).filter { rows[it].status != RowStatus.DUPLICATE }
+        for ((syn, group) in newly.groupBy { rows[it].keys.synKey }) {
+            val more = group.size - out.count { rows[it].keys.synKey == syn }
+            if (more <= 0) continue
+            val open = rows.indices.filter { rows[it].keys.synKey == syn && rows[it].status != RowStatus.DUPLICATE && it !in out }
+                .filter { j -> group.any { g -> sameRow(rows[g].keys, rows[j].keys) } }
+            out += open.sortedBy { if (rows[it].include) 1 else 0 }.take(more)
+        }
+        return out
+    }
+
+    /**
+     * What the Confirm names against [d] as it stands (SPEC R107): the ticked rows' count, the money out
+     * and the money in, each positive; a row naming a pair (SPEC R118), or one recorded since the
+     * review was built, paired by hand or by another review's Confirm (SPEC R119), is not counted.
+     */
+    fun confirmSummary(d: ProfileData, rows: List<ReviewRow>): ConfirmSummary {
+        val since = recordedSince(d, rows)
+        val ticked = rows.filterIndexed { i, it -> it.include && it.pairPaymentId == null && i !in since }
         return ConfirmSummary(
             count = ticked.size,
             moneyOut = ticked.filter { it.row.amount < 0 }.sumOf { -it.row.amount },
@@ -563,12 +787,12 @@ object StatementImport {
      * outflow as its payment with the row's keys (SPEC R21, R26) or as a payoff taking its money
      * from where the row says, else R89's default (SPEC R89, R107). A row filed under one category
      * teaches its payee that category (SPEC R108); every recorded row's keys are kept. Rows are
-     * recorded oldest first, one day's in the review's order (SPEC R107).
+     * recorded oldest first, one day's in the review's order (SPEC R107). While [canConfirm] is
+     * off, [d] comes back unchanged, as it does should a row then fail to record: all or nothing.
      */
     fun confirm(d: ProfileData, rows: List<ReviewRow>, clock: Clock, ids: () -> String): ProfileData {
-        require(canConfirm(d, rows)) { "every ticked outflow needs a payment that adds up or a payoff (SPEC R107)" }
+        if (!canConfirm(d, rows)) return d
         val run = run(d, rows, clock, ids)
-        check(run.ok) { "a row the check let through could not be recorded" }
-        return run.state
+        return if (run.ok) run.state else d
     }
 }

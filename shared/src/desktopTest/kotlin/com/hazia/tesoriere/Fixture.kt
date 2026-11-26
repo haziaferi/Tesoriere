@@ -8,6 +8,9 @@ import com.hazia.tesoriere.model.Goal
 import com.hazia.tesoriere.model.ProfileData
 import com.hazia.tesoriere.model.RecurringExpense
 import com.hazia.tesoriere.model.Savings
+import com.hazia.tesoriere.receipts.ReceiptFile
+import com.hazia.tesoriere.receipts.ReceiptFileLine
+import com.hazia.tesoriere.receipts.ReceiptSettings
 import kotlinx.datetime.LocalDate
 
 /**
@@ -55,4 +58,15 @@ object Fixture {
         lastSweptMonth = lastSweptMonth, finishedAt = finishedAt,
         reminderEnabled = reminderEnabled, reminderLeadDays = reminderLeadDays, createdOn = createdOn,
     )
+
+    /** The receipt settings of the receipt Profile (SPEC R112), with a made-up folder handle. */
+    fun receiptSettings(folder: String? = "folder-handle-1") = ReceiptSettings(PROFILE, folder)
+
+    /** One receipt line as Chatelaine's spec, rule 123, has it: [price] is the whole line's price paid. */
+    fun line(name: String, price: String, chatelaineId: String, chatelaineName: String, pack: String? = null, quantity: Int = 1) =
+        ReceiptFileLine(name, pack, quantity, cents(price), chatelaineId, chatelaineName)
+
+    /** A receipt whose total paid is the sum of its [lines], as rule 123 says it is. */
+    fun receipt(id: String, store: String, date: LocalDate, vararg lines: ReceiptFileLine, currency: String = "EUR", format: Int = 1) =
+        ReceiptFile(format, id, store, date, currency, lines.sumOf { it.pricePaid }, lines.toList())
 }

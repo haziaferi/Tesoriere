@@ -100,22 +100,39 @@ Kinds: O owner rule · D decided · I inherited · A assumed · Q open.
 | D-R108 | Payee rules | 13. Statement import |
 | D-R27 | The receipt contract | 14. Chatelaine receipts |
 | D-R28 | Receipt folder | 14. Chatelaine receipts |
+| D-R112 | The receipt Profile | 14. Chatelaine receipts |
 | D-R29 | Picking up receipts | 14. Chatelaine receipts |
 | D-R30 | Receipt files Tesoriere cannot take | 14. Chatelaine receipts |
+| D-R116 | Scanning the receipt folder | 14. Chatelaine receipts |
+| D-R117 | Reading a receipt file | 14. Chatelaine receipts |
 | D-R31 | Receipt review | 14. Chatelaine receipts |
 | D-R32 | Category links | 14. Chatelaine receipts |
 | D-R33 | Closing a review | 14. Chatelaine receipts |
 | D-R34 | Changing a link | 14. Chatelaine receipts |
 | D-R35 | A receipt's source | 14. Chatelaine receipts |
+| D-R113 | Opening a receipt review | 14. Chatelaine receipts |
+| D-R114 | Answering a receipt review | 14. Chatelaine receipts |
+| D-R115 | Confirming a receipt | 14. Chatelaine receipts |
 | D-R36 | Store links | 15. One payment, two sources |
+| D-R120 | The text a store link keeps | 15. One payment, two sources |
 | D-R37 | Pairing rule | 15. One payment, two sources |
 | D-R38 | Whichever arrives first | 15. One payment, two sources |
 | D-R39 | Difference part | 15. One payment, two sources |
 | D-R40 | Pairing by hand | 15. One payment, two sources |
-| D-R41 | Deleting a receipt payment | 16. Edge cases |
-| D-R42 | Deleting a linked category | 16. Edge cases |
-| D-R43 | Test plan | 17. Test plan |
-| D-R44 | Rollout phases | 18. Rollout |
+| D-R118 | Suggesting a pair | 15. One payment, two sources |
+| D-R119 | Recording a pair | 15. One payment, two sources |
+| D-R128 | Unpairing | 15. One payment, two sources |
+| D-R121 | The Trash | 16. The Trash |
+| D-R122 | Restoring from the Trash | 16. The Trash |
+| D-R123 | Deleting a category | 16. The Trash |
+| D-R124 | Spending under a deleted category | 16. The Trash |
+| D-R125 | Deleting and restoring a payment | 16. The Trash |
+| D-R127 | Restoring a payment as a pair | 16. The Trash |
+| D-R126 | A Profile in the Trash | 16. The Trash |
+| D-R41 | Deleting a receipt payment | 17. Edge cases |
+| D-R42 | Deleting a linked category | 17. Edge cases |
+| D-R43 | Test plan | 18. Test plan |
+| D-R44 | Rollout phases | 19. Rollout |
 | D-R45 | Price comparison | Out of scope |
 | D-R46 | Households in v1 | Out of scope |
 | D-R47 | Currency conversion in v1 | Out of scope |
@@ -550,13 +567,13 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R23 · Parts add up
 
-**Rule:** A payment's total is not zero, its parts add up to it to the cent, and every part has the sign of the total, so a refund's parts are all negative (R21); the one exception is a pair's difference part (R39), at most one per payment, which may have either sign. Until they do, the editor shows the remainder and its save stays off.
+**Rule:** A payment's total is not zero, its parts add up to it to the cent, and every part has the sign of the total, so a refund's parts are all negative (R21); the one exception is a pair's difference part (R39), at most one per payment, which may have either sign and which only pairing writes, an edit keeping one the payment already holds. Until they do, the editor shows the remainder and its save stays off.
 
-**Acceptance:** A EUR 42.30 payment with parts of EUR 30.00 and EUR 12.00 shows EUR 0.30 left and cannot be saved; with a third part of EUR 0.30 it can. A EUR -15.00 refund with parts of EUR -20.00 and EUR 5.00 cannot be saved, and with one part of EUR -15.00 it can; a total of EUR 0.00 cannot be saved. A EUR 42.10 payment with item parts of EUR 30.00 and EUR 12.30 and a difference part of EUR -0.20 can be saved; the same EUR -0.20 as an item part, or two difference parts, cannot.
+**Acceptance:** A EUR 42.30 payment with parts of EUR 30.00 and EUR 12.00 shows EUR 0.30 left and cannot be saved; with a third part of EUR 0.30 it can. A EUR -15.00 refund with parts of EUR -20.00 and EUR 5.00 cannot be saved, and with one part of EUR -15.00 it can; a total of EUR 0.00 cannot be saved. A EUR 42.10 pair with item parts of EUR 30.00 and EUR 12.30 and a difference part of EUR -0.20 can be saved, and so can an edit of it that moves its item parts; the same EUR -0.20 as an item part, two difference parts, or a difference part entered by hand, cannot.
 
 **Not:** Filing the remainder to a default category on its own: it hides a mistake. A part of the other sign: a refund that raises one category's spent is a purchase filed in the wrong place. Holding the difference part to the total's sign: a bank row below the receipt's total would leave the pair with no way to add up.
 
-**Since:** 2026-11-25 · owner · agreed rewording
+**Since:** 2026-11-25 · builder · own words
 
 ### D-R24 · Any payment can be split
 
@@ -1366,7 +1383,8 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 | Slice | Holds |
 |---|---|
 | each category | its spent figure for the month (R25): its parts of payments from any source (Savings, a Goal or an Account), a refund's lowering it (R21), its `cat:` adjustments, the sweep rows filed under it (R67), other than an Account payoff's, the payoff rows of a card whose charges are not logged, filed under it as their payoff category (R109), a card's interest and fees filed under it (R110), and the `savings` or `spend:` rows of a Loan's payments by hand filed under it while nothing was charged to the Loan (R89) |
-| Uncategorised | parts with no category (R21) and sweep rows with no category (R19) |
+| a category in the Trash | its spent figure for the month, marked deleted (R124) |
+| Uncategorised | parts with no category (R21), sweep rows with no category (R19), and the spent figure of a category deleted for good (R124) |
 | no slice | `goal:` rows, `savings` rows of either sign (income, corrections, a payment off an Account, R89), `acct:` rows, `spend:` rows, and the sweep rows of an Account payoff, a card's payment or a Loan's with a payment charged to it (R87), each unless filed under a category (R109) |
 
 **Evidence:** Sci-Fin's spec, section 5.2, and `engine/Reports.kt` at `2892110`, with the slices of payments and sweeps from R22, R25 and R67; the transfers left out: owner, 2026-11-25.
@@ -1447,7 +1465,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R26 · Statement import
 
-**Rule:** A bank statement in CSV or OFX is read on the device, and every bank row lands in a review as a suggestion (R107); nothing is recorded until one Confirm, which names the money out and the money in apart (R107). Each recorded bank row keeps the two keys below, and a row with a key that matches one kept from an earlier import, or one in any payment's bank keys, arrives unticked as already recorded. A payee once filed by the user under one category pre-fills that category (R108).
+**Rule:** A bank statement in CSV or OFX is read on the device, and every bank row lands in a review as a suggestion (R107); nothing is recorded until one Confirm, which names the money out and the money in apart (R107). Each recorded bank row keeps the two keys below, once per row; a row arrives unticked as already recorded when its FITID was recorded, or, by synthetic key where it or the recorded row has no FITID, while the statement's rows with that key, taken in order, are no more than the rows recorded with it, as kept by the import or as held by payments, whichever are more. A payee once filed by the user under one category pre-fills that category (R108).
 
 **Values:**
 
@@ -1458,11 +1476,11 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Evidence:** Sci-Fin's spec, section 4.3, and `engine/Import.kt` at `2892110`, whose key took the description as written; the spacing made one: builder, 2026-11-25.
 
-**Acceptance:** Importing the same OFX statement twice records nothing the second time; importing a CSV export of the same period also records nothing; a payee filed under a category once is pre-filled on the next statement. A row of -12.40 on 2026-03-03 described `POS MERCATO VERDE 0412` has the synthetic key `syn:2026-03-03|-12.40|pos mercato verde 0412`, and so does the same row with two spaces, a tab or a non-breaking space between its words, or a space before them; after the OFX row is recorded, that CSV row arrives as already recorded.
+**Acceptance:** Importing the same OFX statement twice records nothing the second time; importing a CSV export of the same period also records nothing; a payee filed under a category once is pre-filled on the next statement. A row of -12.40 on 2026-03-03 described `POS MERCATO VERDE 0412` has the synthetic key `syn:2026-03-03|-12.40|pos mercato verde 0412`, and so does the same row with two spaces, a tab or a non-breaking space between its words, or a space before them; after the OFX row is recorded, that CSV row arrives as already recorded. With a -4.50 row F1 recorded, a row F2 of the same day, amount and text arrives as new; of two such rows with no FITID, one recorded, one arrives as recorded and one as new; a row of money into Savings, once recorded, arrives as recorded.
 
-**Not:** Checking the FITID only: a CSV export of a period already imported as OFX carries no FITID and would be recorded twice. Keying the description as written: two exports that space one payee differently would record it twice.
+**Not:** Checking the FITID only: a CSV export of a period already imported as OFX carries no FITID and would be recorded twice. Keying the description as written: two exports that space one payee differently would record it twice. Matching any one key: two equal purchases of one day would hide each other.
 
-**Since:** 2026-11-25 · builder · own words
+**Since:** 2026-11-26 · owner · agreed rewording
 
 ### D-R103 · Statement formats
 
@@ -1556,7 +1574,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R107 · The import review
 
-**Rule:** Each bank row arrives in the review with a status, ticked or not, as below, newest first. A ticked outflow is recorded as a payment of its amount on its day, from Savings unless the user picks a Goal or an Account, with parts that add up (R23, R24, R54) and its keys (R26), or as a payment off an Account, taking its money from Savings, a Goal or nowhere as R89 has it, by R89's default unless the user picks another for the row; a ticked row of money in is added to Savings, and on into a Goal when the user picks one, as money put into a Goal is (R50), and is not counted as income, or is recorded as a refund to Savings, a Goal or an Account, a payment of minus its amount with parts that add up (R21, R23) and its keys. Confirm stays off while a ticked outflow is neither or is sent into a Goal, a ticked row's parts do not add up, a refund is also sent into a Goal, a payoff from a Goal is above what the Goal holds after the ticked rows before it, or a payoff of a Loan that counts as spending has no category (R89); a row paid from a Goal that holds less than it after the ticked rows before it carries a warning and takes the rest from Savings (R54); Confirm records the ticked rows oldest first, those of one day in the order the review lists them, checks them in that same order against what the rows before each have recorded, and names the count of ticked rows, the money out and the money in, each as a positive figure.
+**Rule:** Each bank row arrives in the review with a status, ticked or not, as below, newest first. A ticked outflow is recorded as a payment of its amount on its day, from Savings unless the user picks a Goal or an Account, with parts that add up (R23, R24, R54) and its keys (R26), or as a payment off an Account, taking its money from Savings, a Goal or nowhere as R89 has it, by R89's default unless the user picks another for the row; a ticked row of money in is added to Savings, and on into a Goal when the user picks one, as money put into a Goal is (R50), and is not counted as income, or is recorded as a refund to Savings, a Goal or an Account, a payment of minus its amount with parts that add up (R21, R23) and its keys. Confirm stays off while a ticked outflow is neither or is sent into a Goal, a ticked row's parts do not add up, a refund is also sent into a Goal, a payoff from a Goal is above what the Goal holds after the ticked rows before it, or a payoff of a Loan that counts as spending has no category (R89); a row paid from a Goal that holds less than it after the ticked rows before it carries a warning and takes the rest from Savings (R54); Confirm records the ticked rows oldest first, those of one day in the order the review lists them, checks them in that same order against what the rows before each have recorded, and names the count of ticked rows, the money out and the money in, each as a positive figure; a row recorded since the review was built, by another review's Confirm or a pair, is neither recorded nor counted again.
 
 **Why:** A recurring expense's sweep already moved Savings (R63); recording its bank row too would count it twice. A bank seldom writes the name the user gave the expense, so the amount and the day find it too; a card's payment is left out, since its bank row is the payoff that lowers the card (R89), which its sweep never does.
 
@@ -1564,18 +1582,19 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 | Status | When, checked in this order | Ticked |
 |---|---|---|
-| `DUPLICATE` | one of its keys matches (R26) | no |
+| `DUPLICATE` | recorded already, as R26 counts | no |
 | `INCOMING` | its amount is positive | yes |
+| `PAIR` | an outflow suggested as the pair of a receipt's payment (R118); Confirm records nothing for it until the user turns the suggestion down, and then records it as a `READY` row when ticked | no |
 | `RECURRING` | an outflow dated no earlier than the later of a recurring expense's first due date (R61) and the day it was created (R60), or than its earliest sweep row of a due date when that is earlier, whose payee's words hold the expense's name's words, or are held in them; or such an outflow of the expense's amount, or of what its rows dated on that due date hold, on a day within 3 days of one of its due dates, or of what its sweep rows of a due date dated on a day hold, within 3 days of that day; a share (R62, R63) pays toward a bill still to come and counts in neither; neither for an expense that is a card's payment (R93) | no |
 | `READY` | any other outflow | yes |
 
 **Evidence:** Sci-Fin's spec, section 4.3, and `engine/Import.kt` at `2892110`, whose Confirm said how many entries were added with the money out and the money in apart, and whose payoff always lowered Savings; the payoff's default as R89's: builder, 2026-11-25, after review of PR 3; a recurring row found by its amount and day, a card's payment left out of both matches, and neither match before the first due date: builder, 2026-11-25; nor before the day it was created: owner, 2026-11-25.
 
-**Acceptance:** With Savings at 1,000.00, a recurring expense named Rent and the March OFX statement: `AFFITTO CASA RENT` -950.00 arrives `RECURRING` and unticked, `STIPENDIO MARZO` 1,450.00 `INCOMING`; filing -12.40 under Groceries, splitting -42.30 into Pharmacy 30.00 and Household 12.30, and paying off a card at 300.00 with -60.00 names 4 rows, 114.70 out and 1,450.00 in, and leaves Savings at 2,335.30 and the card at 240.00. The same 1,450.00 sent on into a Goal holding 110.00 leaves the Goal at 1,560.00 and Savings at 885.30, with a `savings` row of +1,450.00 and a `goal:` row of +1,450.00 dated 7 March; a Goal deleted before Confirm leaves it in Savings. Rows of -14.00 on 7 March and -100.00 on 8 March, both from a Goal holding 110.00, give the later one a warning, and confirmed leave the Goal at 0.00 and Savings 4.00 lower; the -100.00 alone leaves the Goal at 10.00. A -60.00 row paying off a card at 300.00 that is linked to its fixed payment (R93) leaves the card at 240.00 and Savings unchanged by it, and with Savings picked for the row, 60.00 lower. The -60.00 payoff of the card at 300.00 taken from a Goal holding 110.00 leaves the card at 240.00, the Goal at 50.00 and Savings unchanged by it; from a Goal holding 50.00, Confirm stays off. With a 29.90 monthly expense named Telefono due the 10th, `TIM S.P.A.` -29.90 on 12 March arrives `RECURRING` and unticked, and so does -29.90 on 10 March after the swept expense was edited to 34.90 with the difference declined; -29.90 on 20 March arrives `READY`, and so does a card's 60.00 fixed payment's bank row on its due date, and `ORBITA CARD PAYMENT 0412`, whose words hold the name of that fixed payment, Orbita card payment. With Telefono first due 10 March 2026, `TELEFONO ABBONAMENTO` -12.00 on 7 March and `TIM S.P.A.` -29.90 on 10 February arrive `READY`, and the first on 10 March arrives `RECURRING`; with Telefono first due 5 March but created on 14 March, `TELEFONO ABBONAMENTO` on 10 March and `TIM S.P.A.` -29.90 on 5 March arrive `READY`, and the first on 14 March `RECURRING`. Telefono created on 1 March 2026, first due 10 March, swept that day and on 15 March moved to fall due on 12 April, with the difference declined, still finds on 16 March `TELEFONO ABBONAMENTO` -29.90 on 10 March and `TIM S.P.A.` -29.90 on 11 March, both `RECURRING`. A yearly 1,200.00 Assicurazione auto created on 14 September 2026, first due 15 July 2027, with shares of 120.00 swept on 1 October and 1 November, leaves `ASSICURAZIONE AUTO RCA` -45.00 on 12 November and `BONIFICO` -120.00 on 2 October `READY`. A Loan with no category of its own, a -500.00 row of 1 March charged to it and a -100.00 payoff of it from Savings on 20 March, which the review lists first: Confirm is on, the charge is recorded first, and the payoff counts as a transfer, in no category (R89). 1,450.00 sent into a Goal holding 110.00 on 7 March pays a -200.00 row from that Goal on 8 March with no warning and a -300.00 payoff of the card from it on 9 March, leaving the Goal at 1,060.00. `RIMBORSO CALZATURE ORSA` +25.00 on 20 March filed as a refund under Household records a payment of -25.00 with its keys, leaves Savings 25.00 higher and Household's March spent 25.00 lower, and arrives `DUPLICATE` on the next import; filed as a refund to the card at 300.00, it leaves the card at 275.00.
+**Acceptance:** With Savings at 1,000.00, a recurring expense named Rent and the March OFX statement: `AFFITTO CASA RENT` -950.00 arrives `RECURRING` and unticked, `STIPENDIO MARZO` 1,450.00 `INCOMING`; filing -12.40 under Groceries, splitting -42.30 into Pharmacy 30.00 and Household 12.30, and paying off a card at 300.00 with -60.00 names 4 rows, 114.70 out and 1,450.00 in, and leaves Savings at 2,335.30 and the card at 240.00. The same 1,450.00 sent on into a Goal holding 110.00 leaves the Goal at 1,560.00 and Savings at 885.30, with a `savings` row of +1,450.00 and a `goal:` row of +1,450.00 dated 7 March; a Goal deleted before Confirm leaves it in Savings. Rows of -14.00 on 7 March and -100.00 on 8 March, both from a Goal holding 110.00, give the later one a warning, and confirmed leave the Goal at 0.00 and Savings 4.00 lower; the -100.00 alone leaves the Goal at 10.00. A -60.00 row paying off a card at 300.00 that is linked to its fixed payment (R93) leaves the card at 240.00 and Savings unchanged by it, and with Savings picked for the row, 60.00 lower. The -60.00 payoff of the card at 300.00 taken from a Goal holding 110.00 leaves the card at 240.00, the Goal at 50.00 and Savings unchanged by it; from a Goal holding 50.00, Confirm stays off. With a 29.90 monthly expense named Telefono due the 10th, `TIM S.P.A.` -29.90 on 12 March arrives `RECURRING` and unticked, and so does -29.90 on 10 March after the swept expense was edited to 34.90 with the difference declined; -29.90 on 20 March arrives `READY`, and so does a card's 60.00 fixed payment's bank row on its due date, and `ORBITA CARD PAYMENT 0412`, whose words hold the name of that fixed payment, Orbita card payment. With Telefono first due 10 March 2026, `TELEFONO ABBONAMENTO` -12.00 on 7 March and `TIM S.P.A.` -29.90 on 10 February arrive `READY`, and the first on 10 March arrives `RECURRING`; with Telefono first due 5 March but created on 14 March, `TELEFONO ABBONAMENTO` on 10 March and `TIM S.P.A.` -29.90 on 5 March arrive `READY`, and the first on 14 March `RECURRING`. Telefono created on 1 March 2026, first due 10 March, swept that day and on 15 March moved to fall due on 12 April, with the difference declined, still finds on 16 March `TELEFONO ABBONAMENTO` -29.90 on 10 March and `TIM S.P.A.` -29.90 on 11 March, both `RECURRING`. A yearly 1,200.00 Assicurazione auto created on 14 September 2026, first due 15 July 2027, with shares of 120.00 swept on 1 October and 1 November, leaves `ASSICURAZIONE AUTO RCA` -45.00 on 12 November and `BONIFICO` -120.00 on 2 October `READY`. A Loan with no category of its own, a -500.00 row of 1 March charged to it and a -100.00 payoff of it from Savings on 20 March, which the review lists first: Confirm is on, the charge is recorded first, and the payoff counts as a transfer, in no category (R89). 1,450.00 sent into a Goal holding 110.00 on 7 March pays a -200.00 row from that Goal on 8 March with no warning and a -300.00 payoff of the card from it on 9 March, leaving the Goal at 1,060.00. `RIMBORSO CALZATURE ORSA` +25.00 on 20 March filed as a refund under Household records a payment of -25.00 with its keys, leaves Savings 25.00 higher and Household's March spent 25.00 lower, and arrives `DUPLICATE` on the next import; filed as a refund to the card at 300.00, it leaves the card at 275.00. Two reviews open on one +100.00 row, or one -50.00 payoff of the card, both confirmed, record it once.
 
-**Not:** An outflow recorded with nowhere filed: Savings would drop with nothing to show where the money went. Matching a row dated before the expense's first due date, or before the day it was created: no sweep covered it, so left unticked it would be recorded nowhere. Reading the floor and the due dates from the expense alone: an edit that moves its schedule starts the chain again (R65), and a bill its sweep already paid would arrive `READY` and be recorded twice. Recording the rows newest first, as the review lists them: a Loan's payoff would be decided before the charge to it made earlier, and both would count.
+**Not:** An outflow recorded with nowhere filed: Savings would drop with nothing to show where the money went. Matching a row dated before the expense's first due date, or before the day it was created: no sweep covered it, so left unticked it would be recorded nowhere. Reading the floor and the due dates from the expense alone: an edit that moves its schedule starts the chain again (R65), and a bill its sweep already paid would arrive `READY` and be recorded twice. Recording the rows newest first, as the review lists them: a Loan's payoff would be decided before the charge to it made earlier, and both would count. A `PAIR` row that only pairing can record: a different purchase of the same amount, suggested by mistake, could never be recorded.
 
-**Since:** 2026-11-25 · owner · agreed rewording
+**Since:** 2026-11-26 · owner · agreed rewording
 
 ### D-R108 · Payee rules
 
@@ -1625,6 +1644,16 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
+### D-R112 · The receipt Profile
+
+**Rule:** The app keeps which Profile holds the receipt folder, and that Profile alone keeps the receipt settings: the folder, how new files are found (R29), the recorded receipt ids, the category links (R32) and each store's last source (R35), except that a Profile restored from the Trash while another holds the folder keeps its own with no folder (R126). A folder can be chosen in a Profile only while no other Profile holds one, and only the Profile that holds a folder scans it and confirms receipts (R115).
+
+**Acceptance:** With the folder chosen in Profile A, Profile B is offered no folder and choosing one there is refused; a receipt opened for review in B cannot be confirmed, and the same receipt in A records one payment in A and none in B.
+
+**Not:** Receipt settings in every Profile: a second Profile's links and recorded ids would wait for receipts that never reach it.
+
+**Since:** 2026-11-25 · builder · own words
+
 ### D-R29 · Picking up receipts
 
 **Rule:** The user chooses how new receipt files are found, from the rows below; the first is the default. Nothing is recorded without the user's Confirm (R31).
@@ -1661,6 +1690,62 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
+### D-R116 · Scanning the receipt folder
+
+**Rule:** A scan reads, in name order, the receipt folder's files whose names end in `.json`, passes over every other name, such as the temporary name Chatelaine writes under (Chatelaine's spec, rule 123), and writes nothing, to the folder or to the Profile (R27, R29). Each file read takes the first row below that fits: a receipt is new while its id is not among the receipt Profile's recorded ids (R112, R115), and one id met in two files of a scan is offered once, from the first. The count of receipts waiting is the number ready to review, and a Profile that does not hold the receipt folder scans nothing.
+
+**Values:**
+
+| Check, in this order | The file is |
+|---|---|
+| it cannot be read, is not a receipt file, or reading it fails in any way | refused as unreadable, and the scan goes on (R30) |
+| its format is above the highest Tesoriere reads, 1 | refused, naming its format (R30) |
+| its receipt id is recorded | left out, not listed (R30) |
+| its receipt id was met in an earlier file of this scan | left out, not listed |
+| its currency is not the Profile's | refused, naming both currencies (R30, R47) |
+| none of the above | ready to review (R29) |
+
+**Evidence:** Only names ending in `.json` are read: builder, 2026-11-25, after Chatelaine's spec, rule 123, which writes a file under a temporary name and renames it once whole.
+
+**Acceptance:** Three new files give three receipts ready, a count of 3, and the Profile unchanged; a file whose receipt id is recorded is not listed; a format-2 file is refused naming 2; a USD file in a EUR Profile is refused naming USD and EUR; a file that is not JSON is refused as unreadable; two files holding one receipt id give one receipt; a file named `chatelaine-receipt-rc-9.part` is not read. Each leaves the Profile unchanged.
+
+**Not:** Recording on a scan: nothing is recorded before Confirm (R29, R31). Moving or deleting a file once it is recorded: the folder is read only (R27).
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R117 · Reading a receipt file
+
+**Rule:** A receipt file is read as UTF-8 JSON in the format of Chatelaine's spec, rule 123, in three steps: a file over the size or depth cap below is unreadable before anything in it is read; then its `format` key, where a JSON whole number above the highest format Tesoriere reads, 1, refuses the file naming that format, whatever else the file holds (R30); then the rest, read whole or not at all as the rows below say. A key rule 123 does not name is passed over, `pack` may be absent, and a file that fails any other row is unreadable (R30); reading a file never fails in a way that stops a scan (R116).
+
+**Values:**
+
+| The file | Read as |
+|---|---|
+| larger than 1 MiB (1,048,576 bytes), or nesting arrays and objects more than 64 deep | unreadable, before any key is read |
+| not UTF-8, not JSON, or not one JSON object | unreadable |
+| `format` a JSON whole number above 1 | newer format, naming it, or naming 2,147,483,647 when it is larger |
+| `format` missing, not a JSON whole number, or below 1 | unreadable |
+| a key rule 123 gives the receipt or a line missing, `pack` aside | unreadable |
+| `receiptId`, `store`, `currency`, or a line's `name`, `categoryId` or `categoryName`, not JSON text, or blank | unreadable |
+| `pack` present and not JSON text | unreadable |
+| `totalPaid`, `quantity` or `pricePaid` not a JSON number written as a whole number, such as `"318"` in quotes or `1.5` | unreadable |
+| `date` not a calendar day written `YYYY-MM-DD` | unreadable |
+| `lines` not an array of objects, or empty | unreadable |
+| `totalPaid` zero or below, a `pricePaid` below zero, or a `quantity` below 1 | unreadable |
+| `totalPaid` above 100,000,000,000 cents (1,000,000,000.00), and so any `pricePaid` above it | unreadable |
+| `totalPaid` other than the sum of the lines' `pricePaid`, or a sum too large to hold | unreadable |
+| a line with no `pack`, or a `pack` that is empty or blank | a line with no pack |
+| `currency` in small letters, such as `eur` | read in capitals, `EUR`, and compared with the Profile's ignoring capitals (R30) |
+| a key rule 123 does not name | passed over |
+
+**Evidence:** Chatelaine's spec, rule 123, with its JSON encoding as merged in Chatelaine, which settled the phase 1 plan's owner answer 1; read 2026-11-25. A blank receipt id or an empty `lines` read as unreadable: builder, 2026-11-25, since a receipt is the items ticked at one store (Chatelaine's spec, rule 124) and its id is what R30 tells a recorded file by. An empty `pack` read as none; `currency` read in capitals; a total above zero and no price paid below zero, since a closed Chatelaine receipt is a purchase; the size and depth caps; numbers in quotes refused, reversing the builder's first reading of 2026-11-25, which took them, since rule 123 writes whole cents as JSON numbers: builder, 2026-11-25, after review of Tasks 14 to 16. The cap on `totalPaid`, far above any receipt, so no figure built from one overflows: builder, 2026-11-26, after review of the receipts and pairs pull request.
+
+**Acceptance:** The example file of Chatelaine's spec, rule 123, reads as a receipt of 10.99 at Supermarket A on 2026-11-24 in EUR with three lines, the batteries with no pack. The same file with `format` 2 and a key of its own gives newer format 2, and so it does with no `lines`; with `format` 99999999999 it gives newer format 2,147,483,647. With any one key of rule 123 other than `pack` taken out, with `totalPaid` 11.00, 0.00 or `"1099"`, a `quantity` of 1.5 or 0, a line of -1.00 among lines that add up to the total, or a blank `store`, it is unreadable; so is a file of 3,000 nested arrays, and one over 1 MiB. With a key `note` added it reads as before. A `pack` of `""` reads as no pack, and `currency` `eur` reads as `EUR`. A format-2 file over 1 MiB is unreadable, not a newer format. With `totalPaid` 1,000,000,000.00 and lines adding up to it, it reads; with 1,000,000,000.01, it is unreadable.
+
+**Not:** Reading what can be read of a file that fails a row: a receipt half read would record a payment that is not the one made. Taking `totalPaid` when the lines add up otherwise: the payment's parts could not add up to it (R23). A file that could never be confirmed, such as one of total zero: it would wait in the folder for good (R115).
+
+**Since:** 2026-11-26 · builder · own words
+
 ### D-R31 · Receipt review
 
 **Rule:** A receipt is reviewed as one payment: its store, date and total, and its lines each in the Tesoriere category its category link gives (R32). A line can be moved to another category for this receipt only; no line can be left out. One Confirm, naming the total, records the payment; closing the review records nothing.
@@ -1675,7 +1760,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R32 · Category links
 
-**Rule:** The user gives categories equal names in both apps, and Tesoriere links them by name, ignoring capitals, the first time a Chatelaine category id appears; from then on the link is by id, so renaming the category in Chatelaine keeps it. A Chatelaine category with no equal name asks, in the review, to add it as a new Tesoriere category or to link it to an existing one. The review cannot be confirmed until every line's category is linked.
+**Rule:** The user gives categories equal names in both apps, and Tesoriere links them by name, ignoring capitals, the first time a Chatelaine category id appears; from then on the link is by id, so renaming the category in Chatelaine keeps it. A Chatelaine category with no equal name asks, in the review, to add it as a new Tesoriere category or to link it to an existing one. The review cannot be confirmed while a line of a Chatelaine category with no link is in no category; once the user has moved each such line by hand to a Tesoriere category it can be, nothing is linked for that Chatelaine category, and the next receipt with it asks again.
 
 **Values:**
 
@@ -1687,21 +1772,21 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 | New id, no equal name, user links an existing one | linked; the review reminds the user to rename the Chatelaine category to the Tesoriere name |
 | Known id whose name differs from the linked category's | linked as before, with a note that the names differ |
 
-**Acceptance:** A receipt with category Pulizia links to Tesoriere's pulizia; a later receipt with the same id named Pulizie stays linked and shows the names-differ note; a new category with no equal name keeps Confirm off until it is added or linked.
+**Acceptance:** A receipt with category Pulizia links to Tesoriere's pulizia; a later receipt with the same id named Pulizie stays linked and shows the names-differ note; a new category with no equal name keeps Confirm off until it is added or linked, or until each of its lines is moved by hand to a Tesoriere category, after which the next receipt with it asks again.
 
 **Not:** Linking by name on every receipt: a rename in Chatelaine would read as a new category. Renaming the Tesoriere category to the Chatelaine name: the owner keeps Tesoriere's names.
 
-**Since:** 2026-11-24 · owner · agreed rewording
+**Since:** 2026-11-25 · owner · agreed rewording
 
 ### D-R33 · Closing a review
 
-**Rule:** Category links, and categories added in a review, are kept only when the review is confirmed. Closing a review that holds changes first shows a prompt warning that they will be lost; the user can dismiss it and stay in the review, or close and lose them.
+**Rule:** Category links, and categories added in a review, are kept only when the review is confirmed. Closing a review that holds changes, a line moved, the source changed, a link made or a category added, first shows a prompt warning that they will be lost; the user can dismiss it and stay in the review, or close and lose them.
 
-**Acceptance:** Adding a category in a review and closing it shows the warning; dismissing it returns to the review with the change intact; closing anyway leaves no new category and no new link.
+**Acceptance:** Adding a category in a review and closing it shows the warning; dismissing it returns to the review with the change intact; closing anyway leaves no new category and no new link. Moving one line, or changing the source, and closing shows the same warning.
 
 **Not:** Keeping links from a closed review: a link would exist with no recorded receipt behind it.
 
-**Since:** 2026-11-24 · owner · agreed rewording
+**Since:** 2026-11-25 · owner · agreed rewording
 
 ### D-R34 · Changing a link
 
@@ -1715,27 +1800,99 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R35 · A receipt's source
 
-**Rule:** A receipt's source is Savings unless the user changes it in the review, and the source last confirmed for a store is pre-filled on that store's next receipt. Pairing with a bank row keeps the receipt's source.
+**Rule:** A receipt's source is Savings unless the user changes it in the review, and the source last confirmed for a store is pre-filled on that store's next receipt. Pairing with a bank row keeps the receipt's source, except that a receipt paired with a bank row recorded first, from a store with no source kept, or one that does not exist, and its source left as the review opened it, takes the bank payment's own source.
 
 **Why:** The receipt file does not say how it was paid (Chatelaine's spec, rule 123), and a store is usually paid the same way.
 
-**Acceptance:** The first receipt from a store shows Savings; after it is confirmed with a card as source, the next receipt from that store shows the card.
+**Acceptance:** The first receipt from a store shows Savings; after it is confirmed with a card as source, the next receipt from that store shows the card. A -42.30 row charged to a card recorded first, then a receipt from a store with no source kept, paired with it as it opened, leaves the payment on the card.
 
 **Not:** Asking for the source on every receipt: one more choice per receipt.
 
-**Since:** 2026-11-24 · owner · agreed rewording
+**Since:** 2026-11-26 · owner · agreed rewording
+
+### D-R113 · Opening a receipt review
+
+**Rule:** A receipt review opens each line in the Tesoriere category its Chatelaine category gives, as below, and with the source last confirmed for the store, named as the receipt file writes it (R35). A store with no source kept, or whose kept Goal or Account does not exist, opens with Savings.
+
+**Values:**
+
+| The line's Chatelaine category | Opens in |
+|---|---|
+| linked before, to a category that exists | the linked category, whatever either name (R32) |
+| not linked, or linked to a category that does not exist, with a Tesoriere category of equal name ignoring capitals | that category, linked by name on Confirm |
+| not linked, with no equal name | no category |
+
+**Evidence:** Savings in place of a store's Goal or Account that no longer exists: builder, 2026-11-25.
+
+**Acceptance:** With Tesoriere categories Groceries and pulizia, a first receipt with lines under Chatelaine's Groceries and Pulizia opens them in Groceries and pulizia, from Savings, and a line under Garden in no category. A store last confirmed with a card opens with the card, and with Savings once the card is deleted.
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R114 · Answering a receipt review
+
+**Rule:** In the review the user can move one line to another category, for this receipt only and changing no link (R31); link a Chatelaine category to an existing Tesoriere category; or add it as a new Tesoriere category with its Chatelaine name and 0.00 planned (R32). Linking or adding files every line of that Chatelaine category the user has not moved by hand under the answer, whatever category it opened in, a line moved back to the category it would hold unmoved (the one it opened in, or the answer given since) counting as not moved, and a later answer for the same Chatelaine category replaces the earlier one, dropping a category the earlier one added when no line holds it. The review holds changes, for R33's warning, once a line is moved, the source changed, a link made or a category added; the notes below say what still waits for the user, one per Chatelaine category, in the order the lines first name them, then a pair available when there is one (R118).
+
+**Values:**
+
+| Note | For a Chatelaine category |
+|---|---|
+| unlinked | with no link, no equal name and no answer in this review; Confirm stays off while a line of it is in no category (R32) |
+| pair available | none: the receipt meets R37 with a payment recorded from a bank row (R118); Confirm stays on |
+| names differ | linked before, whose name differs from its Tesoriere category's ignoring capitals |
+| rename in Chatelaine | linked by the user in this review to an existing category whose name differs from it ignoring capitals |
+
+**Acceptance:** A line under Garden, with no Garden in Tesoriere, is noted unlinked; linked to Household it is filed under Household with a rename-in-Chatelaine note; added instead, it is filed under a new category named Garden with 0.00 planned, and the review holds changes. A Garden line moved to Fun before the answer stays under Fun. Snack, opened under Eating out by its link and linked in the review to Groceries, files its lines under Groceries. A review whose categories all link by name holds no changes until a line is moved or the source changed, and moving a line changes no link; a line moved to Fun and back to Groceries, where it opened, leaves no change, and a later link of its Chatelaine category files it again.
+
+**Not:** Counting a link made by name as a change: the next open makes it again, so closing loses nothing.
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R115 · Confirming a receipt
+
+**Rule:** Confirm records the receipt as one payment, the way every payment is recorded (R21, R54): on the receipt's day, of its total paid, with the store as payee, the review's source, and one part per Tesoriere category whose lines add up to other than zero, in the order the lines first name them. The payment keeps the receipt id and every line with the category it was filed under, a line whose category adds up to zero too; the receipt id joins the Profile's recorded ids (R30), and the review's links, by name or by the user, its added categories and the store's source (R35) are kept. Confirm stays off while a row below holds.
+
+**Values:**
+
+| Confirm stays off while |
+|---|
+| the Profile is not the receipt Profile (R112) |
+| the receipt id is recorded already (R30) |
+| the receipt's currency is not the Profile's (R30, R47) |
+| a line of a Chatelaine category with no link is in no category (R32, R114) |
+| a line has no category, or one that does not exist |
+| the payment could not be saved: its parts do not meet R23, or its source does not exist |
+
+**Evidence:** A line whose category adds up to zero kept among the lines but given no part: builder, 2026-11-25 (R23 allows no zero part).
+
+**Acceptance:** A 16.50 receipt with Groceries lines of 1.89, 2.40 and 3.15 and Household lines of 6.90 and 2.16, from Savings at 1,000.00, records one payment of 16.50 with parts Groceries 7.44 and Household 9.06 and all five lines, records its receipt id, and leaves Savings at 983.50; a 0.00 line under Gifts adds no part and is kept among the lines. The same receipt from a Goal holding 10.00 carries R54's warning, and confirmed leaves the Goal at 0.00 and Savings at 993.50. A receipt id recorded once cannot be confirmed again.
+
+**Not:** A part of 0.00: R23 has no zero part. Building the payment apart from the payment path: a short Goal, a card whose charges are not logged (R109) or a deleted source would be handled twice, two ways.
+
+**Since:** 2026-11-25 · owner · agreed rewording
 
 ## 15. One payment, two sources
 
 ### D-R36 · Store links
 
-**Rule:** The first time a receipt from a store is paired with a bank row, Tesoriere remembers that store's name with the bank row's payee text. Later pairs for that store are suggested on the store link as well as the total and date.
+**Rule:** The first time a receipt from a store is paired with a bank row, Tesoriere remembers that store's name with the bank row's payee, less the dates, terminal ids and card words that change on every row (R120). Later suggestions for that store rank the bank rows that match the link first, and still offer after them any other row whose total and date meet R37.
 
 **Why:** A bank row's text rarely equals the store's name, so the store is linked once rather than compared.
 
-**Acceptance:** After pairing an Esselunga receipt with POS ESSELUNGA MI 0423, the next Esselunga receipt is suggested only with bank rows whose payee matches that link, when one exists.
+**Acceptance:** After pairing an Esselunga receipt with POS ESSELUNGA MI 0423, the next Esselunga receipt is suggested first with the bank rows whose payee matches that link, such as POS ESSELUNGA MI 0611, and then with any other row that meets R37.
 
-**Since:** 2026-11-24 · owner · agreed rewording
+**Since:** 2026-11-26 · owner · agreed rewording
+
+### D-R120 · The text a store link keeps
+
+**Rule:** A store link keeps the store's name, as the receipt file writes it, with the rule name (R108) of the first bank row the store is paired with, by suggestion or by hand; a later pair for the store leaves the link as it is. A bank row matches the link when its rule name equals the one kept, and a match only ranks the row first among the store's suggestions: no row is left out for not matching (R36). The link is found through the payment's payee, the store, so a payee edited after Confirm is not found by its store's link.
+
+**Why:** The rule name drops the terminal ids, dates and card words that differ on every row of one store (R108).
+
+**Acceptance:** Pairing an Esselunga receipt with `POS ESSELUNGA MI 0423` keeps `esselunga mi`; `POS ESSELUNGA MI 0611` matches it and is suggested before `POS ESSELUNGA TO 0611`, which does not match and is still suggested; a later Esselunga pair with `ESSELUNGA SPA` by hand keeps `esselunga mi`.
+
+**Not:** Moving the link to each new pair's row: one unusual row would rank first over every usual one. Hiding the rows that do not match: a store paid at a second branch would never be suggested.
+
+**Since:** 2026-11-25 · owner · agreed rewording
 
 ### D-R37 · Pairing rule
 
@@ -1795,27 +1952,223 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
-## 16. Edge cases
+### D-R118 · Suggesting a pair
+
+**Rule:** A receipt's payment and a bank row are suggested as a pair when the row is money out not recorded yet (R26), the payment holds a receipt, no bank keys and a total above zero, and their totals and days meet R37. In the import review such a row arrives `PAIR`, unticked, naming the payment, the pairs chosen across the whole statement by taking every possible row and payment in the order below and naming them together when both are free and naming them still lets as many rows as possible name a payment, each row and each payment once at most, and Confirm records nothing for a row that names a pair: only pairing it records it (R119), unless the user turns the suggestion down, after which the row names no pair, and a row the user pairs by hand names that payment from then on, its twins left as they are. A receipt opened for review is suggested in the same way with each payment recorded from a bank row that holds no receipt, read as that bank row, and its review notes the best one as a pair available, leaving Confirm on (R114).
+
+**Values:**
+
+| Taken first, in this order | Before |
+|---|---|
+| a row matching the store's link (R36, R120) | a row that does not |
+| equal totals | totals that differ within the tolerance (R37) |
+| the row dated closest to the receipt | rows dated further from it |
+| the row dated earlier, then the one the statement lists first | later rows |
+| the payment recorded first | payments recorded later |
+
+**Acceptance:** A 42.30 receipt recorded on 10 March and a statement row of -42.30 on 12 March: the row arrives `PAIR`, unticked, naming the receipt's payment, and the import's Confirm leaves one payment and Savings as it was, ticked or not; with the suggestion turned down and the row ticked under Groceries, Confirm records it as a second payment; the same row on 14 March arrives `READY`; +42.30 arrives `INCOMING`. A refund, or a payment that holds bank keys already, is never named. With rows of -42.30 on 11 and 12 March, only the 11 March row names it; with rows of -42.40 on 11 March and -42.30 on 12 March, the 12 March row does. Two 42.30 receipts of 10 March and rows of -42.30 on 11 and 12 March: the 11 March row names the receipt recorded first and the 12 March row the other. 42.30 receipts of 10 and 11 March with rows of -42.30 on 11 and 14 March: the 14 March row, which only the 11 March receipt meets, names it, and the 11 March row names the 10 March receipt. A 42.30 receipt of 10 March and a 42.50 receipt of 11 March with rows of -42.30 on 10 and 12 March and -42.50 on 13 March: the 10 March row names the 42.30 receipt, the 13 March row the 42.50 one, and the 12 March row arrives `READY`. A named payment removed while the review is open leaves its row unrecorded by that Confirm, and the next import of the statement offers the row `READY`. A receipt opened while a -42.30 payment recorded from a bank row on 12 March holds no receipt notes it as a pair available, and can still be confirmed. Two equal -4.50 rows and one 4.50 receipt, the suggestion turned down, the first row unticked and the second paired by hand and left ticked: Confirm records nothing more, one coffee in all.
+
+**Since:** 2026-11-26 · builder · own words
+
+### D-R119 · Recording a pair
+
+**Rule:** Pairing a receipt and a bank row, suggested or by hand (R40) and from either side, edits the payment the first one recorded, through the payment path (R54), into the one payment below. A difference other than zero (R39) must be filed under a category that exists before the pair can be recorded, and a part whose category does not exist goes under a category that exists given in its place, else the pairing is refused with `CATEGORY_MISSING`. A payment that already holds a receipt and bank keys, a refund, a row of money in and a row recorded already cannot be paired, a row being recorded already as R26 counts, among the rows of its import review that did not arrive `DUPLICATE`.
+
+**Values:**
+
+| Field | After pairing |
+|---|---|
+| total | the bank row's amount |
+| date | the receipt's day |
+| source | the receipt's: the payment's own when the receipt came first, the review's when the bank row did (R35); but the bank payment's own when the store has no source kept, or one that no longer exists, and the user left the review's source as it opened; the store then keeps the pair's source |
+| payee | the store |
+| parts | the receipt payment's own, a part under a category that does not exist taking the one given, when the receipt came first; one per category whose receipt lines, as filed in the review, add up to other than zero (R115) when the bank row did; and the difference part (R39) |
+| receipt id and lines | the receipt's; its id joins the recorded ids (R30) |
+| bank keys | the bank row's, also kept among the import's keys, so the row arrives `DUPLICATE` on a later import (R26) |
+| links, added categories and the store's source | kept as a receipt's Confirm keeps them (R115), when the receipt came second |
+| store link | made the first time the store pairs (R120) |
+| the import review still open | records nothing more for the row on its Confirm, ticked or not, and leaves it out of its figures, the row not having arrived `DUPLICATE`, each payment that took a row's keys since the review was built standing for one row only, so a second row with the same keys is still recorded; a ticked `DUPLICATE` row is recorded as R107 says |
+| spending | counts in the receipt's month, the payment's day, even when the bank row is dated in the next (R25) |
+
+**Acceptance:** A 42.30 receipt from Savings at 1,000.00, then its -42.30 row: one payment of 42.30 from Savings, dated the receipt's day, with the row's keys, Savings at 957.70, and the row `DUPLICATE` on the next import. A -42.30 row filed under Groceries from Savings, then a receipt of Groceries 30.00 and Household 12.30 confirmed with a card: one payment of 42.30 from the card with those two parts, the receipt's day and the row's keys, Savings back at 1,000.00 and the card 42.30 higher. A 42.10 receipt from a Goal holding 42.10, paired with a -42.30 row, warns as R54 says and takes 0.20 from Savings. A -42.30 row dated 14 March, 4 days after its receipt, ticked in the import review and paired by hand before Confirm, leaves one payment and Savings 42.30 lower once. A receipt of 30 March paired with its row of 2 April counts in March's spent. Two rows of -4.50 `BAR CENTRALE` on 11 March with no FITID and one 4.50 receipt under Food: the first pairs, and the second, ticked under Food, is recorded at Confirm, leaving two payments, Savings at 991.00 and Food's March spent at 9.00. Two 4.50 receipts from Bar Centrale on 10 March under Food and those two rows: both arrive `PAIR`, each pairs with one receipt, leaving two payments, Savings at 991.00 and Food at 9.00; so they do with FITIDs F1 and F2, the F1 row then recorded and the F2 row not. A -42.30 row charged to a card at 0.00 recorded first, then a receipt from a store with no source kept, paired as it opened: the payment stays on the card, the card at 42.30 and Savings unchanged; with Savings picked in the review it moves to Savings; for a store whose kept source is a Goal, to the Goal. A 42.30 receipt of Groceries 30.00 and Household 12.30, Household deleted since: its -42.30 row still arrives `PAIR`, the pair is refused with `CATEGORY_MISSING`, and with Fun given it pairs with Groceries 30.00 and Fun 12.30, the line still filed under Household.
+
+**Not:** Writing the pair outside the payment path: a short Goal, a card whose charges are not logged (R109) or a deleted source would be handled twice, two ways. Comparing every key: two equal purchases with FITIDs of their own share the synthetic key, and the second could never pair.
+
+**Since:** 2026-11-26 · owner · agreed rewording
+
+### D-R128 · Unpairing
+
+**Rule:** Unpairing a pair, a payment holding a receipt and bank keys, turns it back through the payment path (R54) into the receipt's payment alone, as below. Its bank keys leave the payment, and its row's keys the import's keys once, so its bank row arrives as new on the next import and can be recorded on its own (R26); its receipt id stays recorded (R30) and the store link stays (R36). Any other payment, or one that does not exist, is not unpaired and nothing changes; a part whose category does not exist goes under a category that exists given in its place, the lines keeping theirs, else the unpairing is refused with `CATEGORY_MISSING`.
+
+**Values:**
+
+| Field | After unpairing |
+|---|---|
+| total | the sum of the receipt lines' price paid |
+| parts | the pair's own, less the difference part, when they add up to the total, so a part moved by hand stays moved (R127); else one per category whose lines add up to other than zero, under the categories the lines are filed under (R115) |
+| date and source | unchanged; a short Goal or a deleted source as R54 says |
+| receipt id and lines | unchanged |
+| bank keys | none |
+
+**Evidence:** Owner, 2026-11-26.
+
+**Acceptance:** A 42.10 receipt from Savings at 1,000.00, paired by hand with a -42.30 row and its 0.20 filed under Fun, unpaired: one payment of 42.10 with the receipt's parts and no keys, Savings at 957.90 and Fun's spent back; the row then arrives `PAIR` again, and turned down and ticked it is recorded on its own, Savings at 915.60. Paired with row F1 while its twin F2 is recorded, then unpaired, F1 arrives as new and F2 as recorded. Unpairing a receipt payment with no bank keys changes nothing. A pair whose Fun part's category was deleted is refused with `CATEGORY_MISSING`, and with Household given it unpairs with that part under Household, its line still filed under Fun. A 4.50 receipt under Food, its payment moved by hand to Groceries, paired and unpaired: Groceries 4.50 and Food 0.00.
+
+**Not:** Dropping the store link: a link only ranks (R36).
+
+**Since:** 2026-11-26 · owner · agreed rewording
+
+## 16. The Trash
+
+### D-R121 · The Trash
+
+**Rule:** A delete happens at once and settles its money then, as its own rule says, and what it removed is kept in the Trash for 30 days with what a restore needs, as below; on the 30th day after the delete it goes for good, and Delete forever takes it sooner, neither moving any money. While in the Trash an item is out of the Profile: it sweeps nothing, reminds of nothing, counts towards no figure and is the source of no new payment. One notice is due for an item on the 20th day after its delete, and once given it is not due again; the engine names the items due a notice and the items to go, and how the notice reads is the design pass's (R16).
+
+**Values:**
+
+| Deleted | Kept with it |
+|---|---|
+| a Goal (R58) | the rows its delete wrote, and what each payment from it took from it |
+| a category (R123) | its category links (R42) |
+| a recurring expense (R66) | the Account linked to it, the rows its delete wrote, and what each payment charged to that Account took |
+| an Account (R87, R88) | its linked recurring expense, the rows its delete wrote, and what each payment charged to it took |
+| a pair of ledger rows (R53) | both rows |
+| an Account quick-add, undone (R111) | its rows |
+| a payment (R125) | the whole payment, and the row its removal wrote for a deleted source (R54) |
+| a Profile (R126) | everything it holds |
+
+**Evidence:** Sci-Fin's spec, section 3.6, and `engine/Trash.kt` at `2892110`; the quick-add, the payment, and the payments kept with a Goal or an Account: builder, 2026-11-25.
+
+**Acceptance:** An item deleted on 1 October 2026 is due its notice on 21 October and not on 20 October, and once given is not due again; it is kept on 30 October and goes on 31 October. A monthly expense in the Trash over two month crossings writes no sweep row.
+
+**Not:** Asking the money question again when an item goes for good: it was answered at the delete, so Delete forever and the 30th day have nothing left to settle.
+
+**Since:** 2026-11-25 · builder · own words
+
+### D-R122 · Restoring from the Trash
+
+**Rule:** Restore puts back what a delete removed as it was, ids, dates, parts, links and marks included, and undoes each row the delete wrote with a row of the opposite amount on the same key, dated the same day, filed under the same category with the same payoff and share marks (R51, R67), noted `Restored from the Trash`; so Savings, each Goal, each Account's balance and each month's spent figures are what they were before the delete, and both rows stay in the ledger. A restored recurring expense counts the month of the restore as swept, catching up no month it missed, and its due dates move on to that day (R61). Restore is refused with a code, changing nothing, in the cases below; an item whose id is in the Profile again is left as it is.
+
+**Values:**
+
+| Refused when | Code |
+|---|---|
+| a payment from the deleted Goal, or charged to the deleted Account, was since removed, moved to another source or changed in what it took from it, or a payment was since restored onto it, each of which wrote a row in its place (R54) | `WRITTEN_SINCE` |
+| a restored recurring expense or Account would file later rows under a category that no longer exists (R123), and no existing category is given to take its place | `CATEGORY_MISSING` |
+| another payment holds the restored payment's receipt id, or its bank row is held by more payments than at the delete (R107, R125) | `RECORDED_AGAIN` |
+| the rows of an undone quick-add move a Goal or an Account deleted since (R111) | `TARGET_DELETED` |
+| the rows of an undone quick-add take more from a Goal than it holds | `GOAL_SHORT` |
+| a payment restored as a pair cannot be paired as R119 says, such as with a difference filed under no category (R127) | `CANNOT_PAIR` |
+
+**Evidence:** Sci-Fin's spec, section 3.6, and `engine/Trash.kt` at `2892110`, whose restore rows were dated the day of the restore; the refusal for rows written since: owner, 2026-11-25; the restore's rows dated and filed as the delete's, and the other refusals: builder, 2026-11-25.
+
+**Acceptance:** With Savings at 1,000.00 and a Goal holding 300.00, deleting the Goal with its money returned on 14 September 2026 leaves 1,300.00; restored on 2 October it holds 300.00, Savings is 1,000.00, and a `goal:` row of +300.00 dated 14 September is noted `Restored from the Trash` beside the delete's -300.00. A semimonthly 300.00 expense under Rent created on 1 September from Savings of 2,000.00, deleted on 20 September with its 300.00 returned and restored on 2 October, leaves Savings at 1,400.00 and Rent's September spent at 600.00, and is marked swept for October. A card at 140.00 deleted and restored reads 140.00. A 30.00 payment from a deleted Goal, removed after the delete, refuses the Goal's restore with `WRITTEN_SINCE`; one whose parts were only filed again does not.
+
+**Not:** Dating the restore's rows on the day of the restore, as Sci-Fin: a return in September undone in October would lower September's spent and raise October's. Restoring over a row written since: the Goal or the Account would count that payment twice, in the row and in its own figure.
+
+**Since:** 2026-11-26 · owner · agreed rewording
+
+### D-R123 · Deleting a category
+
+**Rule:** Deleting a category removes it and the category links to it (R42), and the parts of payments and the ledger rows filed under it keep its id (R124). When a recurring expense or an Account names it, as an expense's category (R67), a finished expense's too, a card's payoff or fees category (R109, R110), a payoff category while the card's charges are logged too, or a Loan's own category (R89), the delete takes another existing category and moves each of them to it in the same step, their past rows staying where they were filed, so no stored field ever names a category that is gone; without one, or with one that does not exist, the delete is refused with a code and nothing changes. Restoring the category moves none of them back.
+
+**Values:**
+
+| Case | Code |
+|---|---|
+| no such category | `NO_SUCH_CATEGORY` |
+| the category given in its place does not exist, or is the one deleted | `REPLACEMENT_UNKNOWN` |
+| a recurring expense or an Account files under it and no category is given in its place | `REPLACEMENT_NEEDED` |
+
+**Evidence:** Sci-Fin's spec, section 4.3, and `engine/CategoryEditing.kt` at `2892110`, where no expense had a category; the move of recurring expenses: owner, 2026-11-25; the move of an Account's categories, the finished expenses and logged cards counted, and the codes: builder, 2026-11-25.
+
+**Acceptance:** Deleting Phone while a 60.00 monthly expense files under it is refused with `REPLACEMENT_NEEDED`; with Internet given, the expense files under Internet, and Phone's August spent stays 60.00 with its sweep row under Phone; restoring Phone leaves the expense under Internet. A card whose payoff or fees category is Phone, and a Loan whose own category is Phone, move to Internet in the same step. Deleting a category nothing files under needs no other category.
+
+**Not:** Leaving an expense under a category that is gone: every expense keeps an existing category (R67). Moving past rows: a past month's spent would shift on its own (R67).
+
+**Since:** 2026-11-25 · owner · agreed rewording
+
+### D-R124 · Spending under a deleted category
+
+**Rule:** A deleted category's spending keeps its id. While the category is in the Trash, Spending reads it as a slice of that category marked deleted, a code and not text, so it shows under the category's name; once the category leaves the Trash for good, as Uncategorised (R99); restored, as the category's own slice again. Which slice holds it never changes a month's total, in Spending or in Income vs Expenses (R101).
+
+**Acceptance:** With Fun at 40.00 and Groceries at 30.00 in September 2026, Fun deleted to the Trash gives a slice of Fun marked deleted at 40.00 and a total of 70.00; Fun gone for good gives Uncategorised at 40.00 and 70.00; Fun restored gives its own slice of 40.00 again.
+
+**Not:** Moving the parts to Uncategorised at the delete: a restore could not bring the name back, and the parts would no longer be as written.
+
+**Since:** 2026-11-25 · owner · agreed rewording
+
+### D-R125 · Deleting and restoring a payment
+
+**Rule:** Deleting a payment removes it through the payment path (R54), undoing what its source moved, and keeps it whole in the Trash, its parts, the share Savings paid, its receipt id and lines and its bank keys; its receipt id stays recorded (R41) and its bank keys stay among the import's keys, so neither the file nor the bank row arrives as new (R26, R30), also when a twin of its row is unpaired since (R128). Restoring it moves its source again as recorded, or as below when the source has changed since, unless it is restored as another payment's pair (R127). Its bank keys count as held again (R122) only when more other payments hold them than at its delete, a payment's keys and its own compared by FITID when both have one, else by the synthetic key, so a twin of one day recorded with it does not refuse it.
+
+**Values:**
+
+| Its source at the restore | Restoring it |
+|---|---|
+| as at the delete | moves it as recorded: the total, and for a Goal the same share from Savings |
+| a Goal holding less than its share | takes all the Goal holds and the rest from Savings, after a warning the user can dismiss, the share Savings paid growing by the rest (R54) |
+| a Goal or an Account deleted since the payment's delete, in the Trash or for good | moves as a payment from a deleted Goal or charged to a deleted Account does (R54), after a warning the user can dismiss: a `savings` row in the Goal's place, or an `acct:` row that keeps the Account's rows and payments adding up to zero |
+| deleted before the payment's delete and still gone | undoes the row the payment's delete wrote (R122), with no warning: Savings moves back as it was before the payment's delete |
+| deleted before the payment's delete and restored since | moves it as recorded, as at the delete, and leaves the row the payment's delete wrote, which the row of its earlier restore onto the deleted source cancels |
+
+**Evidence:** Builder, 2026-11-25, from R41 and R54; a source restored since: builder, 2026-11-26, after review of the receipts and pairs pull request.
+
+**Acceptance:** With Savings at 1,000.00, a 42.30 receipt payment from Savings deleted leaves 1,000.00, and restored leaves 957.70 with its parts, lines and keys. A 30.00 payment from a Goal holding 50.00 after it, deleted, leaves the Goal at 80.00; with 70.00 spent from the Goal since, restoring it warns and leaves the Goal at 0.00 and Savings 20.00 lower. Deleted, then its Goal deleted with 80.00 returned, restoring it warns and leaves Savings 30.00 lower with a `savings` row of -30.00 noted `Payment from a deleted goal`. With Savings at 900.00 and a Goal holding 100.00, a 30.00 payment from the Goal deleted, the Goal deleted with its money returned, the payment restored, deleted again, and the Goal restored, leaves Savings at 900.00 and the Goal at 100.00; restoring the payment then leaves Savings at 900.00 and the Goal at 70.00, with no warning. The same steps with a 40.00 payment charged to a card at 100.00 leave the card at 140.00. Of two -4.50 rows of one day recorded in one import, with FITIDs F1 and F2 or with none, one payment deleted is restored as it was; with no FITID, once the row is ticked as `DUPLICATE` and recorded again, its restore is refused with `RECORDED_AGAIN`. A payment in the Trash, edited, changes nothing. Of two such rows with no FITID, one payment deleted and the other paired with a receipt and unpaired, the deleted one's row stays recorded and only one of the two arrives as new on the next import; with FITIDs F1 and F2, F2's deleted, only F1's does.
+
+**Since:** 2026-11-26 · builder · own words
+
+### D-R127 · Restoring a payment as a pair
+
+**Rule:** A payment restored while a payment recorded since its delete, not one there already, would be its pair, as below, carries a notice naming that payment with the warnings the pair itself would carry (R54, R109), and may come back as that pair instead of on its own: the two are paired as R119 says, the side in the Profile completed by the side in the Trash, which does not come back on its own and whose delete's rows stay. A receipt side keeps the parts it held when deleted, less any difference part, the difference worked out again and filed under a category the user picks, by default the category of its own difference part when it held one and that category still exists; a part or line whose category is gone takes a category given in its place, else the restore is refused with `CATEGORY_MISSING`, and a pair R119 refuses is refused with `CANNOT_PAIR`. Without that choice the payment comes back on its own (R125), refused with `RECORDED_AGAIN` while another payment holds its receipt id or its bank keys hold again as R125 counts them (R122); when R119 asks whether a bank side's row is recorded, its twins, the payments holding its keys at its delete, each stand for one other row of its review, and a bank side with a FITID is told apart by it from the rows recorded with none.
+
+**Values:**
+
+| In the Trash | Recorded since, in the Profile | Named | Restored as the pair |
+|---|---|---|---|
+| a receipt payment holding no bank keys | a payment from a bank row holding no receipt, meeting it as R37 says | the best in R118's order | the bank row's payment takes the receipt's parts, day, source, store, id and lines, with the links kept (R119) |
+| a receipt payment holding bank keys | a payment holding one of its bank keys and no receipt, recorded from its row ticked as `DUPLICATE` (R107) | that payment | the same, the one row kept once among the import's keys (R26) |
+| a payment from a bank row holding no receipt | a receipt payment holding no bank keys, meeting it as R37 says, the payment read as its row's day, amount and text | the best in R118's order | the receipt payment takes the row's amount as its total, its keys and the difference part (R119) |
+
+**Evidence:** Builder, 2026-11-25, after review of Task 18 and of the receipts and pairs pull request: without it, the purchase would count twice.
+
+**Acceptance:** With Savings at 1,000.00, a 42.30 receipt of 10 March, Groceries 30.00 and Household 12.30, deleted, then its -42.30 row of 12 March recorded under Groceries, which leaves 957.70: restoring the receipt names that payment; on its own it leaves 915.40 and two payments, and as the pair one payment of 42.30 with Groceries 30.00 and Household 12.30, the receipt's id, lines and day and the row's keys, and Savings at 957.70. With a -42.50 row instead, the pair is refused with `CANNOT_PAIR` until the 0.20 difference is filed under a category. A 4.50 receipt filed under Food and moved by hand to Groceries, deleted and restored as its row's pair, keeps Groceries 4.50. A 4.50 bank payment of 11 March under Food deleted, then a 4.50 receipt of 10 March under Food recorded: restoring the bank payment names the receipt's payment, and as the pair leaves one payment of 4.50 with the row's keys, Savings at 995.50 and Food's March spent at 4.50. A paired 42.30 receipt payment deleted, then its row ticked as `DUPLICATE` and recorded under Groceries: restoring it on its own is refused with `RECORDED_AGAIN`, and as that payment's pair leaves one payment with the receipt and the keys, and Savings at 957.70. Of two -4.50 bank payments of 11 March under Food, with no FITID or with FITIDs F1 and F2, one deleted, then a 4.50 receipt of 10 March under Food recorded: the deleted one comes back as the receipt's pair, leaving two payments, Savings at 991.00 and Food at 9.00. A 42.30 receipt paired with a -42.50 row, its 0.20 under Fun, deleted, then its row recorded again under Groceries: restored as that payment's pair with no category picked, the 0.20 is under Fun again and Savings at 957.50; with Household picked, under Household; with Fun deleted since, it is refused with `CANNOT_PAIR` until one is picked. A -4.50 coffee recorded from a CSV, as a payment or a payoff, then an OFX of F1 and F2, F2 recorded and its payment deleted, then a 4.50 receipt recorded: F2 comes back as the receipt's pair. A 4.50 coffee paired with its row, deleted, its row ticked as `DUPLICATE` and recorded, then restored as that payment's pair: one payment and Savings at 995.50, and of a statement with two equal coffees that day one arrives as recorded and one as new; unpaired, the row arrives as new. Of two equal coffees of 11 March and one 4.50 receipt, the first row paired with the receipt and the second recorded as a payment of its own, Savings at 991.00: the receipt's payment deleted is offered no pair, is refused with `CANNOT_PAIR` as the other coffee's pair, and restored on its own leaves Savings at 991.00 and Food at 9.00; so is a receipt or a bank payment deleted while its unpaired match was there.
+
+**Since:** 2026-11-26 · builder · own words
+
+### D-R126 · A Profile in the Trash
+
+**Rule:** A deleted Profile is kept in the Trash whole: its Savings, settings, import memory, Goals, categories, recurring expenses, Accounts, ledger, shifts, payments and receipt settings. Deleting the Profile that holds the receipt folder frees the folder for another Profile (R112). Restored, it comes back as one more Profile, not opened, and holds the receipt folder again while no other Profile holds one; otherwise it comes back with no folder and keeps its recorded receipt ids, category links and stores' sources, so no recorded receipt is offered again if a folder is chosen there later.
+
+**Evidence:** Sci-Fin's spec, sections 3.6 and 8.3, at `2892110`; the payments, the receipt settings and the folder held by another Profile: builder, 2026-11-25.
+
+**Acceptance:** A Profile holding the receipt folder and a 42.30 receipt payment, deleted, frees the folder; restored while no other Profile holds one, it holds the folder again and equals the Profile as deleted. Restored after Profile B chose a folder, B keeps it, and the restored Profile holds no folder and keeps its recorded receipt id.
+
+**Since:** 2026-11-25 · builder · own words
+
+## 17. Edge cases
 
 ### D-R41 · Deleting a receipt payment
 
-**Rule:** A payment recorded from a receipt is deleted through the Trash like any other. Its receipt id stays recorded, so the file is not offered again; restoring it from the Trash restores the payment with its parts and pairs.
+**Rule:** A payment recorded from a receipt is deleted through the Trash like any other payment (R125). Its receipt id stays recorded, so the file is not offered again; restoring it brings back the payment with its parts, receipt lines, bank keys and pair, and the bank row of its pair stays recorded throughout (R26). When its bank row was recorded as a payment of its own while it was in the Trash, it may be restored as that payment's pair (R127), so the purchase counts once.
 
-**Evidence:** Not checked: the owner has not ruled on whether a deleted receipt should be offered again.
+**Evidence:** Not checked: the owner has not ruled on whether a deleted receipt should be offered again; the phase 1 plan keeps it recorded.
 
-**Acceptance:** Deleting a receipt payment and reopening the app does not offer the receipt file again; restoring it brings back its parts.
+**Acceptance:** Deleting a receipt payment leaves its file out of the next scan (R116). A 42.30 receipt split 30.00 Groceries and 12.30 Household and paired with its bank row, deleted and restored, has its two parts, its two lines and its bank keys again, and the row arrives `DUPLICATE` on an import before and after the restore.
 
-**Since:** 2026-11-24 · builder · own words
+**Since:** 2026-11-25 · builder · own words
 
 ### D-R42 · Deleting a linked category
 
-**Rule:** Deleting a Tesoriere category removes the category links to it; the next receipt with that Chatelaine category asks again, as for a new one (R32).
+**Rule:** Deleting a Tesoriere category removes the category links to it (R123); the next receipt with that Chatelaine category asks again, as for a new one (R32). Restoring the category brings back each removed link whose Chatelaine category has not been linked since.
 
-**Acceptance:** After deleting Pulizia, the next receipt with Chatelaine's Pulizia keeps Confirm off until its line is linked or added.
+**Evidence:** The restore of links: the phase 1 plan's provisional choice, 2026-11-24, as the Trash restores what a delete removed (R122).
 
-**Since:** 2026-11-24 · builder · own words
+**Acceptance:** After deleting Pulizia, the next receipt with Chatelaine's Pulizia keeps Confirm off until its line is linked or added. A Chatelaine category Pulizie linked to Pulizia, after Pulizia is deleted and restored, opens in Pulizia again with Confirm on.
 
-## 17. Test plan
+**Since:** 2026-11-25 · builder · own words
+
+## 18. Test plan
 
 ### D-R43 · Test plan
 
@@ -1836,7 +2189,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · builder · own words
 
-## 18. Rollout
+## 19. Rollout
 
 ### D-R44 · Rollout phases
 
@@ -1881,7 +2234,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R21 · Payment: A recorded receipt payment holds every receipt line; a paired payment holds both its `receiptId` and its `bankKeys`; a recurring expense's sweep records no payment. With Savings at 1,000.00 and a 40.00 payment under Fun, a 15.00 refund from Savings under Fun leaves Savings at 975.00 and Fun's spent for the month at 25.00, and logs no ledger row and no income.
 - R22 · Source and parts are separate: A EUR 40 receipt charged to a card adds its parts to their categories' spent figures and EUR 40 to the card's balance, and moves nothing in Savings.
 - R54 · What a payment's source moves: A 42.30 payment from Savings lowers Savings by 42.30; a 30.00 payment from a Goal holding 50.00 leaves it 20.00 and Savings unchanged, and one of 60.00, after a warning, leaves it 0.00 and Savings 10.00 lower; removed, the Goal holds 50.00 and Savings is as it was; edited to 55.00 it takes 5.00 from Savings, and to 40.00 none, leaving the Goal 10.00; a 40.00 payment charged to a card with a 0.00 balance leaves the balance at 40.00, and a 15.00 refund to it then leaves 25.00; a 15.00 refund into a Goal holding 50.00 leaves it 65.00. With Savings at 1,000.00: 100.00 into a Goal, a 30.00 payment from it, the Goal deleted with its 70.00 returned leaves 970.00; removing the payment then gives 1,000.00 with a `savings` row of +30.00, re-filing its parts leaves 970.00 and logs nothing, and lowering its total to 25.00 gives 975.00 with a row of +5.00; after each, the movements of Savings add up to Savings. A 40.00 payment charged to a card that is deleted since carries a warning, can be re-filed into two parts or removed with Savings unchanged, and a new payment charged to that card cannot be saved. A 40.00 payment charged to a card at 0.00 that is deleted since, removed, logs an `acct:` row of +40.00 for that card; moved to a second card instead, it raises that card to 40.00 and logs the same row; after each, Savings vs Owed's point for the month equals its figure of the day (R100).
-- R23 · Parts add up: A EUR 42.30 payment with parts of EUR 30.00 and EUR 12.00 shows EUR 0.30 left and cannot be saved; with a third part of EUR 0.30 it can. A EUR -15.00 refund with parts of EUR -20.00 and EUR 5.00 cannot be saved, and with one part of EUR -15.00 it can; a total of EUR 0.00 cannot be saved. A EUR 42.10 payment with item parts of EUR 30.00 and EUR 12.30 and a difference part of EUR -0.20 can be saved; the same EUR -0.20 as an item part, or two difference parts, cannot.
+- R23 · Parts add up: A EUR 42.30 payment with parts of EUR 30.00 and EUR 12.00 shows EUR 0.30 left and cannot be saved; with a third part of EUR 0.30 it can. A EUR -15.00 refund with parts of EUR -20.00 and EUR 5.00 cannot be saved, and with one part of EUR -15.00 it can; a total of EUR 0.00 cannot be saved. A EUR 42.10 pair with item parts of EUR 30.00 and EUR 12.30 and a difference part of EUR -0.20 can be saved, and so can an edit of it that moves its item parts; the same EUR -0.20 as an item part, two difference parts, or a difference part entered by hand, cannot.
 - R24 · Any payment can be split: A bank row and a hand-logged payment can each be saved with two parts in two categories.
 - R25 · Spent is derived: Re-filing a payment's parts changes the spent figures of the categories involved, for the payment's month, and writes no correction row. A 60.00 sweep filed under Phone and dated in March adds 60.00 to Phone's spent for March, and no payment exists for it.
 - R55 · Goal calculator: A 1,200.00 goal with 400.00 saved and a target date six calendar months ahead needs 133.34 a month; the same goal at 150.00 a month takes 6 months.
@@ -1935,29 +2288,46 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R100 · Savings vs Owed: Read on 14 September 2026, with 1,000.00 into Savings on 10 July, a card opened at 640.00 on 1 September and a 40.00 payment charged to it on 5 September, it reads 320.00; a three-month trend reads 1,000.00 for July and August and 320.00 for September.
 - R101 · Income vs Expenses: With Income on, 1,450.00 of income, 200.00 into a Goal and a 30.00 payment from Savings in September 2026 read 1,450.00 in and 30.00 out; an 80.00 payment from the Goal makes 110.00 out; a 40.00 payment charged to a card makes 150.00; paying 60.00 off the card from Savings leaves 150.00, and a 15.00 refund to Savings makes 135.00 out with 1,450.00 still in. A month with a 100.00 sweep and nothing else reads 100.00 out, and one with 40.00 charged to a card and the card's 40.00 payment swept, and nothing else, reads 40.00 out.
 - R102 · Overtime calculator: 22.00 an hour for 10 hours is 220.00 a month and 2,640.00 a year; for 0.5 hours, 11.00 and 132.00; for -3 hours, 0.00 and 0.00. A month's pay is 3,200.00 from 3,200.00 paid monthly or 1,600.00 paid twice a month, and 2,600.00 from 1,200.00 every two weeks or 600.00 weekly. Salaried at 3,200.00 a month over 160 hours pre-fills 20.00; over 0 hours, nothing; with Income off or a pay of 0.00, nothing. Hourly at 20.00 pre-fills 20.00 and has no month's pay.
-- R26 · Statement import: Importing the same OFX statement twice records nothing the second time; importing a CSV export of the same period also records nothing; a payee filed under a category once is pre-filled on the next statement. A row of -12.40 on 2026-03-03 described `POS MERCATO VERDE 0412` has the synthetic key `syn:2026-03-03|-12.40|pos mercato verde 0412`, and so does the same row with two spaces, a tab or a non-breaking space between its words, or a space before them; after the OFX row is recorded, that CSV row arrives as already recorded.
+- R26 · Statement import: Importing the same OFX statement twice records nothing the second time; importing a CSV export of the same period also records nothing; a payee filed under a category once is pre-filled on the next statement. A row of -12.40 on 2026-03-03 described `POS MERCATO VERDE 0412` has the synthetic key `syn:2026-03-03|-12.40|pos mercato verde 0412`, and so does the same row with two spaces, a tab or a non-breaking space between its words, or a space before them; after the OFX row is recorded, that CSV row arrives as already recorded. With a -4.50 row F1 recorded, a row F2 of the same day, amount and text arrives as new; of two such rows with no FITID, one recorded, one arrives as recorded and one as new; a row of money into Savings, once recorded, arrives as recorded.
 - R103 · Statement formats: An OFX block posted `20260303120000` of `-12.40` reads as 2026-03-03 and -12.40; a block with a memo and no name takes the memo; a block of `0.00` gives no row. A semicolon CSV with the quoted description `POS BAR` and `LA PIAZZETTA` on two lines gives one row described `POS BAR LA PIAZZETTA`.
 - R104 · Statement amounts: Each text in the table reads as its figure in cents; the parser holds no floating-point value.
 - R105 · CSV columns by header: Headers `Booking date,Value date,Description,Amount` with `01/09/2026,02/09/2026,POS CAFFE DEL MOLO,-3.50` give one row of -3.50 on 2026-09-01, and headers `Booking date,Value date,Description,Debit,Credit` with the same days, a debit of `3.50` and an empty credit give the same row. Headers `Value date,Booking date,Description,Amount` with `02/09/2026,01/09/2026` give 2026-09-01 too. Headers `Data contabile;Data valuta;Causale;Descrizione operazione;Dare;Avere` with `03/03/2026;05/03/2026;PAGAMENTO POS;MERCATO VERDE;1.234,56;` give one row of -1,234.56 on 2026-03-03 described `MERCATO VERDE`, and an Avere of `1.450,00` gives 1,450.00. Headers `Data;Descrizione;Addebiti;Accrediti` with `03/03/2026;MERCATO VERDE;12,40;` give -12.40. Headers `Date,Credit card number,Description,Debit,Credit` with a debit of `800.00` and a credit of `12.00` give -800.00 and 12.00. Headers `Buchungsdatum;Verwendungszweck;Umsatzbetrag` with `01.09.2026;MIETE WOHNUNG;-800,00` give one row of -800.00. Headers `a;b;c` give no rows.
 - R106 · Statement dates: Each text in the table reads as its day; `05/03/2026` in a CSV statement is 5 March.
-- R107 · The import review: With Savings at 1,000.00, a recurring expense named Rent and the March OFX statement: `AFFITTO CASA RENT` -950.00 arrives `RECURRING` and unticked, `STIPENDIO MARZO` 1,450.00 `INCOMING`; filing -12.40 under Groceries, splitting -42.30 into Pharmacy 30.00 and Household 12.30, and paying off a card at 300.00 with -60.00 names 4 rows, 114.70 out and 1,450.00 in, and leaves Savings at 2,335.30 and the card at 240.00. The same 1,450.00 sent on into a Goal holding 110.00 leaves the Goal at 1,560.00 and Savings at 885.30, with a `savings` row of +1,450.00 and a `goal:` row of +1,450.00 dated 7 March; a Goal deleted before Confirm leaves it in Savings. Rows of -14.00 on 7 March and -100.00 on 8 March, both from a Goal holding 110.00, give the later one a warning, and confirmed leave the Goal at 0.00 and Savings 4.00 lower; the -100.00 alone leaves the Goal at 10.00. A -60.00 row paying off a card at 300.00 that is linked to its fixed payment (R93) leaves the card at 240.00 and Savings unchanged by it, and with Savings picked for the row, 60.00 lower. The -60.00 payoff of the card at 300.00 taken from a Goal holding 110.00 leaves the card at 240.00, the Goal at 50.00 and Savings unchanged by it; from a Goal holding 50.00, Confirm stays off. With a 29.90 monthly expense named Telefono due the 10th, `TIM S.P.A.` -29.90 on 12 March arrives `RECURRING` and unticked, and so does -29.90 on 10 March after the swept expense was edited to 34.90 with the difference declined; -29.90 on 20 March arrives `READY`, and so does a card's 60.00 fixed payment's bank row on its due date, and `ORBITA CARD PAYMENT 0412`, whose words hold the name of that fixed payment, Orbita card payment. With Telefono first due 10 March 2026, `TELEFONO ABBONAMENTO` -12.00 on 7 March and `TIM S.P.A.` -29.90 on 10 February arrive `READY`, and the first on 10 March arrives `RECURRING`; with Telefono first due 5 March but created on 14 March, `TELEFONO ABBONAMENTO` on 10 March and `TIM S.P.A.` -29.90 on 5 March arrive `READY`, and the first on 14 March `RECURRING`. Telefono created on 1 March 2026, first due 10 March, swept that day and on 15 March moved to fall due on 12 April, with the difference declined, still finds on 16 March `TELEFONO ABBONAMENTO` -29.90 on 10 March and `TIM S.P.A.` -29.90 on 11 March, both `RECURRING`. A yearly 1,200.00 Assicurazione auto created on 14 September 2026, first due 15 July 2027, with shares of 120.00 swept on 1 October and 1 November, leaves `ASSICURAZIONE AUTO RCA` -45.00 on 12 November and `BONIFICO` -120.00 on 2 October `READY`. A Loan with no category of its own, a -500.00 row of 1 March charged to it and a -100.00 payoff of it from Savings on 20 March, which the review lists first: Confirm is on, the charge is recorded first, and the payoff counts as a transfer, in no category (R89). 1,450.00 sent into a Goal holding 110.00 on 7 March pays a -200.00 row from that Goal on 8 March with no warning and a -300.00 payoff of the card from it on 9 March, leaving the Goal at 1,060.00. `RIMBORSO CALZATURE ORSA` +25.00 on 20 March filed as a refund under Household records a payment of -25.00 with its keys, leaves Savings 25.00 higher and Household's March spent 25.00 lower, and arrives `DUPLICATE` on the next import; filed as a refund to the card at 300.00, it leaves the card at 275.00.
+- R107 · The import review: With Savings at 1,000.00, a recurring expense named Rent and the March OFX statement: `AFFITTO CASA RENT` -950.00 arrives `RECURRING` and unticked, `STIPENDIO MARZO` 1,450.00 `INCOMING`; filing -12.40 under Groceries, splitting -42.30 into Pharmacy 30.00 and Household 12.30, and paying off a card at 300.00 with -60.00 names 4 rows, 114.70 out and 1,450.00 in, and leaves Savings at 2,335.30 and the card at 240.00. The same 1,450.00 sent on into a Goal holding 110.00 leaves the Goal at 1,560.00 and Savings at 885.30, with a `savings` row of +1,450.00 and a `goal:` row of +1,450.00 dated 7 March; a Goal deleted before Confirm leaves it in Savings. Rows of -14.00 on 7 March and -100.00 on 8 March, both from a Goal holding 110.00, give the later one a warning, and confirmed leave the Goal at 0.00 and Savings 4.00 lower; the -100.00 alone leaves the Goal at 10.00. A -60.00 row paying off a card at 300.00 that is linked to its fixed payment (R93) leaves the card at 240.00 and Savings unchanged by it, and with Savings picked for the row, 60.00 lower. The -60.00 payoff of the card at 300.00 taken from a Goal holding 110.00 leaves the card at 240.00, the Goal at 50.00 and Savings unchanged by it; from a Goal holding 50.00, Confirm stays off. With a 29.90 monthly expense named Telefono due the 10th, `TIM S.P.A.` -29.90 on 12 March arrives `RECURRING` and unticked, and so does -29.90 on 10 March after the swept expense was edited to 34.90 with the difference declined; -29.90 on 20 March arrives `READY`, and so does a card's 60.00 fixed payment's bank row on its due date, and `ORBITA CARD PAYMENT 0412`, whose words hold the name of that fixed payment, Orbita card payment. With Telefono first due 10 March 2026, `TELEFONO ABBONAMENTO` -12.00 on 7 March and `TIM S.P.A.` -29.90 on 10 February arrive `READY`, and the first on 10 March arrives `RECURRING`; with Telefono first due 5 March but created on 14 March, `TELEFONO ABBONAMENTO` on 10 March and `TIM S.P.A.` -29.90 on 5 March arrive `READY`, and the first on 14 March `RECURRING`. Telefono created on 1 March 2026, first due 10 March, swept that day and on 15 March moved to fall due on 12 April, with the difference declined, still finds on 16 March `TELEFONO ABBONAMENTO` -29.90 on 10 March and `TIM S.P.A.` -29.90 on 11 March, both `RECURRING`. A yearly 1,200.00 Assicurazione auto created on 14 September 2026, first due 15 July 2027, with shares of 120.00 swept on 1 October and 1 November, leaves `ASSICURAZIONE AUTO RCA` -45.00 on 12 November and `BONIFICO` -120.00 on 2 October `READY`. A Loan with no category of its own, a -500.00 row of 1 March charged to it and a -100.00 payoff of it from Savings on 20 March, which the review lists first: Confirm is on, the charge is recorded first, and the payoff counts as a transfer, in no category (R89). 1,450.00 sent into a Goal holding 110.00 on 7 March pays a -200.00 row from that Goal on 8 March with no warning and a -300.00 payoff of the card from it on 9 March, leaving the Goal at 1,060.00. `RIMBORSO CALZATURE ORSA` +25.00 on 20 March filed as a refund under Household records a payment of -25.00 with its keys, leaves Savings 25.00 higher and Household's March spent 25.00 lower, and arrives `DUPLICATE` on the next import; filed as a refund to the card at 300.00, it leaves the card at 275.00. Two reviews open on one +100.00 row, or one -50.00 payoff of the card, both confirmed, record it once.
 - R108 · Payee rules: `POS MERCATO VERDE 0412` filed under Groceries in March arrives in April's review with one part of 18.75 in Groceries, from Savings; `FARMACIA SAN LORENZO` split into Pharmacy and Household teaches no rule; the payee of `POS*MERCATO-VERDE  0412` is `pos mercato verde 0412`. `POS 03/03 MERCATO VERDE 0412` and `PAGAMENTO POS 12/03/2026 ORE 10:22 MERCATO VERDE CARTA ****1234` both have the rule name `mercato verde`, and the first filed under Groceries pre-fills the second; `POS 0412` keeps the rule name `pos 0412`. A rule kept under the payee `pos mercato verde 0412` still pre-fills `POS MERCATO VERDE 0412`.
 - R27 · The receipt contract: The receipt parser's tests cite Chatelaine's rule 123 field by field; no Tesoriere code opens the receipt folder for writing.
 - R28 · Receipt folder: With the folder set in Profile A, receipts are reviewed and recorded only in Profile A; Profile B offers no receipt folder while A has one.
+- R112 · The receipt Profile: With the folder chosen in Profile A, Profile B is offered no folder and choosing one there is refused; a receipt opened for review in B cannot be confirmed, and the same receipt in A records one payment in A and none in B.
 - R29 · Picking up receipts: With the default, opening the app with three new files offers three receipts and runs no background work; with the daily check on, three new files give one notification that day; no receipt is recorded before its Confirm.
 - R30 · Receipt files Tesoriere cannot take: One file per row, put in the receipt folder, is listed with its reason (or, for a recorded id, not at all) and changes no figure.
+- R116 · Scanning the receipt folder: Three new files give three receipts ready, a count of 3, and the Profile unchanged; a file whose receipt id is recorded is not listed; a format-2 file is refused naming 2; a USD file in a EUR Profile is refused naming USD and EUR; a file that is not JSON is refused as unreadable; two files holding one receipt id give one receipt; a file named `chatelaine-receipt-rc-9.part` is not read. Each leaves the Profile unchanged.
+- R117 · Reading a receipt file: The example file of Chatelaine's spec, rule 123, reads as a receipt of 10.99 at Supermarket A on 2026-11-24 in EUR with three lines, the batteries with no pack. The same file with `format` 2 and a key of its own gives newer format 2, and so it does with no `lines`; with `format` 99999999999 it gives newer format 2,147,483,647. With any one key of rule 123 other than `pack` taken out, with `totalPaid` 11.00, 0.00 or `"1099"`, a `quantity` of 1.5 or 0, a line of -1.00 among lines that add up to the total, or a blank `store`, it is unreadable; so is a file of 3,000 nested arrays, and one over 1 MiB. With a key `note` added it reads as before. A `pack` of `""` reads as no pack, and `currency` `eur` reads as `EUR`. A format-2 file over 1 MiB is unreadable, not a newer format. With `totalPaid` 1,000,000,000.00 and lines adding up to it, it reads; with 1,000,000,000.01, it is unreadable.
 - R31 · Receipt review: A receipt of five lines in two categories records one payment of the receipt's total with two parts; moving one line to a third category gives three parts and changes no category link; closing the review leaves no payment.
-- R32 · Category links: A receipt with category Pulizia links to Tesoriere's pulizia; a later receipt with the same id named Pulizie stays linked and shows the names-differ note; a new category with no equal name keeps Confirm off until it is added or linked.
-- R33 · Closing a review: Adding a category in a review and closing it shows the warning; dismissing it returns to the review with the change intact; closing anyway leaves no new category and no new link.
+- R32 · Category links: A receipt with category Pulizia links to Tesoriere's pulizia; a later receipt with the same id named Pulizie stays linked and shows the names-differ note; a new category with no equal name keeps Confirm off until it is added or linked, or until each of its lines is moved by hand to a Tesoriere category, after which the next receipt with it asks again.
+- R33 · Closing a review: Adding a category in a review and closing it shows the warning; dismissing it returns to the review with the change intact; closing anyway leaves no new category and no new link. Moving one line, or changing the source, and closing shows the same warning.
 - R34 · Changing a link: After relinking Snack from Eating out to Groceries, last month's Eating out spent figure is unchanged and the next receipt's Snack lines go to Groceries.
-- R35 · A receipt's source: The first receipt from a store shows Savings; after it is confirmed with a card as source, the next receipt from that store shows the card.
-- R36 · Store links: After pairing an Esselunga receipt with POS ESSELUNGA MI 0423, the next Esselunga receipt is suggested only with bank rows whose payee matches that link, when one exists.
+- R35 · A receipt's source: The first receipt from a store shows Savings; after it is confirmed with a card as source, the next receipt from that store shows the card. A -42.30 row charged to a card recorded first, then a receipt from a store with no source kept, paired with it as it opened, leaves the payment on the card.
+- R113 · Opening a receipt review: With Tesoriere categories Groceries and pulizia, a first receipt with lines under Chatelaine's Groceries and Pulizia opens them in Groceries and pulizia, from Savings, and a line under Garden in no category. A store last confirmed with a card opens with the card, and with Savings once the card is deleted.
+- R114 · Answering a receipt review: A line under Garden, with no Garden in Tesoriere, is noted unlinked; linked to Household it is filed under Household with a rename-in-Chatelaine note; added instead, it is filed under a new category named Garden with 0.00 planned, and the review holds changes. A Garden line moved to Fun before the answer stays under Fun. Snack, opened under Eating out by its link and linked in the review to Groceries, files its lines under Groceries. A review whose categories all link by name holds no changes until a line is moved or the source changed, and moving a line changes no link; a line moved to Fun and back to Groceries, where it opened, leaves no change, and a later link of its Chatelaine category files it again.
+- R115 · Confirming a receipt: A 16.50 receipt with Groceries lines of 1.89, 2.40 and 3.15 and Household lines of 6.90 and 2.16, from Savings at 1,000.00, records one payment of 16.50 with parts Groceries 7.44 and Household 9.06 and all five lines, records its receipt id, and leaves Savings at 983.50; a 0.00 line under Gifts adds no part and is kept among the lines. The same receipt from a Goal holding 10.00 carries R54's warning, and confirmed leaves the Goal at 0.00 and Savings at 993.50. A receipt id recorded once cannot be confirmed again.
+- R36 · Store links: After pairing an Esselunga receipt with POS ESSELUNGA MI 0423, the next Esselunga receipt is suggested first with the bank rows whose payee matches that link, such as POS ESSELUNGA MI 0611, and then with any other row that meets R37.
+- R120 · The text a store link keeps: Pairing an Esselunga receipt with `POS ESSELUNGA MI 0423` keeps `esselunga mi`; `POS ESSELUNGA MI 0611` matches it and is suggested before `POS ESSELUNGA TO 0611`, which does not match and is still suggested; a later Esselunga pair with `ESSELUNGA SPA` by hand keeps `esselunga mi`.
 - R37 · Pairing rule: Each row of the table, as a receipt and a bank row, gives the suggestion its row says; no pair is recorded without the user's confirm.
 - R38 · Whichever arrives first: Recording a EUR 42.30 receipt and then importing its bank row leaves one payment of EUR 42.30; importing the bank row first under Groceries and then its receipt with Groceries 30.00 and Household 12.30 leaves one payment with those two parts.
 - R39 · Difference part: A EUR 42.10 receipt paired with a EUR 42.30 bank row records a EUR 42.30 payment with a EUR 0.20 difference part in the category the user chose, and the pair's confirm is off until it is chosen. A EUR 42.30 receipt paired with a EUR 42.10 bank row records a EUR 42.10 payment with a EUR -0.20 difference part.
 - R40 · Pairing by hand: A EUR 40.00 receipt and a EUR 41.20 bank row, not suggested, can be paired by hand into one EUR 41.20 payment with a EUR 1.20 part the user files.
-- R41 · Deleting a receipt payment: Deleting a receipt payment and reopening the app does not offer the receipt file again; restoring it brings back its parts.
-- R42 · Deleting a linked category: After deleting Pulizia, the next receipt with Chatelaine's Pulizia keeps Confirm off until its line is linked or added.
+- R118 · Suggesting a pair: A 42.30 receipt recorded on 10 March and a statement row of -42.30 on 12 March: the row arrives `PAIR`, unticked, naming the receipt's payment, and the import's Confirm leaves one payment and Savings as it was, ticked or not; with the suggestion turned down and the row ticked under Groceries, Confirm records it as a second payment; the same row on 14 March arrives `READY`; +42.30 arrives `INCOMING`. A refund, or a payment that holds bank keys already, is never named. With rows of -42.30 on 11 and 12 March, only the 11 March row names it; with rows of -42.40 on 11 March and -42.30 on 12 March, the 12 March row does. Two 42.30 receipts of 10 March and rows of -42.30 on 11 and 12 March: the 11 March row names the receipt recorded first and the 12 March row the other. 42.30 receipts of 10 and 11 March with rows of -42.30 on 11 and 14 March: the 14 March row, which only the 11 March receipt meets, names it, and the 11 March row names the 10 March receipt. A 42.30 receipt of 10 March and a 42.50 receipt of 11 March with rows of -42.30 on 10 and 12 March and -42.50 on 13 March: the 10 March row names the 42.30 receipt, the 13 March row the 42.50 one, and the 12 March row arrives `READY`. A named payment removed while the review is open leaves its row unrecorded by that Confirm, and the next import of the statement offers the row `READY`. A receipt opened while a -42.30 payment recorded from a bank row on 12 March holds no receipt notes it as a pair available, and can still be confirmed. Two equal -4.50 rows and one 4.50 receipt, the suggestion turned down, the first row unticked and the second paired by hand and left ticked: Confirm records nothing more, one coffee in all.
+- R119 · Recording a pair: A 42.30 receipt from Savings at 1,000.00, then its -42.30 row: one payment of 42.30 from Savings, dated the receipt's day, with the row's keys, Savings at 957.70, and the row `DUPLICATE` on the next import. A -42.30 row filed under Groceries from Savings, then a receipt of Groceries 30.00 and Household 12.30 confirmed with a card: one payment of 42.30 from the card with those two parts, the receipt's day and the row's keys, Savings back at 1,000.00 and the card 42.30 higher. A 42.10 receipt from a Goal holding 42.10, paired with a -42.30 row, warns as R54 says and takes 0.20 from Savings. A -42.30 row dated 14 March, 4 days after its receipt, ticked in the import review and paired by hand before Confirm, leaves one payment and Savings 42.30 lower once. A receipt of 30 March paired with its row of 2 April counts in March's spent. Two rows of -4.50 `BAR CENTRALE` on 11 March with no FITID and one 4.50 receipt under Food: the first pairs, and the second, ticked under Food, is recorded at Confirm, leaving two payments, Savings at 991.00 and Food's March spent at 9.00. Two 4.50 receipts from Bar Centrale on 10 March under Food and those two rows: both arrive `PAIR`, each pairs with one receipt, leaving two payments, Savings at 991.00 and Food at 9.00; so they do with FITIDs F1 and F2, the F1 row then recorded and the F2 row not. A -42.30 row charged to a card at 0.00 recorded first, then a receipt from a store with no source kept, paired as it opened: the payment stays on the card, the card at 42.30 and Savings unchanged; with Savings picked in the review it moves to Savings; for a store whose kept source is a Goal, to the Goal. A 42.30 receipt of Groceries 30.00 and Household 12.30, Household deleted since: its -42.30 row still arrives `PAIR`, the pair is refused with `CATEGORY_MISSING`, and with Fun given it pairs with Groceries 30.00 and Fun 12.30, the line still filed under Household.
+- R128 · Unpairing: A 42.10 receipt from Savings at 1,000.00, paired by hand with a -42.30 row and its 0.20 filed under Fun, unpaired: one payment of 42.10 with the receipt's parts and no keys, Savings at 957.90 and Fun's spent back; the row then arrives `PAIR` again, and turned down and ticked it is recorded on its own, Savings at 915.60. Paired with row F1 while its twin F2 is recorded, then unpaired, F1 arrives as new and F2 as recorded. Unpairing a receipt payment with no bank keys changes nothing. A pair whose Fun part's category was deleted is refused with `CATEGORY_MISSING`, and with Household given it unpairs with that part under Household, its line still filed under Fun. A 4.50 receipt under Food, its payment moved by hand to Groceries, paired and unpaired: Groceries 4.50 and Food 0.00.
+- R121 · The Trash: An item deleted on 1 October 2026 is due its notice on 21 October and not on 20 October, and once given is not due again; it is kept on 30 October and goes on 31 October. A monthly expense in the Trash over two month crossings writes no sweep row.
+- R122 · Restoring from the Trash: With Savings at 1,000.00 and a Goal holding 300.00, deleting the Goal with its money returned on 14 September 2026 leaves 1,300.00; restored on 2 October it holds 300.00, Savings is 1,000.00, and a `goal:` row of +300.00 dated 14 September is noted `Restored from the Trash` beside the delete's -300.00. A semimonthly 300.00 expense under Rent created on 1 September from Savings of 2,000.00, deleted on 20 September with its 300.00 returned and restored on 2 October, leaves Savings at 1,400.00 and Rent's September spent at 600.00, and is marked swept for October. A card at 140.00 deleted and restored reads 140.00. A 30.00 payment from a deleted Goal, removed after the delete, refuses the Goal's restore with `WRITTEN_SINCE`; one whose parts were only filed again does not.
+- R123 · Deleting a category: Deleting Phone while a 60.00 monthly expense files under it is refused with `REPLACEMENT_NEEDED`; with Internet given, the expense files under Internet, and Phone's August spent stays 60.00 with its sweep row under Phone; restoring Phone leaves the expense under Internet. A card whose payoff or fees category is Phone, and a Loan whose own category is Phone, move to Internet in the same step. Deleting a category nothing files under needs no other category.
+- R124 · Spending under a deleted category: With Fun at 40.00 and Groceries at 30.00 in September 2026, Fun deleted to the Trash gives a slice of Fun marked deleted at 40.00 and a total of 70.00; Fun gone for good gives Uncategorised at 40.00 and 70.00; Fun restored gives its own slice of 40.00 again.
+- R125 · Deleting and restoring a payment: With Savings at 1,000.00, a 42.30 receipt payment from Savings deleted leaves 1,000.00, and restored leaves 957.70 with its parts, lines and keys. A 30.00 payment from a Goal holding 50.00 after it, deleted, leaves the Goal at 80.00; with 70.00 spent from the Goal since, restoring it warns and leaves the Goal at 0.00 and Savings 20.00 lower. Deleted, then its Goal deleted with 80.00 returned, restoring it warns and leaves Savings 30.00 lower with a `savings` row of -30.00 noted `Payment from a deleted goal`. With Savings at 900.00 and a Goal holding 100.00, a 30.00 payment from the Goal deleted, the Goal deleted with its money returned, the payment restored, deleted again, and the Goal restored, leaves Savings at 900.00 and the Goal at 100.00; restoring the payment then leaves Savings at 900.00 and the Goal at 70.00, with no warning. The same steps with a 40.00 payment charged to a card at 100.00 leave the card at 140.00. Of two -4.50 rows of one day recorded in one import, with FITIDs F1 and F2 or with none, one payment deleted is restored as it was; with no FITID, once the row is ticked as `DUPLICATE` and recorded again, its restore is refused with `RECORDED_AGAIN`. A payment in the Trash, edited, changes nothing. Of two such rows with no FITID, one payment deleted and the other paired with a receipt and unpaired, the deleted one's row stays recorded and only one of the two arrives as new on the next import; with FITIDs F1 and F2, F2's deleted, only F1's does.
+- R127 · Restoring a payment as a pair: With Savings at 1,000.00, a 42.30 receipt of 10 March, Groceries 30.00 and Household 12.30, deleted, then its -42.30 row of 12 March recorded under Groceries, which leaves 957.70: restoring the receipt names that payment; on its own it leaves 915.40 and two payments, and as the pair one payment of 42.30 with Groceries 30.00 and Household 12.30, the receipt's id, lines and day and the row's keys, and Savings at 957.70. With a -42.50 row instead, the pair is refused with `CANNOT_PAIR` until the 0.20 difference is filed under a category. A 4.50 receipt filed under Food and moved by hand to Groceries, deleted and restored as its row's pair, keeps Groceries 4.50. A 4.50 bank payment of 11 March under Food deleted, then a 4.50 receipt of 10 March under Food recorded: restoring the bank payment names the receipt's payment, and as the pair leaves one payment of 4.50 with the row's keys, Savings at 995.50 and Food's March spent at 4.50. A paired 42.30 receipt payment deleted, then its row ticked as `DUPLICATE` and recorded under Groceries: restoring it on its own is refused with `RECORDED_AGAIN`, and as that payment's pair leaves one payment with the receipt and the keys, and Savings at 957.70. Of two -4.50 bank payments of 11 March under Food, with no FITID or with FITIDs F1 and F2, one deleted, then a 4.50 receipt of 10 March under Food recorded: the deleted one comes back as the receipt's pair, leaving two payments, Savings at 991.00 and Food at 9.00. A 42.30 receipt paired with a -42.50 row, its 0.20 under Fun, deleted, then its row recorded again under Groceries: restored as that payment's pair with no category picked, the 0.20 is under Fun again and Savings at 957.50; with Household picked, under Household; with Fun deleted since, it is refused with `CANNOT_PAIR` until one is picked. A -4.50 coffee recorded from a CSV, as a payment or a payoff, then an OFX of F1 and F2, F2 recorded and its payment deleted, then a 4.50 receipt recorded: F2 comes back as the receipt's pair. A 4.50 coffee paired with its row, deleted, its row ticked as `DUPLICATE` and recorded, then restored as that payment's pair: one payment and Savings at 995.50, and of a statement with two equal coffees that day one arrives as recorded and one as new; unpaired, the row arrives as new. Of two equal coffees of 11 March and one 4.50 receipt, the first row paired with the receipt and the second recorded as a payment of its own, Savings at 991.00: the receipt's payment deleted is offered no pair, is refused with `CANNOT_PAIR` as the other coffee's pair, and restored on its own leaves Savings at 991.00 and Food at 9.00; so is a receipt or a bank payment deleted while its unpaired match was there.
+- R126 · A Profile in the Trash: A Profile holding the receipt folder and a 42.30 receipt payment, deleted, frees the folder; restored while no other Profile holds one, it holds the folder again and equals the Profile as deleted. Restored after Profile B chose a folder, B keeps it, and the restored Profile holds no folder and keeps its recorded receipt id.
+- R41 · Deleting a receipt payment: Deleting a receipt payment leaves its file out of the next scan (R116). A 42.30 receipt split 30.00 Groceries and 12.30 Household and paired with its bank row, deleted and restored, has its two parts, its two lines and its bank keys again, and the row arrives `DUPLICATE` on an import before and after the restore.
+- R42 · Deleting a linked category: After deleting Pulizia, the next receipt with Chatelaine's Pulizia keeps Confirm off until its line is linked or added. A Chatelaine category Pulizie linked to Pulizia, after Pulizia is deleted and restored, opens in Pulizia again with Confirm on.
 - R43 · Test plan: CI runs the first five levels on every pull request; a release records its device walk.
 - R44 · Rollout phases: Phase 2's gate is recorded in `SPEC-history.md` or the release notes before Sci-Fin is retired.
 

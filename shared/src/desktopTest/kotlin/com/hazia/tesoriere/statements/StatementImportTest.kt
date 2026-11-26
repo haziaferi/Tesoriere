@@ -6,6 +6,7 @@ import com.hazia.tesoriere.Fixture.goal
 import com.hazia.tesoriere.Fixture.profile
 import com.hazia.tesoriere.Ids
 import com.hazia.tesoriere.engine.Accounts
+import com.hazia.tesoriere.engine.savingsAmount
 import com.hazia.tesoriere.TestClock
 import com.hazia.tesoriere.cents
 import com.hazia.tesoriere.model.Account
@@ -22,7 +23,6 @@ import com.hazia.tesoriere.payments.Spent
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFails
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -294,7 +294,7 @@ class StatementImportTest {
 
         val filed = marchFiled(d)
         assertTrue(StatementImport.canConfirm(d, filed))
-        assertEquals(ConfirmSummary(count = 4, moneyOut = cents("114.70"), moneyIn = cents("1,450.00")), StatementImport.confirmSummary(filed))
+        assertEquals(ConfirmSummary(count = 4, moneyOut = cents("114.70"), moneyIn = cents("1,450.00")), StatementImport.confirmSummary(d, filed))
         val after = StatementImport.confirm(d, filed, clock, ids::next)
 
         assertEquals(cents("2,335.30"), after.savings.amount)
@@ -588,7 +588,7 @@ class StatementImportTest {
         val d = world()
         val filed = marchFiled(d).map { if (it.row.description == "STIPENDIO MARZO") it.copy(incomingGoalId = "cash") else it }
         assertTrue(StatementImport.canConfirm(d, filed))
-        assertEquals(ConfirmSummary(4, cents("114.70"), cents("1,450.00")), StatementImport.confirmSummary(filed))
+        assertEquals(ConfirmSummary(4, cents("114.70"), cents("1,450.00")), StatementImport.confirmSummary(d, filed))
         val after = StatementImport.confirm(d, filed, clock, ids::next)
         assertEquals(cents("1,560.00"), after.goals.single().saved)
         assertEquals(cents("885.30"), after.savings.amount)
@@ -615,7 +615,7 @@ class StatementImportTest {
         val d = world()
         val short = marchFiled(d).file("FARMACIA SAN LORENZO", "pharm" to "30.00", "home" to "12.00")
         assertFalse(StatementImport.canConfirm(d, short))
-        assertFails { StatementImport.confirm(d, short, clock, ids::next) }
+        assertEquals(d, StatementImport.confirm(d, short, clock, ids::next), "Confirm off: it changes nothing, never a throw")
         val full = short.file("FARMACIA SAN LORENZO", "pharm" to "30.00", "home" to "12.00", "home" to "0.30")
         assertTrue(StatementImport.canConfirm(d, full))
         // unticked, a row that does not add up no longer holds Confirm back
@@ -669,7 +669,7 @@ class StatementImportTest {
         assertEquals(RowStatus.INCOMING, review.single().status)
         val refund = review.map { it.copy(draft = StatementImport.draft(it.row, listOf(Part("home", -2500)))) }
         assertTrue(StatementImport.canConfirm(d, refund))
-        assertEquals(ConfirmSummary(1, 0, cents("25.00")), StatementImport.confirmSummary(refund))
+        assertEquals(ConfirmSummary(1, 0, cents("25.00")), StatementImport.confirmSummary(d, refund))
         val after = StatementImport.confirm(d, refund, clock, ids::next)
         val p = after.payments.single()
         assertEquals(listOf(-2500L, -2500L), listOf(p.total, Spent.of(after, "home", "2026-03")))
@@ -748,5 +748,167 @@ class StatementImportTest {
         val mercato = after.payments.single { it.payee == "POS MERCATO VERDE 0412" }
         assertEquals(LocalDate(2026, 3, 3), mercato.date)
         assertEquals(1240L, mercato.total)
+    }
+
+    /** The rows paired since, worked out as before the index (SPEC R119): every payment against every row. */
+    private fun pairedSinceByScan(d: ProfileData, rows: List<ReviewRow>): Set<Int> {
+        val taken = HashSet<Int>()
+        for (p in d.payments) {
+            val held = p.bankKeys ?: continue
+            val open = rows.indices.filter { it !in taken && rows[it].status != RowStatus.DUPLICATE && StatementImport.sameRow(rows[it].keys, held) }
+            val pick = open.firstOrNull { rows[it].pairPaymentId == p.id } ?: open.firstOrNull { rows[it].keys == held } ?: open.firstOrNull() ?: continue
+            taken += pick
+        }
+        return taken
+    }
+
+    // SPEC:R119 SPEC:R26
+    @OptIn(ExperimentalTime::class)
+    @Test fun `R119 2,000 payments against a 200-row statement give the rows paired since as every payment against every row does`() {
+        val day = LocalDate(2026, 3, 1)
+        // 200 rows: FITID rows, twin coffees with no FITID, rows whose FITIDs share one synthetic key, some arrived DUPLICATE
+        val rows = (0 until 200).map { i ->
+            val date = LocalDate(2026, 3, 1 + i % 28)
+            val fitid = when (i % 4) { 0 -> "F-$i"; 1 -> null; 2 -> "T-${i / 8}-${i % 8}"; else -> null }
+            val amount = -(100L + if (i % 4 == 1) 350L else i.toLong())
+            val row = BankRow(date, amount, if (i % 4 == 2) "TWIN SHOP" else "SHOP ${i % 4 == 1}", fitid)
+            ReviewRow(row, StatementImport.keys(row), "shop", if (i % 13 == 0) RowStatus.DUPLICATE else RowStatus.READY, true, null, null,
+                if (i % 17 == 0) "pay-${i * 3}" else null)
+        }
+        // 2,000 payments: most hold keys of no row, some a row's keys, some a twin's, some a FITID of their own over a row's synthetic key
+        val payments = (0 until 2000).map { j ->
+            val keys = when {
+                j % 10 == 0 -> rows[(j / 10) % 200].keys
+                j % 10 == 3 -> rows[(j * 7) % 200].keys.copy(fitid = null)
+                j % 10 == 6 -> rows[(j * 3) % 200].keys.copy(fitid = "X-$j")
+                j % 10 == 9 -> null
+                else -> BankKeys("N-$j", "syn:2025-01-01|-${j}.00|elsewhere")
+            }
+            Payment("pay-$j", Fixture.PROFILE, day, Instant.fromEpochMilliseconds(j.toLong()), 100, PaymentSource.Savings, "shop", listOf(Part("groc", 100)), bankKeys = keys)
+        }
+        val d = profile().copy(payments = payments)
+        val expected = pairedSinceByScan(d, rows)
+        assertTrue(expected.size > 20, "the case pairs rows: ${expected.size}")
+        assertEquals(expected, StatementImport.pairedSince(d, rows))
+    }
+    // --- R26: twins told apart (owner ruling of 2026-11-26) ---
+
+    private fun coffee(fitid: String?) = BankRow(LocalDate(2026, 3, 11), -cents("4.50"), "BAR CENTRALE", fitid)
+
+    /** [rows] reviewed against [d], every row not `DUPLICATE` ticked under Groceries, and confirmed. */
+    private fun recordAll(d: ProfileData, vararg rows: BankRow): ProfileData {
+        val review = StatementImport.review(d, rows.toList(), clock.today).map {
+            if (it.status == RowStatus.DUPLICATE || it.row.amount > 0) it
+            else it.copy(include = true, draft = StatementImport.draft(it.row, listOf(Part("groc", -it.row.amount))))
+        }
+        return StatementImport.confirm(d, review, clock, ids::next)
+    }
+
+    // SPEC:R26 SPEC:R107
+    @Test fun `R26 F1 recorded, a later statement's F2 of the same day, amount and text arrives READY and records once`() {
+        val d1 = recordAll(world(), coffee("F1"))
+        val later = StatementImport.review(d1, listOf(coffee("F2")), clock.today).single()
+        assertEquals(RowStatus.READY, later.status)
+        assertTrue(later.include)
+        val d2 = recordAll(d1, coffee("F2"))
+        assertEquals(listOf("F1", "F2"), d2.payments.map { it.bankKeys?.fitid })
+        assertEquals(cents("991.00"), d2.savingsAmount)
+        // a statement holding both: F1 is recorded, F2 too now
+        assertEquals(listOf(RowStatus.DUPLICATE, RowStatus.DUPLICATE), StatementImport.review(d2, listOf(coffee("F1"), coffee("F2")), clock.today).map { it.status })
+        val overlap = StatementImport.review(d1, listOf(coffee("F1"), coffee("F2")), clock.today)
+        assertEquals(RowStatus.DUPLICATE, overlap.single { it.row.fitid == "F1" }.status)
+        assertEquals(RowStatus.READY, overlap.single { it.row.fitid == "F2" }.status)
+    }
+
+    // SPEC:R26 SPEC:R107
+    @Test fun `R26 of no-FITID twins with one recorded, a statement holding both has one DUPLICATE and one new, and records only that one`() {
+        val d1 = recordAll(world(), coffee(null))
+        val review = StatementImport.review(d1, listOf(coffee(null), coffee(null)), clock.today)
+        assertEquals(1, review.count { it.status == RowStatus.DUPLICATE })
+        assertEquals(1, review.count { it.status == RowStatus.READY })
+        val d2 = recordAll(d1, coffee(null), coffee(null))
+        assertEquals(2, d2.payments.size, "the payment held at the review stands for the DUPLICATE row, not the new one")
+        assertEquals(cents("991.00"), d2.savingsAmount)
+        assertEquals(listOf(RowStatus.DUPLICATE, RowStatus.DUPLICATE), StatementImport.review(d2, listOf(coffee(null), coffee(null)), clock.today).map { it.status })
+    }
+
+    // SPEC:R26 SPEC:R107
+    @Test fun `R26 a row of money into Savings, recorded with no payment, arrives DUPLICATE on the next import`() {
+        val wage = BankRow(LocalDate(2026, 3, 27), cents("1,450.00"), "STIPENDIO MARZO", null)
+        val d1 = recordAll(world(), wage)
+        assertEquals(cents("2,450.00"), d1.savingsAmount)
+        assertTrue(d1.payments.isEmpty())
+        assertEquals(RowStatus.DUPLICATE, StatementImport.review(d1, listOf(wage), clock.today).single().status)
+        // and so does its twin when both were recorded, while a third of the same day arrives new
+        val d2 = recordAll(d1, wage, wage)
+        assertEquals(listOf(RowStatus.DUPLICATE, RowStatus.DUPLICATE, RowStatus.INCOMING), StatementImport.review(d2, listOf(wage, wage, wage), clock.today).map { it.status })
+    }
+
+    // --- R107: a review left open while the same rows are recorded elsewhere ---
+
+    // SPEC:R107 SPEC:R26
+    @Test fun `R107 two reviews of one +100_00 row, both confirmed, add it to Savings once`() {
+        val wage = BankRow(LocalDate(2026, 3, 27), cents("100.00"), "BONIFICO", null)
+        val d = world()
+        val r1 = StatementImport.review(d, listOf(wage), clock.today)
+        val r2 = StatementImport.review(d, listOf(wage), clock.today)
+        val a = StatementImport.confirm(d, r2, clock, ids::next)
+        assertEquals(cents("1,100.00"), a.savingsAmount)
+        assertEquals(0, StatementImport.confirmSummary(a, r1).count, "the open review names nothing left to record")
+        assertEquals(cents("1,100.00"), StatementImport.confirm(a, r1, clock, ids::next).savingsAmount)
+    }
+
+    // SPEC:R107 SPEC:R89 SPEC:R26
+    @Test fun `R107 two reviews of one -50_00 card payoff, both confirmed, pay the card once`() {
+        val po = BankRow(LocalDate(2026, 3, 27), -cents("50.00"), "PAGAMENTO ORBITA", null)
+        val d = world()
+        fun open() = StatementImport.review(d, listOf(po), clock.today).map { it.copy(include = true, payoffAccountId = "orbita") }
+        val r1 = open(); val r2 = open()
+        val a = StatementImport.confirm(d, r2, clock, ids::next)
+        val b = StatementImport.confirm(a, r1, clock, ids::next)
+        assertEquals(cents("250.00"), b.accounts.single().balance)
+        assertEquals(cents("950.00"), b.savingsAmount)
+    }
+
+    // SPEC:R107 SPEC:R26 SPEC:R119
+    @Test fun `R107 a review of two coffees left open while another records one of them records only the other`() {
+        val d = world()
+        fun ticked(rows: List<ReviewRow>) = rows.map { it.copy(include = true, draft = StatementImport.draft(it.row, listOf(Part("groc", cents("4.50"))))) }
+        val r1 = ticked(StatementImport.review(d, listOf(coffee(null), coffee(null)), clock.today))
+        val r2 = StatementImport.review(d, listOf(coffee(null), coffee(null)), clock.today)
+        val a = StatementImport.confirm(d, ticked(r2).mapIndexed { i, r -> if (i == 0) r else r.copy(include = false) }, clock, ids::next)
+        assertEquals(1, StatementImport.confirmSummary(a, r1).count)
+        val b = StatementImport.confirm(a, r1, clock, ids::next)
+        assertEquals(2, b.payments.size)
+        assertEquals(cents("9.00"), Spent.of(b, "groc", "2026-03"))
+        // one coffee in both reviews: recorded once
+        val c = StatementImport.confirm(StatementImport.confirm(d, ticked(r2.take(1)), clock, ids::next), ticked(r1.take(1)), clock, ids::next)
+        assertEquals(cents("4.50"), Spent.of(c, "groc", "2026-03"))
+    }
+
+    // --- R26: keys kept by the deduplicating code before every row kept its own ---
+
+    // SPEC:R26
+    @Test fun `R26 an old list fit F1, S, fit F2, T reads F2 alone, so a CSV row T and an OFX row T of F7 arrive recorded`() {
+        val shop = BankRow(LocalDate(2026, 3, 18), -cents("12.00"), "SHOP", null)
+        val s = StatementImport.keys(coffee("F1")).synKey
+        val t = StatementImport.keys(shop).synKey
+        val old = world().let { it.copy(importState = it.importState.copy(importedKeys = listOf("fit:F1", s, "fit:F2", t))) }
+        assertEquals(RowStatus.DUPLICATE, StatementImport.review(old, listOf(shop), clock.today).single().status)
+        assertEquals(RowStatus.DUPLICATE, StatementImport.review(old, listOf(shop.copy(fitid = "F7")), clock.today).single().status)
+        // with a payment holding F2 and T, T is F2's: the OFX row of F7 is a row of its own
+        val held = old.copy(payments = listOf(Payment("pay-2", Fixture.PROFILE, shop.date, Instant.fromEpochMilliseconds(0), 1200, PaymentSource.Savings,
+            "SHOP", listOf(Part("groc", 1200)), bankKeys = BankKeys("F2", t))))
+        assertEquals(RowStatus.READY, StatementImport.review(held, listOf(shop.copy(fitid = "F7")), clock.today).single().status)
+    }
+
+    // SPEC:R26 SPEC:R107
+    @Test fun `R26 an OFX row of money into Savings with a FITID, recorded with no payment, keeps its synthetic key as its own`() {
+        val gift = BankRow(LocalDate(2026, 3, 27), cents("20.00"), "REGALO", "G1")
+        val d1 = recordAll(world(), gift)
+        assertTrue(d1.payments.isEmpty())
+        assertEquals(RowStatus.INCOMING, StatementImport.review(d1, listOf(gift.copy(fitid = "G2")), clock.today).single().status, "a twin with its own FITID is new")
+        assertEquals(RowStatus.DUPLICATE, StatementImport.review(d1, listOf(gift.copy(fitid = null)), clock.today).single().status, "the CSV row of it is not")
+        assertEquals(RowStatus.DUPLICATE, StatementImport.review(d1, listOf(gift), clock.today).single().status)
     }
 }

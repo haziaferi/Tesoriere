@@ -199,7 +199,7 @@ class ReportsTest {
             PaymentDraft(today, cents("42.30"), PaymentSource.Savings, "Corner Market", listOf(Part("groc", cents("30.00")), Part("home", cents("12.30")))),
             clock, "p1",
         )
-        val s = Reports.spendingComposition(d, today)
+        val s = Reports.spendingComposition(d, today, emptySet())
         assertEquals(
             listOf(Triple(SliceKind.CATEGORY, "groc", cents("30.00")), Triple(SliceKind.CATEGORY, "home", cents("12.30"))),
             keyed(s.slices),
@@ -219,7 +219,7 @@ class ReportsTest {
             d.copy(accounts = listOf(Account("cc", Fixture.PROFILE, "Card", type = AccountType.CREDIT, balance = cents("100.00")))),
             "cc", cents("60.00"), Accounts.Direction.PAYMENT, null, from = Accounts.PayoffFrom.Savings, clock = TestClock(today),
         ) { ids.next() }
-        val s = Reports.spendingComposition(cardPaidOff, today)
+        val s = Reports.spendingComposition(cardPaidOff, today, emptySet())
         assertEquals(listOf(Triple(SliceKind.CATEGORY, "c", cents("30.00"))), keyed(s.slices))
         assertEquals(cents("30.00"), s.net); assertFalse(s.plainList)
     }
@@ -234,7 +234,7 @@ class ReportsTest {
         )
         assertEquals(
             listOf(Triple(SliceKind.CATEGORY, "food", cents("65.00")), Triple(SliceKind.CATEGORY, "phone", cents("60.00"))),
-            keyed(Reports.spendingComposition(d, today).slices),
+            keyed(Reports.spendingComposition(d, today, emptySet()).slices),
         )
     }
 
@@ -243,7 +243,7 @@ class ReportsTest {
         val d = profile().with(tx("s", "rec:e", "9.00", LocalDate(2026, 9, 1))).paying(
             pay("p", "15.00", today, PaymentSource.Goal("g"), listOf(Part(null, cents("15.00")))),
         )
-        assertEquals(listOf(Triple(SliceKind.UNCATEGORISED, null, cents("24.00"))), keyed(Reports.spendingComposition(d, today).slices))
+        assertEquals(listOf(Triple(SliceKind.UNCATEGORISED, null, cents("24.00"))), keyed(Reports.spendingComposition(d, today, emptySet()).slices))
     }
 
     // SPEC:R62 SPEC:R99 SPEC:R107 SPEC:R67
@@ -270,7 +270,7 @@ class ReportsTest {
             assertEquals(cents("50.00"), Spent.of(d, "ins", month.ymKey()), month.toString())
             assertEquals(
                 listOf(Triple(SliceKind.CATEGORY, "ins", cents("50.00"))),
-                keyed(Reports.spendingComposition(d, month.plusDays(14)).slices), month.toString(),
+                keyed(Reports.spendingComposition(d, month.plusDays(14), emptySet()).slices), month.toString(),
             )
             month = month.firstOfNextMonth()
         }
@@ -280,8 +280,8 @@ class ReportsTest {
     // SPEC:R99
     @Test fun `R99 Food at 30_00 and -50_00 in one month is a plain list, and so is a month with nothing`() {
         val d = profile(categories = listOf(category("c", "Food"))).with(tx("1", "cat:c", "30.00", today), tx("2", "cat:c", "-50.00", today))
-        assertTrue(Reports.spendingComposition(d, today).plainList)
-        assertTrue(Reports.spendingComposition(profile(), today).plainList)
+        assertTrue(Reports.spendingComposition(d, today, emptySet()).plainList)
+        assertTrue(Reports.spendingComposition(profile(), today, emptySet()).plainList)
     }
 
     // ---- Savings vs Owed -------------------------------------------------------------------
@@ -371,7 +371,7 @@ class ReportsTest {
         d = Payments.record(d, PaymentDraft(LocalDate(2026, 10, 5), cents("40.00"), PaymentSource.Account("cc"), null, listOf(Part("food", cents("40.00")))), clock, "pay")
         val oct20 = LocalDate(2026, 10, 20)
         assertEquals(cents("40.00"), Spent.of(d, "food", "2026-10"))
-        val s = Reports.spendingComposition(d, oct20)
+        val s = Reports.spendingComposition(d, oct20, emptySet())
         assertEquals(listOf(Slice(SliceKind.CATEGORY, "food", cents("40.00"))), s.slices)
         assertEquals(cents("40.00"), s.net)
         assertEquals(cents("40.00"), Reports.incomeVsExpenses(d, oct20, 1).single().expenses)
@@ -385,7 +385,7 @@ class ReportsTest {
         clock.setDay(LocalDate(2026, 10, 1))
         d = NewMonth.runCatchUp(d, clock) { ids.next() }.first
         assertEquals(cents("229.70"), Spent.of(d, "car", "2026-10"))
-        assertEquals(cents("229.70"), Reports.spendingComposition(d, LocalDate(2026, 10, 20)).net)
+        assertEquals(cents("229.70"), Reports.spendingComposition(d, LocalDate(2026, 10, 20), emptySet()).net)
     }
 
     // SPEC:R67 SPEC:R66 SPEC:R93
@@ -404,7 +404,7 @@ class ReportsTest {
         assertEquals(cents("-40.00"), back.amount)
         assertEquals(cents("1,000.00"), d.savingsAmount)
         assertEquals(0L, Spent.of(d, "food", "2026-10"))
-        assertTrue(Reports.spendingComposition(d, LocalDate(2026, 10, 20)).slices.isEmpty())
+        assertTrue(Reports.spendingComposition(d, LocalDate(2026, 10, 20), emptySet()).slices.isEmpty())
     }
 
     // SPEC:R101 SPEC:R54
@@ -425,7 +425,7 @@ class ReportsTest {
         assertEquals(cents("150.00"), Reports.incomeVsExpenses(d, today).last().expenses)
         d = Accounts.quickAdd(d, "cc", cents("60.00"), Accounts.Direction.PAYMENT, null, from = Accounts.PayoffFrom.Savings, clock = clock) { ids.next() }
         assertEquals(cents("150.00"), Reports.incomeVsExpenses(d, today).last().expenses)   // paying the card off is a transfer
-        assertEquals(Reports.spendingComposition(d, today).net, Reports.incomeVsExpenses(d, today).last().expenses)
+        assertEquals(Reports.spendingComposition(d, today, emptySet()).net, Reports.incomeVsExpenses(d, today).last().expenses)
         d = d.paid("-15.00", PaymentSource.Savings)                                          // a refund (SPEC R21)
         assertEquals(cents("135.00"), Reports.incomeVsExpenses(d, today).last().expenses)
         assertEquals(cents("1,450.00"), Reports.incomeVsExpenses(d, today).last().income)
@@ -463,7 +463,7 @@ class ReportsTest {
         fun ProfileData.paid(total: String) =
             Payments.record(this, PaymentDraft(today, cents(total), PaymentSource.Savings, null, listOf(Part("food", cents(total)))), clock, ids.next())
         d = d.paid("40.00").paid("-15.00")
-        assertEquals(listOf(Triple(SliceKind.CATEGORY, "food", cents("25.00"))), keyed(Reports.spendingComposition(d, today).slices))
+        assertEquals(listOf(Triple(SliceKind.CATEGORY, "food", cents("25.00"))), keyed(Reports.spendingComposition(d, today, emptySet()).slices))
         val point = Reports.incomeVsExpenses(d, today).last()
         assertEquals(cents("25.00"), point.expenses); assertEquals(cents("1,450.00"), point.income)
     }

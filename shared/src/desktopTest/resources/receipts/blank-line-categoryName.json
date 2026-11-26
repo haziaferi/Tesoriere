@@ -1,0 +1,33 @@
+{
+  "format": 1,
+  "receiptId": "3f6c2a9e-8b41-4d27-9c55-0e7a1b2d4f68",
+  "store": "Supermarket A",
+  "date": "2026-11-24",
+  "currency": "EUR",
+  "totalPaid": 1099,
+  "lines": [
+    {
+      "name": "cookies Q",
+      "pack": "600 g",
+      "quantity": 3,
+      "pricePaid": 318,
+      "categoryId": "b7d1e4f0-2c9a-4e63-8f15-6a0d3c7b9e21",
+      "categoryName": ""
+    },
+    {
+      "name": "batteries",
+      "quantity": 2,
+      "pricePaid": 598,
+      "categoryId": "5e9a0c3d-7f24-4b18-a6e2-1d8c4f0b7a93",
+      "categoryName": "Household"
+    },
+    {
+      "name": "bananas",
+      "pack": "865 g",
+      "quantity": 1,
+      "pricePaid": 183,
+      "categoryId": "b7d1e4f0-2c9a-4e63-8f15-6a0d3c7b9e21",
+      "categoryName": "Food"
+    }
+  ]
+}

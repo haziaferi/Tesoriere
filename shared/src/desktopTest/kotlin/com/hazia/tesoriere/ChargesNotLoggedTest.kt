@@ -65,7 +65,7 @@ class ChargesNotLoggedTest {
         var d = world().paidOff("60.00", Accounts.PayoffFrom.Savings)
         assertEquals(cents("60.00"), shop(d, "2026-09"))
         assertEquals("shop", d.transactions.single { it.key == "savings" }.categoryId)
-        assertEquals(listOf(Slice(SliceKind.CATEGORY, "shop", cents("60.00"))), Reports.spendingComposition(d, sept).slices)
+        assertEquals(listOf(Slice(SliceKind.CATEGORY, "shop", cents("60.00"))), Reports.spendingComposition(d, sept, emptySet()).slices)
         assertEquals(cents("60.00"), Reports.incomeVsExpenses(d, sept).last().expenses)
         assertEquals(cents("940.00"), d.savings.amount)
         d = d.paidOff("60.00", Accounts.PayoffFrom.Goal("trip"))
@@ -120,7 +120,7 @@ class ChargesNotLoggedTest {
         d = AccountEditing.save(d, d.accounts.single().copy(chargesNotLogged = true, payoffCategoryId = "shop"), clock) { ids.next() }
         assertTrue(d.accounts.single().chargesNotLogged)
         assertEquals(0L, shop(d, "2026-09"))
-        assertTrue(Reports.spendingComposition(d, sept).slices.isEmpty())
+        assertTrue(Reports.spendingComposition(d, sept, emptySet()).slices.isEmpty())
         d = d.paidOff("30.00", Accounts.PayoffFrom.Savings)
         val gone = Accounts.deleteCascade(d, "cc", clock) { ids.next() }
         assertEquals(cents("30.00"), shop(gone, "2026-10"))

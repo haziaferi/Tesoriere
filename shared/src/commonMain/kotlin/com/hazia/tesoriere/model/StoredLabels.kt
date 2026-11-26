@@ -52,6 +52,11 @@ object StoredLabels {
      * since, when one of its payments is edited or removed (SPEC R54, R88). Tesoriere's own.
      */
     const val DELETED_ACCOUNT_PAYMENT = "Payment to a deleted account"
+    /**
+     * The note of a row a restore from the Trash writes to undo a row its delete wrote (SPEC
+     * R122), as Sci-Fin's engine/Trash.kt at 2892110 notes its restore rows.
+     */
+    const val RESTORED = "Restored from the Trash"
     /** The description of a statement row that carries none (SPEC R103). */
     const val STATEMENT_ENTRY = "Statement entry"
 

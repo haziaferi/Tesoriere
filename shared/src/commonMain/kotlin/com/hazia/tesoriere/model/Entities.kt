@@ -273,7 +273,12 @@ data class Shift(
 @Entity(tableName = "import_state")
 data class ImportState(
     @PrimaryKey val profileId: String,
-    /** Rows already recorded: `fit:<FITID>` and `syn:date|amount|description`, both kept. */
+    /**
+     * Rows already recorded: each recorded row appends `fit:<FITID>` then `fsyn:date|amount|description`
+     * when it has a FITID, else `syn:date|amount|description`, so twins of one day are counted (SPEC
+     * R26). Keys kept before every row appended its own may hold a synthetic key once for several
+     * rows, as `syn:` after a FITID key; StatementImport.keptRows reads both.
+     */
     val importedKeys: List<String> = emptyList(),
     /** Normalised payee to category id, learned from the user's filing. */
     val payeeRules: Map<String, String> = emptyMap(),
@@ -293,6 +298,11 @@ data class AppState(
     val profilesEnabled: Boolean = false,
     val lastBackupExportDate: LocalDate? = null,
     val lastBackupImportDate: LocalDate? = null,
+    /**
+     * The Profile that holds the receipt folder, null while none does (SPEC R28, R112). Tesoriere's
+     * own; part of schema 1, still edited in place.
+     */
+    val receiptProfileId: String? = null,
 )
 
 /**
@@ -341,8 +351,8 @@ data class CopySchedule(
 )
 
 /**
- * One deleted thing in the Trash, kept 30 days (SPEC R18). [payload] is JSON: what the delete
- * removed and the money it moved. Device-only: a backup carries what exists, not what was deleted.
+ * One deleted thing in the Trash, kept 30 days (SPEC R18, R121). [payload] is JSON (Trash.encode): what the delete
+ * removed and what a restore needs (SPEC R122). Device-only: a backup carries what exists, not what was deleted.
  */
 @Entity(tableName = "trash", indices = [Index("profileId")])
 data class TrashItem(

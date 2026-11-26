@@ -240,3 +240,82 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-25 · R109 · changed · a statement refund to a card whose charges are not logged carries the same warning as a payment · builder
 - 2026-11-25 · R111 · changed · undoing a statement payoff keeps its keys; the row returns unticked as already recorded and can be ticked · builder
 - 2026-11-25 · R111 · changed · undoing a quick-add on unset Savings leaves Savings at 0.00, not unset · builder
+- 2026-11-25 · R112 · added · one Profile holds the receipt folder and the receipt settings; only it scans and confirms receipts · builder
+- 2026-11-25 · R113 · added · how a review opens each line's category and the store's source, Savings when the kept source is gone · builder
+- 2026-11-25 · R114 · added · moving a line, linking or adding a Chatelaine category in the review; the notes; what counts as changes · builder
+- 2026-11-25 · R115 · added · Confirm records through the payment path, keeps every line and the receipt id; when Confirm stays off · builder
+- 2026-11-25 · R116 · added · a scan reads only names ending in .json, writes nothing, sorts each file; one id twice is offered once · builder
+- 2026-11-25 · R117 · added · a receipt file read as rule 123's JSON, format first; unknown keys passed over; anything else wrong is unreadable · builder
+- 2026-11-25 · R32 · changed · an unlinked category whose lines are all moved by hand does not block Confirm; the next receipt asks again · owner
+- 2026-11-25 · R33 · changed · a moved line or a changed source also counts as a change that warns before close · owner
+- 2026-11-25 · R114 · changed · any move, source change, link or added category holds changes; an answer files every line not moved by hand · owner
+- 2026-11-25 · R115 · changed · Confirm stays off only while a line of an unlinked category is in no category · owner
+- 2026-11-25 · R116 · changed · a file whose reading fails in any way is refused as unreadable and the scan goes on · builder
+- 2026-11-25 · R117 · changed · size and depth caps; numbers only as JSON numbers; total above zero, no negative price, quantity 1 or more; blanks refused · builder
+- 2026-11-25 · R114 · changed · a line moved back to the category it would hold unmoved counts as not moved · builder
+- 2026-11-25 · R117 · changed · the order is size and depth, then format, then the rest; an empty pack is none; currency read in capitals · builder
+- 2026-11-25 · R120 · added · a store link keeps the first paired row's rule name; a row matches when its rule name equals it · builder
+- 2026-11-25 · R118 · added · which receipt payments and bank rows are suggested as pairs; PAIR rows are unticked and never recorded by Confirm · builder
+- 2026-11-25 · R119 · added · pairing edits the first payment through the payment path into one; what each field becomes; what cannot pair · builder
+- 2026-11-25 · R107 · changed · the PAIR status joins the table, checked after INCOMING and before RECURRING · builder
+- 2026-11-25 · R36 · changed · a store link ranks the rows that match it first and hides none · owner
+- 2026-11-25 · R120 · changed · a link only ranks; found through the payment's payee, so an edited payee loses it · owner
+- 2026-11-25 · R118 · changed · pairs chosen across the statement, link then equal totals first; a receipt review notes a pair available · builder
+- 2026-11-25 · R119 · changed · a row paired while its review is open is not recorded by that Confirm; spending stays in the receipt's month · builder
+- 2026-11-25 · R114 · changed · a pair-available note follows the category notes and leaves Confirm on · builder
+- 2026-11-25 · R107 · changed · a ticked duplicate whose keys a payment holds is not recorded again · builder
+- 2026-11-25 · R118 · changed · as many rows as possible name a payment; the order decides among such choices · builder
+- 2026-11-25 · R107 · changed · a ticked duplicate is recorded as before, whatever payment holds its keys · builder
+- 2026-11-25 · R119 · changed · only a row that did not arrive DUPLICATE is skipped at Confirm once a pair holds its keys · builder
+- 2026-11-25 · R121 · added · the Trash keeps each delete 30 days with what a restore needs; one notice on day 20; inert while there · builder
+- 2026-11-25 · R122 · added · restore puts items back and undoes the delete's rows on the same day and filing; refused with a code when rows were written since · owner
+- 2026-11-25 · R123 · added · deleting a category removes its links; expenses and Accounts filing under it move to another category given · owner
+- 2026-11-25 · R124 · added · spending under a deleted category keeps its id; marked deleted while in the Trash, Uncategorised after; totals unchanged · owner
+- 2026-11-25 · R125 · added · a deleted payment is kept whole; restoring it moves its source again, or as for a short or deleted source · builder
+- 2026-11-25 · R126 · added · a deleted Profile is kept whole, payments and receipt settings included; the receipt folder on delete and restore · builder
+- 2026-11-25 · R41 · changed · restoring brings back parts, lines, bank keys and pair; the paired bank row stays recorded · builder
+- 2026-11-25 · R42 · changed · restoring the category brings back its removed links not relinked since · builder
+- 2026-11-25 · R99 · changed · a category in the Trash is its own slice marked deleted; one deleted for good is Uncategorised · builder
+- 2026-11-25 · R112 · changed · a Profile restored while another holds the folder keeps its receipt settings with no folder · builder
+- 2026-11-25 · R118 · changed · each possible pair taken in order and named when as many rows can still name a payment · builder
+- 2026-11-25 · R125 · changed · a receipt payment may come back as the pair of its bank row's payment; no warning for a source deleted before it · builder
+- 2026-11-25 · R122 · changed · CANNOT_PAIR refuses a restore as a pair that R119 would refuse · builder
+- 2026-11-25 · R123 · changed · finished expenses and a logged card's payoff category count as filing under the category; fees and Loan categories move too · builder
+- 2026-11-25 · R41 · changed · a deleted receipt payment whose bank row was recorded meanwhile may be restored as its pair · builder
+- 2026-11-25 · R127 · added · a payment restored as the pair of a payment recorded since, from either side; the receipt side keeps its own parts · builder
+- 2026-11-25 · R125 · changed · the restore as a pair moves to R127 · builder
+- 2026-11-25 · R122 · changed · CANNOT_PAIR names R127's pairs from either side · builder
+- 2026-11-25 · R119 · changed · each payment that took a row's keys while the review was open stands for one row only · builder
+- 2026-11-25 · R23 · changed · only pairing writes a difference part; an edit keeps one the payment already holds · builder
+- 2026-11-25 · R41 · changed · the restore as a pair cites R127 · builder
+- 2026-11-26 · R36 · changed · the link keeps the payee less its changing words, as R120 says · owner
+- 2026-11-26 · R107 · changed · a PAIR row turned down is recorded as a READY row when ticked · owner
+- 2026-11-26 · R118 · changed · a suggestion the user turns down names no pair · builder
+- 2026-11-26 · R125 · changed · a source deleted before the payment and restored since is moved again; the delete's row stays · builder
+- 2026-11-26 · R119 · changed · a recorded row: FITIDs compared alone when both have one; a synthetic key counted against the review's other rows · builder
+- 2026-11-26 · R125 · changed · bank keys held again only by more payments than at the delete, FITID first; twins restore · builder
+- 2026-11-26 · R127 · changed · RECORDED_AGAIN as R125 counts; a bank side's twins stand for rows of its review · builder
+- 2026-11-26 · R127 · changed · a receipt side's difference defaults to its old difference part's category while that exists · builder
+- 2026-11-26 · R125 · changed · editing a payment in the Trash changes nothing · builder
+- 2026-11-26 · R117 · changed · a totalPaid above 1,000,000,000.00 is unreadable · builder
+- 2026-11-26 · R128 · added · a pair unpaired is the receipt's payment alone; its row's keys are dropped so the row arrives as new · owner
+- 2026-11-26 · R35 · changed · a pair whose store has no source kept, its source left as opened, takes the bank payment's · owner
+- 2026-11-26 · R119 · changed · source row: the bank payment's own when the store has none kept and the review's was left; store keeps it · owner
+- 2026-11-26 · R125 · changed · a deleted payment's row stays recorded when a twin of it is unpaired since · builder
+- 2026-11-26 · R122 · changed · RECORDED_AGAIN when more payments hold the bank row than at the delete, as R125 counts · owner
+- 2026-11-26 · R26 · changed · twins told apart: FITID first, else as many rows of a synthetic key as recorded; each row kept once · owner
+- 2026-11-26 · R107 · changed · DUPLICATE: recorded already, as R26 counts · owner
+- 2026-11-26 · R128 · changed · the unpaired row's keys leave the import's keys once; a recorded twin stays recorded · owner
+- 2026-11-26 · R125 · changed · of no-FITID twins, a deleted one's row stays recorded when the other is unpaired, the other's arrives new · builder
+- 2026-11-26 · R119 · changed · a row is recorded already as R26 counts · owner
+- 2026-11-26 · R127 · changed · a bank side with a FITID is told apart by it from the rows recorded with none · builder
+- 2026-11-26 · R107 · changed · a row recorded since the review was built is not recorded or counted again by its Confirm · owner
+- 2026-11-26 · R118 · changed · a row paired by hand names its payment from then on, its twins left as they are · builder
+- 2026-11-26 · R26 · changed · rows recorded with a key: as kept by the import or as held by payments, whichever are more · owner
+- 2026-11-26 · R35 · changed · a store's kept source that does not exist counts as none for the pair's source, as R119 says · owner
+- 2026-11-26 · R128 · changed · a line whose category does not exist takes one given in its place, else CATEGORY_MISSING · owner
+- 2026-11-26 · R127 · changed · a receipt side holding bank keys restored as a pair leaves its one row kept once · builder
+- 2026-11-26 · R119 · changed · a part whose category does not exist takes one given in its place, else CATEGORY_MISSING · owner
+- 2026-11-26 · R128 · changed · the pair keeps its own parts less the difference part while they add up to the total · owner
+- 2026-11-26 · R127 · changed · only a payment recorded since the delete, not one there already, is offered or taken as the pair · builder
+- 2026-11-26 · R119 · changed · parts row: the receipt payment's own when it came first; the review's lines when the bank row did · owner

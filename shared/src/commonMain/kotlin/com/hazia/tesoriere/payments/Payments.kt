@@ -21,6 +21,8 @@ import com.hazia.tesoriere.model.StoredLabels
  * `savings` row, so the reports' replay of Savings (SPEC R95) still adds up to it; and a change to
  * what is charged to an Account deleted since is logged as an `acct:` row, so its rows and its
  * payments still add up to zero and Savings vs Owed's trend matches its figure (SPEC R88, R100).
+ * A payment put back from the Trash ([Payments.reinstate]) moves its source again as recorded
+ * (SPEC R125).
  */
 object Payments {
 
@@ -33,16 +35,22 @@ object Payments {
      * (SPEC R39), adding up to the total (SPEC R23),
      * and a source that exists. A Goal short of the total is no reason to refuse: Savings pays
      * the rest, after the warning of [draftNotice] (SPEC R54). When [editing] names the payment
-     * being edited, its own effect counts as undone.
+     * being edited, its own effect counts as undone. A difference part is taken only when the
+     * payment being edited holds one already: only pairing writes one (SPEC R23).
      */
-    fun canSave(d: ProfileData, draft: PaymentDraft, editing: String? = null): Boolean {
+    fun canSave(d: ProfileData, draft: PaymentDraft, editing: String? = null): Boolean = canSave(d, draft, editing, pairing = false)
+
+    /** [canSave] for pairing (SPEC R39, R119), the one caller that may write a difference part. */
+    internal fun canSave(d: ProfileData, draft: PaymentDraft, editing: String?, pairing: Boolean): Boolean {
         if (draft.total == 0L || draft.parts.isEmpty() || remainder(draft) != 0L) return false
         val categories = d.categories.mapTo(HashSet()) { it.id }
         val refund = draft.total < 0
-        // a pair's difference part, at most one, may have the other sign (SPEC R23, R39)
-        if (draft.parts.count { it.difference } > 1) return false
-        if (draft.parts.any { it.amount == 0L || (!it.difference && (it.amount < 0) != refund) || it.categoryId == null || it.categoryId !in categories }) return false
         val old = editing?.let { id -> d.payments.firstOrNull { it.id == id } }
+        // a pair's difference part, at most one, may have the other sign (SPEC R23, R39); only pairing
+        // writes one, and an edit keeps one the payment already holds
+        if (draft.parts.count { it.difference } > 1) return false
+        if (draft.parts.any { it.difference } && !pairing && old?.parts?.any { it.difference } != true) return false
+        if (draft.parts.any { it.amount == 0L || (!it.difference && (it.amount < 0) != refund) || it.categoryId == null || it.categoryId !in categories }) return false
         val base = old?.let { undo(d, it) } ?: d
         return when (val s = draft.source) {
             PaymentSource.Savings -> true
@@ -89,9 +97,12 @@ object Payments {
             PaymentSource.Savings, null -> null
         }
 
-    /** Records [draft] as a new payment and applies its source (SPEC R54), with Savings paying what a short Goal cannot. */
+    /**
+     * Records [draft] as a new payment and applies its source (SPEC R54), with Savings paying what a
+     * short Goal cannot. A draft [canSave] refuses changes nothing: [d] comes back unchanged.
+     */
     fun record(d: ProfileData, draft: PaymentDraft, clock: Clock, id: String): ProfileData {
-        require(canSave(d, draft)) { "the payment cannot be saved" }
+        if (!canSave(d, draft)) return d
         val p = Payment(
             id = id, profileId = d.profileId, date = draft.date, loggedAt = clock.now(), total = draft.total,
             source = draft.source, payee = draft.payee?.takeIf { it.isNotBlank() }, parts = draft.parts,
@@ -105,11 +116,18 @@ object Payments {
      * and applying the new one (SPEC R54), with the share Savings pays for a short Goal worked out
      * again once the old share is returned. Its id, logged instant, receipt and bank keys stay.
      * What a Goal deleted since moves in Savings is logged as one `savings` row [txId], dated
-     * today, when it is not zero.
+     * today, when it is not zero. An id no payment holds, one in the Trash say, or a draft [canSave]
+     * refuses, gives [d] back unchanged.
      */
-    fun edit(d: ProfileData, paymentId: String, draft: PaymentDraft, clock: Clock, txId: String): ProfileData {
-        val old = d.payments.first { it.id == paymentId }
-        require(canSave(d, draft, editing = paymentId)) { "the payment cannot be saved" }
+    fun edit(d: ProfileData, paymentId: String, draft: PaymentDraft, clock: Clock, txId: String): ProfileData =
+        edit(d, paymentId, draft, clock, txId, pairing = false)
+
+    /** [edit] for pairing (SPEC R119), which may write a difference part (SPEC R23, R39). */
+    internal fun edit(d: ProfileData, paymentId: String, draft: PaymentDraft, clock: Clock, txId: String, pairing: Boolean): ProfileData {
+        // an unknown id, such as a payment in the Trash, changes nothing, as remove does
+        val old = d.payments.firstOrNull { it.id == paymentId } ?: return d
+        // a draft that cannot be saved changes nothing either
+        if (!canSave(d, draft, paymentId, pairing)) return d
         val new = old.copy(
             date = draft.date, total = draft.total, source = draft.source, payee = draft.payee?.takeIf { it.isNotBlank() }, parts = draft.parts,
             fromSavings = fromSavings(d, draft, editing = paymentId),
@@ -135,6 +153,55 @@ object Payments {
     }
 
     /**
+     * Puts back payment [p], removed earlier, for a restore from the Trash (SPEC R122, R125): its
+     * id, date, parts, receipt and keys as they were, at its place in logged order, and its source
+     * moved again as recorded. A Goal that holds less than its share gives all it holds and Savings
+     * the rest, the payment's [Payment.fromSavings] growing by it (SPEC R54). A Goal or an Account
+     * deleted since its removal moves as for any payment of a deleted source: one `savings` or
+     * `acct:` row [txId], dated today. When [settled], the source was deleted before the removal
+     * and is still gone, and the caller undoes the removal's row instead, so no row is written here;
+     * a source restored since is not settled and moves as recorded. A payment whose id is in the
+     * Profile already is not put back a second time: [d] comes back unchanged.
+     */
+    fun reinstate(d: ProfileData, p: Payment, settled: Boolean, clock: Clock, txId: String): ProfileData {
+        if (d.payments.any { it.id == p.id }) return d
+        val back = reinstated(d, p, settled)
+        val at = d.payments.indexOfFirst { it.loggedAt > back.loggedAt }.let { if (it < 0) d.payments.size else it }
+        var next = apply(d, back).copy(payments = d.payments.subList(0, at) + back + d.payments.subList(at, d.payments.size))
+        if (settled) return next
+        when (val s = back.source) {
+            is PaymentSource.Goal -> if (d.goals.none { it.id == s.id }) next = logDeletedGoalShift(next, -(back.total - back.fromSavings), clock, txId)
+            is PaymentSource.Account -> next = logDeletedAccountCharge(d, next, s.id, back.total, clock, txId)
+            PaymentSource.Savings -> Unit
+        }
+        return next
+    }
+
+    /**
+     * The warning a restore of [p] carries, or null (SPEC R125): its source deleted since its
+     * removal, or a Goal short of its share (SPEC R54). None when [settled]: the source was deleted
+     * before the removal, and undoing the removal's row moves Savings back as it was.
+     */
+    fun reinstateNotice(d: ProfileData, p: Payment, settled: Boolean): PaymentNotice? = if (settled) null else when (val s = p.source) {
+        is PaymentSource.Goal -> when {
+            d.goals.none { it.id == s.id } -> PaymentNotice.SOURCE_GOAL_DELETED
+            reinstated(d, p, settled = false).fromSavings > p.fromSavings -> PaymentNotice.GOAL_SHORT
+            else -> null
+        }
+        is PaymentSource.Account -> PaymentNotice.SOURCE_ACCOUNT_DELETED.takeIf { d.accounts.none { it.id == s.id } }
+        PaymentSource.Savings -> null
+    }
+
+    /** [p] with the share Savings pays grown to what its Goal cannot give, when the Goal holds less than its share (SPEC R54, R125). */
+    private fun reinstated(d: ProfileData, p: Payment, settled: Boolean): Payment {
+        val s = p.source as? PaymentSource.Goal ?: return p
+        if (settled || p.total <= 0) return p
+        val goal = d.goals.firstOrNull { it.id == s.id } ?: return p
+        val held = maxOf(0L, goal.saved)
+        return if (held >= p.total - p.fromSavings) p else p.copy(fromSavings = p.total - held)
+    }
+
+    /**
      * What is charged to an Account deleted since must stay matched by its `acct:` rows, so that
      * they add up to zero together, as the closing row left them (SPEC R54, R88, R100): when [old]
      * was charged to such an Account and [new] (null on removal) charges it less, or nothing, the
@@ -142,11 +209,14 @@ object Payments {
      */
     private fun logDeletedAccountShift(before: ProfileData, d: ProfileData, old: Payment, new: Payment?, clock: Clock, txId: String): ProfileData {
         val s = old.source as? PaymentSource.Account ?: return d
-        if (before.accounts.any { it.id == s.id }) return d
-        val change = (if (new?.source == s) new.total else 0L) - old.total
-        if (change == 0L) return d
-        val key = TransactionKey.AccountKey(s.id)
-        val label = before.transactions.lastOrNull { it.key == key.stored }?.targetLabel ?: s.id
+        return logDeletedAccountCharge(before, d, s.id, (if (new?.source == s) new.total else 0L) - old.total, clock, txId)
+    }
+
+    /** A [change] to what is charged to Account [accountId], when it was deleted before [before], logged as one `acct:` row of the opposite sign (SPEC R54, R88). */
+    private fun logDeletedAccountCharge(before: ProfileData, d: ProfileData, accountId: String, change: Money, clock: Clock, txId: String): ProfileData {
+        if (change == 0L || before.accounts.any { it.id == accountId }) return d
+        val key = TransactionKey.AccountKey(accountId)
+        val label = before.transactions.lastOrNull { it.key == key.stored }?.targetLabel ?: accountId
         return Ledger.logAndMove(d, Movement(-change, key, label, StoredLabels.DELETED_ACCOUNT_PAYMENT), clock, txId).first
     }
 
