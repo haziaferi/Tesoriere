@@ -507,9 +507,10 @@ object StatementImport {
     /**
      * The payment a [row] becomes: its day, minus its amount as the total, its description as the
      * payee. Money out is a purchase; money in a refund, with a negative total (SPEC R21, R107).
+     * A row of zero moves nothing and becomes no payment: null.
      */
-    fun draft(row: BankRow, parts: List<Part>, source: PaymentSource = PaymentSource.Savings): PaymentDraft {
-        require(row.amount != 0L) { "a row of zero moves nothing" }
+    fun draft(row: BankRow, parts: List<Part>, source: PaymentSource = PaymentSource.Savings): PaymentDraft? {
+        if (row.amount == 0L) return null
         return PaymentDraft(row.date, -row.amount, source, row.description, parts)
     }
 
