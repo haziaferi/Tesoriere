@@ -228,4 +228,16 @@ class ReceiptFileFormatTest {
         assertEquals(before, d)
         assertEquals(6, dir.list()!!.size)
     }
+
+    /** The example with its total [total] cents, the cookies' price paid raised to keep the sum. */
+    private fun withTotal(total: Long): ByteArray = bytes("example.json").decodeToString()
+        .replace("\"totalPaid\": 1099", "\"totalPaid\": $total").replace("\"pricePaid\": 318", "\"pricePaid\": ${total - 781}").encodeToByteArray()
+
+    // SPEC:R117 SPEC:R20
+    @Test fun `R117 a totalPaid of 1,000,000,000_00 reads and one cent more is unreadable`() {
+        val top = assertIs<ParseResult.Ok>(ReceiptFileFormat.parse(withTotal(100_000_000_000)))
+        assertEquals(100_000_000_000, top.file.totalPaid)
+        assertEquals(ParseResult.Unreadable, ReceiptFileFormat.parse(withTotal(100_000_000_001)))
+        assertEquals(ParseResult.Unreadable, ReceiptFileFormat.parse(withTotal(Long.MAX_VALUE)))
+    }
 }

@@ -24,6 +24,12 @@ object ReceiptFileFormat {
     /** The deepest nesting of arrays and objects read; rule 123's own is 3 (SPEC R117). */
     const val MAX_DEPTH = 64
 
+    /**
+     * The largest `totalPaid` read, in cents: 1,000,000,000.00 (SPEC R117). Every price paid is at
+     * most the total, so no sum of parts or figure built from a receipt comes near a Long's top.
+     */
+    const val MAX_TOTAL: Long = 100_000_000_000
+
     private val json = Json
 
     /** A JSON number written as a whole number: no sign but minus, no fraction, no exponent. */
@@ -73,7 +79,7 @@ object ReceiptFileFormat {
         val lines = (o["lines"] as? JsonArray ?: throw Unreadable()).map { line(it as? JsonObject ?: throw Unreadable()) }
         if (lines.isEmpty()) throw Unreadable()
         val total = whole(o, "totalPaid")
-        if (total <= 0) throw Unreadable()
+        if (total <= 0 || total > MAX_TOTAL) throw Unreadable()
         var sum = 0L
         for (l in lines) {
             // every price is zero or above, so only an overflow past the top is possible
