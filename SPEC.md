@@ -2055,7 +2055,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 |---|---|
 | a payment from the deleted Goal, or charged to the deleted Account, was since removed, moved to another source or changed in what it took from it, or a payment was since restored onto it, each of which wrote a row in its place (R54) | `WRITTEN_SINCE` |
 | a restored recurring expense or Account would file later rows under a category that no longer exists (R123), and no existing category is given to take its place | `CATEGORY_MISSING` |
-| another payment holds the restored payment's receipt id or one of its bank keys (R107) | `RECORDED_AGAIN` |
+| another payment holds the restored payment's receipt id, or its bank row is held by more payments than at the delete (R107, R125) | `RECORDED_AGAIN` |
 | the rows of an undone quick-add move a Goal or an Account deleted since (R111) | `TARGET_DELETED` |
 | the rows of an undone quick-add take more from a Goal than it holds | `GOAL_SHORT` |
 | a payment restored as a pair cannot be paired as R119 says, such as with a difference filed under no category (R127) | `CANNOT_PAIR` |
@@ -2066,7 +2066,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Not:** Dating the restore's rows on the day of the restore, as Sci-Fin: a return in September undone in October would lower September's spent and raise October's. Restoring over a row written since: the Goal or the Account would count that payment twice, in the row and in its own figure.
 
-**Since:** 2026-11-25 · owner · agreed rewording
+**Since:** 2026-11-26 · owner · agreed rewording
 
 ### D-R123 · Deleting a category
 
