@@ -787,12 +787,12 @@ object StatementImport {
      * outflow as its payment with the row's keys (SPEC R21, R26) or as a payoff taking its money
      * from where the row says, else R89's default (SPEC R89, R107). A row filed under one category
      * teaches its payee that category (SPEC R108); every recorded row's keys are kept. Rows are
-     * recorded oldest first, one day's in the review's order (SPEC R107).
+     * recorded oldest first, one day's in the review's order (SPEC R107). While [canConfirm] is
+     * off, [d] comes back unchanged, as it does should a row then fail to record: all or nothing.
      */
     fun confirm(d: ProfileData, rows: List<ReviewRow>, clock: Clock, ids: () -> String): ProfileData {
-        require(canConfirm(d, rows)) { "every ticked outflow needs a payment that adds up or a payoff (SPEC R107)" }
+        if (!canConfirm(d, rows)) return d
         val run = run(d, rows, clock, ids)
-        check(run.ok) { "a row the check let through could not be recorded" }
-        return run.state
+        return if (run.ok) run.state else d
     }
 }

@@ -23,7 +23,6 @@ import com.hazia.tesoriere.payments.Spent
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFails
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -616,7 +615,7 @@ class StatementImportTest {
         val d = world()
         val short = marchFiled(d).file("FARMACIA SAN LORENZO", "pharm" to "30.00", "home" to "12.00")
         assertFalse(StatementImport.canConfirm(d, short))
-        assertFails { StatementImport.confirm(d, short, clock, ids::next) }
+        assertEquals(d, StatementImport.confirm(d, short, clock, ids::next), "Confirm off: it changes nothing, never a throw")
         val full = short.file("FARMACIA SAN LORENZO", "pharm" to "30.00", "home" to "12.00", "home" to "0.30")
         assertTrue(StatementImport.canConfirm(d, full))
         // unticked, a row that does not add up no longer holds Confirm back
