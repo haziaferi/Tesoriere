@@ -291,3 +291,4 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-26 · R36 · changed · the link keeps the payee less its changing words, as R120 says · owner
 - 2026-11-26 · R107 · changed · a PAIR row turned down is recorded as a READY row when ticked · owner
 - 2026-11-26 · R118 · changed · a suggestion the user turns down names no pair · builder
+- 2026-11-26 · R125 · changed · a source deleted before the payment and restored since is moved again; the delete's row stays · builder

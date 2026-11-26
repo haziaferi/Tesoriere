@@ -552,6 +552,48 @@ class TrashTest {
         assertEquals(figures(d0, "2026-09", "2026-10"), figures(goalBack, "2026-09", "2026-10"))
     }
 
+    // SPEC:R125 SPEC:R54 SPEC:R122
+    @Test fun `R125 a payment deleted after its Goal, whose Goal was restored since, moves the Goal again and leaves Savings at 900_00`() {
+        val start = profile(savings = "900.00", goals = listOf(goal("trip", "Trip", saved = "100.00")), categories = listOf(category("fun", "Fun")))
+        val d0 = pay(start, "p1", "30.00", PaymentSource.Goal("trip"), "fun" to "30.00")
+        assertEquals(cents("70.00"), d0.goals.single().saved)
+        val (a1, t1) = assertNotNull(Trash.deletePayment(d0, "p1", clock, ids))
+        val (a2, tg) = assertNotNull(Trash.deleteGoal(a1, "trip", returnSaved = true, clock, ids))
+        assertEquals(cents("1,000.00"), a2.savingsAmount)
+        val a3 = Trash.restore(a2, t1, clock, ids)
+        assertEquals(cents("970.00"), a3.savingsAmount)
+        assertEquals(RestoreProblem.WRITTEN_SINCE, Trash.restoreProblem(a3, tg))
+        val (a4, t3) = assertNotNull(Trash.deletePayment(a3, "p1", clock, ids))
+        assertEquals(1, t3.written.size)
+        assertEquals(cents("1,000.00"), a4.savingsAmount)
+        val a5 = Trash.restore(a4, tg, clock, ids)
+        assertEquals(cents("900.00"), a5.savingsAmount)
+        assertEquals(cents("100.00"), a5.goals.single().saved)
+        assertEquals(emptyList(), Trash.restoreNotices(a5, t3), "the Goal is back and holds the payment's 30.00")
+        val back = Trash.restore(a5, t3, clock, ids)
+        assertEquals(cents("900.00"), back.savingsAmount)
+        assertEquals(cents("70.00"), back.goals.single().saved)
+        assertEquals(cents("30.00"), Spent.of(back, "fun", "2026-09"))
+        assertEquals(0L, back.transactions.filter { it.payee == StoredLabels.DELETED_GOAL_PAYMENT }.sumOf { it.amount }, "the two savings rows cancel")
+    }
+
+    // SPEC:R125 SPEC:R54 SPEC:R88 SPEC:R122
+    @Test fun `R125 a 40_00 card payment deleted after its card, whose card was restored since, charges the card again`() {
+        val opened = Ledger.logAccountEdit(world().copy(accounts = listOf(card())), "card", "Card", cents("100.00"), StoredLabels.OPENING_BALANCE, clock, "open")
+        val d0 = pay(opened, "p1", "40.00", PaymentSource.Account("card"), "groc" to "40.00")
+        val (a1, t1) = assertNotNull(Trash.deletePayment(d0, "p1", clock, ids))
+        val (a2, tc) = assertNotNull(Trash.deleteAccount(a1, "card", reverse = false, clock, ids))
+        val a3 = Trash.restore(a2, t1, clock, ids)
+        val (a4, t3) = assertNotNull(Trash.deletePayment(a3, "p1", clock, ids))
+        assertNull(Trash.restoreProblem(a4, tc))
+        val a5 = Trash.restore(a4, tc, clock, ids)
+        assertEquals(a1.accounts, a5.accounts)
+        assertEquals(listOf<RestoreNotice>(), Trash.restoreNotices(a5, t3))
+        val back = Trash.restore(a5, t3, clock, ids)
+        assertEquals(figures(d0, "2026-09"), figures(back, "2026-09"))
+        assertEquals(d0.payments, back.payments)
+    }
+
     // SPEC:R122 SPEC:R111
     @Test fun `R122 a 60_00 payoff of a card from Savings, undone, comes back as it was`() {
         val d0 = Accounts.quickAdd(world().copy(accounts = listOf(card())), "card", cents("60.00"), Accounts.Direction.PAYMENT, null, Accounts.PayoffFrom.Savings, clock, ids = ids)

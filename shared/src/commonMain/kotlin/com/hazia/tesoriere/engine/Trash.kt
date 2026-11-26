@@ -325,7 +325,7 @@ object Trash {
     fun restoreNotices(d: ProfileData, p: TrashPayload): List<RestoreNotice> =
         p.payments.filter { x -> d.payments.none { it.id == x.id } }.flatMap { pay ->
             listOfNotNull(
-                Payments.reinstateNotice(d, pay, settled = p.written.isNotEmpty())?.let { RestoreNotice.Source(it) },
+                Payments.reinstateNotice(d, pay, settled = settled(d, p, pay))?.let { RestoreNotice.Source(it) },
                 pairFor(d, pay)?.let { RestoreNotice.PairAvailable(it, pairNotice(d, pay, it)) },
             )
         }
@@ -384,11 +384,14 @@ object Trash {
         }
 
         val payments = p.payments.filter { x -> n.payments.none { it.id == x.id } }
-        // a payment whose removal wrote a row for its deleted source: that row is undone with it (SPEC
-        // R125); restored as a pair it stays removed, its partner completed instead (SPEC R127)
-        for (t in p.written) if ((payments.isNotEmpty() && pairWith == null) || t.key in back) n = undoRow(n, t, clock, ids())
+        // a payment whose removal wrote a row for its source, deleted before it and still gone: that
+        // row is undone with it (SPEC R125); a source back since is moved again instead, the row
+        // staying, cancelled by the one its restore onto the deleted source wrote; restored as a pair
+        // it stays removed, its partner completed instead (SPEC R127)
+        val settled = payments.filter { settled(n, p, it) }.mapTo(HashSet()) { it.id }
+        for (t in p.written) if ((settled.isNotEmpty() && pairWith == null) || t.key in back) n = undoRow(n, t, clock, ids())
         for (pay in payments) n = if (pairWith != null) restoreAsPair(n, pay, pairWith, differenceCategoryId, replacementCategoryId, clock, ids())
-            else Payments.reinstate(n, pay, settled = p.written.isNotEmpty(), clock, ids())
+            else Payments.reinstate(n, pay, settled = pay.id in settled, clock, ids())
 
         val rows = p.transactions.filter { t -> n.transactions.none { it.id == t.id } }
         for (t in rows) n = reAdd(n, t)
@@ -519,6 +522,17 @@ object Trash {
     private fun unimported(d: ProfileData, pay: Payment): ProfileData {
         val keys = pay.bankKeys?.let(StatementImport::keyStrings)?.toSet() ?: return d
         return d.copy(importState = d.importState.copy(importedKeys = d.importState.importedKeys.filter { it !in keys }))
+    }
+
+    /**
+     * Whether payment [pay] of [p] was removed after its Goal or Account was deleted, its removal
+     * writing the row [p] keeps, and that source is still out of [d] (SPEC R125): then undoing the
+     * row restores it. A source back in the Profile since is moved again as recorded instead.
+     */
+    private fun settled(d: ProfileData, p: TrashPayload, pay: Payment): Boolean = p.written.isNotEmpty() && when (val s = pay.source) {
+        is PaymentSource.Goal -> d.goals.none { it.id == s.id }
+        is PaymentSource.Account -> d.accounts.none { it.id == s.id }
+        PaymentSource.Savings -> false
     }
 
     /** The rows [after] holds that [before] did not: what a delete wrote. */

@@ -152,8 +152,9 @@ object Payments {
      * moved again as recorded. A Goal that holds less than its share gives all it holds and Savings
      * the rest, the payment's [Payment.fromSavings] growing by it (SPEC R54). A Goal or an Account
      * deleted since its removal moves as for any payment of a deleted source: one `savings` or
-     * `acct:` row [txId], dated today. When [settled], the source was deleted before the removal,
-     * whose row the caller undoes instead, so no row is written here. A payment whose id is in the
+     * `acct:` row [txId], dated today. When [settled], the source was deleted before the removal
+     * and is still gone, and the caller undoes the removal's row instead, so no row is written here;
+     * a source restored since is not settled and moves as recorded. A payment whose id is in the
      * Profile already is not put back a second time: [d] comes back unchanged.
      */
     fun reinstate(d: ProfileData, p: Payment, settled: Boolean, clock: Clock, txId: String): ProfileData {
