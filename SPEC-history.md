@@ -321,3 +321,4 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-26 · R119 · changed · parts row: the receipt payment's own when it came first; the review's lines when the bank row did · owner
 - 2026-11-26 · R129 · added · merging a receipt payment and a bank payment, both recorded, into one pair; the bank payment removed, not trashed · owner
 - 2026-11-26 · R40 · changed · pairing by hand also works between two payments both recorded already, as R129 says · owner
+- 2026-11-26 · R129 · changed · a merge removing a payment whose Goal or Account is in the Trash settles it; that restore is refused, Unpair notwithstanding · owner

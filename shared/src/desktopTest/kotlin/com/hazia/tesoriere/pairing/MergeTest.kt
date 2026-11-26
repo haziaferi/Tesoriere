@@ -12,6 +12,7 @@ import com.hazia.tesoriere.cents
 import com.hazia.tesoriere.engine.Accounts
 import com.hazia.tesoriere.engine.GoalEditing
 import com.hazia.tesoriere.engine.Reports
+import com.hazia.tesoriere.engine.RestoreProblem
 import com.hazia.tesoriere.engine.TransactionKey
 import com.hazia.tesoriere.engine.Trash
 import com.hazia.tesoriere.engine.Writes
@@ -216,6 +217,20 @@ class MergeTest {
         val row = m.transactions.single { it.id !in d.transactions.map { t -> t.id } }
         assertEquals("tx-rm" to cents("4.50"), row.id to row.amount)
         assertEquals(m.savingsAmount, replayed(m))
+    }
+
+    // SPEC:R129 SPEC:R54 SPEC:R122
+    @Test fun `R129 a bank payment whose Goal is in the Trash, merged, settles it - the Goal's restore is refused, Unpair notwithstanding`() {
+        val d0 = Writes.goalQuickAdd(world(), "trip", cents("100.00"), null, clock, "t-1")
+        val d1 = recordReceipt(d0, coffeeReceipt())
+        val d2 = recordRows(d1, coffee, source = PaymentSource.Goal("trip"))
+        val (d, payload) = Trash.deleteGoal(d2, "trip", true, clock, Ids("del")::next)!!
+        assertNull(Trash.restoreProblem(d, payload))
+        val m = merge(d)
+        assertEquals(d.savingsAmount + cents("4.50"), m.savingsAmount, "one savings row in the Goal's place (R54)")
+        assertEquals(RestoreProblem.WRITTEN_SINCE, Trash.restoreProblem(m, payload))
+        val un = Pairing.unpair(m, "pay-r", clock, "tx-u", emptyList())
+        assertEquals(RestoreProblem.WRITTEN_SINCE, Trash.restoreProblem(un, payload))
     }
 
     // SPEC:R129 SPEC:R54 SPEC:R88
