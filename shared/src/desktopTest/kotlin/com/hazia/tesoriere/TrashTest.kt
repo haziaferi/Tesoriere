@@ -985,7 +985,7 @@ class TrashTest {
         val d1 = recordReceipt(receiptWorld(), shop())
         val row = BankRow(LocalDate(2026, 3, 12), -cents("42.30"), "POS MERCATO LUME 0423", "FIT-12")
         val d2 = Pairing.pairBankWithPayment(d1, "pay-r", StatementImport.review(d1, listOf(row), mar10).single(), null, clock, "tx-pair", emptyList())
-        val un = Pairing.unpair(d2, "pay-r", clock, "tx-un")
+        val un = Pairing.unpair(d2, "pay-r", clock, "tx-un", emptyList())
         assertEquals(d1.payments, un.payments)
         val (after, p) = assertNotNull(Trash.deletePayment(un, "pay-r", clock, ids))
         assertNull(Trash.restoreProblem(after, p))
@@ -995,5 +995,41 @@ class TrashTest {
         val paired = Trash.restore(withRow, p, clock, ids, pairWith = bankId)
         assertEquals(1, paired.payments.size)
         assertEquals(cents("957.70"), paired.savingsAmount)
+    }
+
+    /**
+     * Two -4.50 rows of 11 March with FITIDs [fitids], recorded under Food; the second one's
+     * payment deleted to the Trash; the first paired with the 4.50 receipt and unpaired. The
+     * Profile, the Trash and the two rows.
+     */
+    private fun twinUnpaired(fitids: Pair<String?, String?>): Triple<ProfileData, List<TrashItem>, List<BankRow>> {
+        clock.setDay(mar10)
+        val rows = listOf(coffeeRow.copy(fitid = fitids.first), coffeeRow.copy(fitid = fitids.second))
+        val d0 = recordRows(foodWorld(), *rows.toTypedArray())
+        val (b1, b2) = d0.payments
+        val (after, p) = assertNotNull(Trash.deletePayment(d0, b2.id, clock, ids))
+        val trash = listOf(TrashItem("tr-1", Fixture.PROFILE, "payment", "Bar Centrale", mar10.toString(), Trash.encode(p)))
+        val paired = Pairing.pairReceiptWithPayment(after, b1.id, Receipts.open(after, coffee()), null, clock, "tx-pair")
+        assertEquals("rc-1", paired.payments.single().receiptId)
+        val un = Pairing.unpair(paired, b1.id, clock, "tx-un", trash)
+        assertNull(un.payments.single().bankKeys)
+        return Triple(un, trash, rows)
+    }
+
+    // SPEC:R128 SPEC:R26 SPEC:R41
+    @Test fun `R128 of two -4_50 twins with no FITID, one in the Trash, the other unpaired keeps the shared key, and no row arrives as new`() {
+        val (un, _, rows) = twinUnpaired(null to null)
+        assertTrue(StatementImport.keys(rows[0]).synKey in un.importState.importedKeys, "the trashed twin still holds it")
+        assertEquals(listOf(RowStatus.DUPLICATE, RowStatus.DUPLICATE), StatementImport.review(un, rows, mar10).map { it.status })
+    }
+
+    // SPEC:R128 SPEC:R26
+    @Test fun `R128 of two -4_50 rows F1 and F2, F2's in the Trash, F1's pair unpaired drops both of F1's keys, and only F1 arrives as new`() {
+        val (un, _, rows) = twinUnpaired("F1" to "F2")
+        assertFalse("fit:F1" in un.importState.importedKeys)
+        assertTrue("fit:F2" in un.importState.importedKeys)
+        val review = StatementImport.review(un, rows, mar10)
+        assertEquals(RowStatus.DUPLICATE, review.single { it.row.fitid == "F2" }.status)
+        assertTrue(review.single { it.row.fitid == "F1" }.status != RowStatus.DUPLICATE)
     }
 }

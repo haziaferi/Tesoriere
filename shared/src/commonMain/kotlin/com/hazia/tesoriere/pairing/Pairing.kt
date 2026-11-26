@@ -3,9 +3,11 @@
 package com.hazia.tesoriere.pairing
 
 import com.hazia.tesoriere.engine.Clock
+import com.hazia.tesoriere.engine.Trash
 import com.hazia.tesoriere.engine.daysTo
 import com.hazia.tesoriere.model.Money
 import com.hazia.tesoriere.model.ProfileData
+import com.hazia.tesoriere.model.TrashItem
 import com.hazia.tesoriere.payments.Part
 import com.hazia.tesoriere.payments.Payment
 import com.hazia.tesoriere.payments.PaymentDraft
@@ -95,13 +97,19 @@ object Pairing {
     /**
      * Unpairs [paymentId] (SPEC R128): Payments.edit makes it the receipt's payment alone, and its
      * bank keys leave it and the import's keys, so its row arrives as new on the next import (SPEC
-     * R26). The receipt id stays recorded and the store link stays (SPEC R36). [txId] is the ledger
+     * R26): its FITID key always, its synthetic key only while no other payment, in the Profile or
+     * among the payments of [trash] (the Trash's items; those of this Profile are read), holds the keys of the same
+     * row by StatementImport.sameRow, so a twin in the Trash still keeps its row recorded (SPEC
+     * R41). The receipt id stays recorded and the store link stays (SPEC R36). [txId] is the ledger
      * row a deleted source's edit may write (SPEC R54). While [unpairProblem] finds one, [d] comes
      * back unchanged.
      */
-    fun unpair(d: ProfileData, paymentId: String, clock: Clock, txId: String): ProfileData {
+    fun unpair(d: ProfileData, paymentId: String, clock: Clock, txId: String, trash: List<TrashItem>): ProfileData {
         if (unpairProblem(d, paymentId) != null) return d
-        val keys = StatementImport.keyStrings(d.payments.first { it.id == paymentId }.bankKeys!!).toSet()
+        val held = d.payments.first { it.id == paymentId }.bankKeys!!
+        val trashed = trash.filter { it.profileId == d.profileId }.flatMap { Trash.decode(it.payload)?.payments.orEmpty() }
+        val twin = (d.payments + trashed).any { o -> o.id != paymentId && o.bankKeys?.let { StatementImport.sameRow(it, held) } == true }
+        val keys = listOfNotNull(held.fitid?.let { "fit:$it" }, held.synKey.takeIf { !twin }).toSet()
         val edited = Payments.edit(d, paymentId, unpairDraft(d, paymentId)!!, clock, txId)
         return edited.copy(
             payments = edited.payments.map { if (it.id == paymentId) it.copy(bankKeys = null) else it },
