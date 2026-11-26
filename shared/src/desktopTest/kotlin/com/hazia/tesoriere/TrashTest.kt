@@ -391,6 +391,10 @@ class TrashTest {
         assertEquals(CategoryEditing.DeleteProblem.REPLACEMENT_UNKNOWN, CategoryEditing.deleteProblem(d, "phone", "nope"))
         assertEquals(CategoryEditing.DeleteProblem.REPLACEMENT_UNKNOWN, CategoryEditing.deleteProblem(d, "phone", "phone"))
         assertEquals(CategoryEditing.DeleteProblem.NO_SUCH_CATEGORY, CategoryEditing.deleteProblem(d, "nope", "net"))
+        // each refusal changes nothing
+        for ((id, replacement) in listOf("phone" to null, "phone" to "nope", "phone" to "phone", "nope" to "net")) {
+            assertEquals(d, CategoryEditing.delete(d, id, replacement), "$id with $replacement")
+        }
 
         val (after, p) = assertNotNull(Trash.deleteCategory(d, "phone", replacementId = "net"))
         assertEquals("net", after.recurringExpenses.single().categoryId)

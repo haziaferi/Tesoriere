@@ -17,7 +17,6 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.atTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -105,7 +104,8 @@ class HourlyIncomeTest {
     @Test fun `R81 a payday cannot be confirmed with 0_00`() {
         val d = hourly().shift(3, 6.0)
         val p = Hourly.duePayday(d, LocalDate(2026, 11, 13))!!
-        assertFailsWith<IllegalArgumentException> { Hourly.confirmPayday(d, p, 0, clock, ids.next()) }
+        assertEquals(d, Hourly.confirmPayday(d, p, 0, clock, ids.next()))
+        assertEquals(d, Hourly.confirmPayday(d, p, cents("-1.00"), clock, ids.next()))
     }
 
     // SPEC:R81
@@ -177,7 +177,7 @@ class HourlyIncomeTest {
     // SPEC:R83 SPEC:R79
     @Test fun `R83 discarded, the shifts leave no row and the income can then be made salaried, but not with a shift logged`() {
         val d = hourly().shift(3, 6.0).shift(4, 4.0)
-        assertFailsWith<IllegalArgumentException> { Hourly.setType(d, IncomeType.SALARIED, clock.today) }
+        assertEquals(d, Hourly.setType(d, IncomeType.SALARIED, clock.today))
         val discarded = Hourly.settleOnSwitch(d, null, clock, ids.next())
         assertTrue(discarded.shifts.isEmpty() && discarded.transactions.isEmpty())
         val salaried = Hourly.setType(discarded, IncomeType.SALARIED, clock.today).settings

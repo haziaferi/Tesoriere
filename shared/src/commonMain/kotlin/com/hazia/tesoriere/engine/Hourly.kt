@@ -91,10 +91,11 @@ object Hourly {
     /**
      * The payday confirmed (SPEC R81): what arrived lands in Savings as income dated to the
      * payday, carrying the hours and the rate they were logged at, which the learned estimate
-     * reads back, and the shifts it paid go.
+     * reads back, and the shifts it paid go. A confirmed payday has an amount: [arrived] not above
+     * zero gives [d] back unchanged ([nothingThisTime] answers a payday that brought nothing).
      */
     fun confirmPayday(d: ProfileData, payday: Payday, arrived: Money, clock: Clock, txId: String): ProfileData {
-        require(arrived > 0) { "a confirmed payday has an amount" }
+        if (arrived <= 0) return d
         val hours = payday.hours
         val rate = if (hours > 0) (payday.gross / hours).roundToLong() else null
         val moved = Ledger.logAndMove(
@@ -134,12 +135,13 @@ object Hourly {
     /**
      * The type change (SPEC R79). Hourly has no automatic deposit and counts paydays after
      * [today] only, so neither one behind it nor today's is asked about; back to salaried keeps
-     * SPEC R76's paydays. Shifts are settled first (SPEC R83).
+     * SPEC R76's paydays. Shifts are settled first (SPEC R83): while any is logged, [d] comes back
+     * unchanged.
      */
     fun setType(d: ProfileData, type: IncomeType, today: LocalDate): ProfileData {
         val s = d.settings
         if (s.incomeType == type) return d
-        require(d.shifts.isEmpty()) { "shifts are settled before the type changes" }
+        if (d.shifts.isNotEmpty()) return d
         return d.copy(settings = s.copy(
             incomeType = type,
             incomeAutoDeposit = false,
