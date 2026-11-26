@@ -15,6 +15,7 @@ import com.hazia.tesoriere.model.Shift
 import com.hazia.tesoriere.model.StoredLabels
 import com.hazia.tesoriere.model.Transaction
 import com.hazia.tesoriere.model.TrashItem
+import com.hazia.tesoriere.pairing.PairProblem
 import com.hazia.tesoriere.pairing.Pairing
 import com.hazia.tesoriere.payments.Part
 import com.hazia.tesoriere.payments.Payment
@@ -476,8 +477,11 @@ object Trash {
                 val (review, parts) = receiptSideOf(d, pay, replacement) ?: return RestoreProblem.CANNOT_PAIR
                 RestoreProblem.CANNOT_PAIR.takeIf { Pairing.receiptPairProblem(unrecorded(d, pay), pairWith, review, differenceFor(d, pay, differenceCategoryId), parts) != null }
             }
-            Side.BANK -> RestoreProblem.CANNOT_PAIR.takeIf {
-                Pairing.bankPairProblem(unimported(d, pay), pairWith, reviewRow(pay), differenceCategoryId, twinRows(d, p, pay)) != null
+            // the receipt payment completed may hold a part under a category gone: [replacement] takes its place (SPEC R119)
+            Side.BANK -> when (Pairing.bankPairProblem(unimported(d, pay), pairWith, reviewRow(pay), differenceCategoryId, twinRows(d, p, pay), replacement)) {
+                null -> null
+                PairProblem.CATEGORY_MISSING -> RestoreProblem.CATEGORY_MISSING
+                else -> RestoreProblem.CANNOT_PAIR
             }
             null -> RestoreProblem.CANNOT_PAIR
         }
@@ -506,7 +510,7 @@ object Trash {
             )
         }
         Side.BANK -> {
-            val paired = Pairing.pairBankWithPayment(unimported(d, pay), pairWith, reviewRow(pay), differenceCategoryId, clock, txId, twinRows(d, p, pay)).data
+            val paired = Pairing.pairBankWithPayment(unimported(d, pay), pairWith, reviewRow(pay), differenceCategoryId, clock, txId, twinRows(d, p, pay), replacement).data
             paired.copy(importState = paired.importState.copy(importedKeys = d.importState.importedKeys))
         }
         null -> error("not a side of a pair (SPEC R127)")

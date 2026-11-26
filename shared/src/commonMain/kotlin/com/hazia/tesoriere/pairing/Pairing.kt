@@ -50,6 +50,8 @@ enum class PairProblem {
     ROW_NOT_PAIRABLE,
     /** The bank row is recorded already (SPEC R26). */
     ROW_RECORDED,
+    /** A part of the receipt's payment files under a category that does not exist, and no category that exists is given in its place (SPEC R119, R123). */
+    CATEGORY_MISSING,
     /** The receipt's own review cannot be confirmed: see Receipts.problem (SPEC R115). */
     RECEIPT_PROBLEM,
     /** A difference other than zero with no category picked (SPEC R39). */
@@ -248,11 +250,17 @@ object Pairing {
 
     // --- receipt first, then its bank row (SPEC R38 row 1) ---
 
-    /** What the receipt's payment [paymentId] becomes when paired with bank row [row] (SPEC R119); null for an unknown id. */
-    fun bankPairDraft(d: ProfileData, paymentId: String, row: ReviewRow, differenceCategoryId: String?): PaymentDraft? {
+    /**
+     * What the receipt's payment [paymentId] becomes when paired with bank row [row] (SPEC R119);
+     * null for an unknown id. A part whose category does not exist goes under
+     * [replacementCategoryId] (SPEC R123, R124); its receipt lines keep theirs.
+     */
+    fun bankPairDraft(d: ProfileData, paymentId: String, row: ReviewRow, differenceCategoryId: String?, replacementCategoryId: String? = null): PaymentDraft? {
         val p = d.payments.firstOrNull { it.id == paymentId } ?: return null
         val bank = -row.row.amount
-        return PaymentDraft(p.date, bank, p.source, p.payee, withDifference(p.parts.filter { !it.difference }, differencePart(p.total, bank), differenceCategoryId))
+        val live = d.categories.mapTo(HashSet()) { it.id }
+        val parts = p.parts.filter { !it.difference }.map { if (it.categoryId in live) it else it.copy(categoryId = replacementCategoryId) }
+        return PaymentDraft(p.date, bank, p.source, p.payee, withDifference(parts, differencePart(p.total, bank), differenceCategoryId))
     }
 
     /**
@@ -263,20 +271,24 @@ object Pairing {
      */
     fun bankPairProblem(
         d: ProfileData, paymentId: String, row: ReviewRow, differenceCategoryId: String?, review: List<ReviewRow>,
+        replacementCategoryId: String? = null,
     ): PairProblem? {
         val p = d.payments.firstOrNull { it.id == paymentId }
         if (p == null || !receiptSide(p)) return PairProblem.PAYMENT_NOT_PAIRABLE
         if (row.row.amount >= 0) return PairProblem.ROW_NOT_PAIRABLE
         if (StatementImport.rowRecorded(d, row, review)) return PairProblem.ROW_RECORDED
+        // a part filed under a category deleted since needs one that exists in its place (SPEC R119, R123)
+        val live = d.categories.mapTo(HashSet()) { it.id }
+        if (p.parts.any { !it.difference && it.categoryId !in live } && replacementCategoryId !in live) return PairProblem.CATEGORY_MISSING
         if (!canConfirmPair(differencePart(p.total, -row.row.amount), differenceCategoryId)) return PairProblem.DIFFERENCE_UNFILED
-        val draft = bankPairDraft(d, paymentId, row, differenceCategoryId) ?: return PairProblem.PAYMENT_NOT_PAIRABLE
+        val draft = bankPairDraft(d, paymentId, row, differenceCategoryId, replacementCategoryId) ?: return PairProblem.PAYMENT_NOT_PAIRABLE
         if (!Payments.canSave(d, draft, paymentId, pairing = true)) return PairProblem.CANNOT_SAVE
         return null
     }
 
     /** The warning the paired payment would carry, as for any payment edit (SPEC R54, R109); null for an unknown id. */
-    fun bankPairNotice(d: ProfileData, paymentId: String, row: ReviewRow, differenceCategoryId: String?): PaymentNotice? =
-        bankPairDraft(d, paymentId, row, differenceCategoryId)?.let { Payments.draftNotice(d, it, editing = paymentId) }
+    fun bankPairNotice(d: ProfileData, paymentId: String, row: ReviewRow, differenceCategoryId: String?, replacementCategoryId: String? = null): PaymentNotice? =
+        bankPairDraft(d, paymentId, row, differenceCategoryId, replacementCategoryId)?.let { Payments.draftNotice(d, it, editing = paymentId) }
 
     /**
      * Pairs receipt payment [paymentId] with bank row [row], suggested or by hand (SPEC R38, R40,
@@ -290,11 +302,11 @@ object Pairing {
      */
     fun pairBankWithPayment(
         d: ProfileData, paymentId: String, row: ReviewRow, differenceCategoryId: String?, clock: Clock, txId: String,
-        review: List<ReviewRow>,
+        review: List<ReviewRow>, replacementCategoryId: String? = null,
     ): BankPairing {
-        if (bankPairProblem(d, paymentId, row, differenceCategoryId, review) != null) return BankPairing(d, review)
+        if (bankPairProblem(d, paymentId, row, differenceCategoryId, review, replacementCategoryId) != null) return BankPairing(d, review)
         val store = d.payments.first { it.id == paymentId }.payee
-        val edited = Payments.edit(d, paymentId, bankPairDraft(d, paymentId, row, differenceCategoryId)!!, clock, txId, pairing = true)
+        val edited = Payments.edit(d, paymentId, bankPairDraft(d, paymentId, row, differenceCategoryId, replacementCategoryId)!!, clock, txId, pairing = true)
         // the row itself in the review, else the first equal to it: it names the payment from now on
         val at = review.indexOfFirst { it === row }.takeIf { it >= 0 } ?: review.indexOf(row)
         val named = review.mapIndexed { i, r -> if (i == at) r.copy(pairPaymentId = paymentId) else r }

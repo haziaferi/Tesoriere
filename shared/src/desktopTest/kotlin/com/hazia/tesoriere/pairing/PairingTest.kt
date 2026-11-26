@@ -711,6 +711,25 @@ class PairingTest {
         assertEquals(listOf(RowStatus.DUPLICATE, RowStatus.PAIR), reviewOf(un, coffee, coffee).map { it.status })
     }
 
+    // SPEC:R119 SPEC:R123 SPEC:R124 SPEC:R118
+    @Test fun `R119 a receipt payment whose Household part's category was deleted is named, refused CATEGORY_MISSING, and with Fun given pairs that part under Fun`() {
+        val d1 = recordReceipt(world(), shop())
+        val noHome = d1.copy(categories = d1.categories.filter { it.id != "home" })
+        val review = reviewOf(noHome, row("42.30", on(12)))
+        val rr = review.single()
+        assertEquals(RowStatus.PAIR to "pay-r", rr.status to rr.pairPaymentId, "the suggestion still names it")
+        assertEquals(PairProblem.CATEGORY_MISSING, Pairing.bankPairProblem(noHome, "pay-r", rr, null, review))
+        assertEquals(noHome, Pairing.pairBankWithPayment(noHome, "pay-r", rr, null, clock, "tx-1", review).data)
+        assertEquals(PairProblem.CATEGORY_MISSING, Pairing.bankPairProblem(noHome, "pay-r", rr, null, review, replacementCategoryId = "nope"))
+        assertNull(Pairing.bankPairProblem(noHome, "pay-r", rr, null, review, replacementCategoryId = "fun"))
+        val paired = Pairing.pairBankWithPayment(noHome, "pay-r", rr, null, clock, "tx-1", review, replacementCategoryId = "fun").data
+        val p = paired.payments.single()
+        assertEquals(listOf(Part("groc", cents("30.00")), Part("fun", cents("12.30"))), p.parts)
+        assertEquals(listOf("groc", "home"), p.receiptLines.map { it.categoryId }, "the lines keep the category they were recorded under")
+        assertEquals(StatementImport.keys(rr.row), p.bankKeys)
+        assertEquals(cents("12.30"), Spent.of(paired, "fun", "2026-03"))
+    }
+
     // --- R128: unpairing ---
 
     /** A 42.10 receipt (Groceries 30.00, Household 12.10) from Savings paired by hand with a -42.30 row, its 0.20 under Fun. */
