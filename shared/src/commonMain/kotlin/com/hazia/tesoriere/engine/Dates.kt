@@ -17,6 +17,19 @@ import kotlinx.datetime.plus
 /** `YYYY-MM`, the key a month is known by. */
 fun LocalDate.ymKey(): String = toString().substring(0, 7)
 
+private val YM = Regex("""(\d{4})-(\d{2})""")
+
+/** The 1st of the month [ym] names as `YYYY-MM`, or null for a string that is no month: a stored mark may be corrupted. */
+fun monthStart(ym: String?): LocalDate? {
+    val m = ym?.let { YM.matchEntire(it) } ?: return null
+    val month = m.groupValues[2].toInt()
+    if (month !in 1..12) return null
+    return LocalDate(m.groupValues[1].toInt(), month, 1)
+}
+
+/** [ym] when it names a month as `YYYY-MM`, else null: a corrupted month mark counts as no mark. */
+fun monthMark(ym: String?): String? = ym?.takeIf { monthStart(it) != null }
+
 fun LocalDate.plusDays(n: Int): LocalDate = plus(n, DateTimeUnit.DAY)
 fun LocalDate.minusDays(n: Int): LocalDate = minus(n, DateTimeUnit.DAY)
 

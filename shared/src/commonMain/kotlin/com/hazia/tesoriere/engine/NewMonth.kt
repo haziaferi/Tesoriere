@@ -104,7 +104,7 @@ object NewMonth {
 
         for (id in d.recurringExpenses.map { it.id }) {
             val e = next.recurringExpenses.first { it.id == id }
-            if ((e.lastSweptMonth ?: "") >= ym) continue
+            if ((monthMark(e.lastSweptMonth) ?: "") >= ym) continue
             val (afterSweep, swept) = Recurring.sweepOccurrences(next, id, first, clock, ids)
             next = afterSweep
             sweptTotal += swept
@@ -164,14 +164,16 @@ object NewMonth {
         val today = clock.today()
         var next = d
         val nowYm = today.ymKey()
-        val marks = (listOfNotNull(next.settings.lastMonthProcessed) + next.recurringExpenses.mapNotNull { it.lastSweptMonth }).sorted()
-        if (marks.isEmpty() || marks.first() >= nowYm) {
+        // a mark that is no month, a corrupted one, counts as no mark
+        val marks = (listOfNotNull(monthMark(next.settings.lastMonthProcessed)) + next.recurringExpenses.mapNotNull { monthMark(it.lastSweptMonth) }).sorted()
+        val start = marks.firstOrNull()?.let(::monthStart)
+        if (start == null || marks.first() >= nowYm) {
             // the payday clock still runs: a payday may have passed inside the month
             val (afterIncome, _) = Income.runCatchUp(markProcessed(Recurring.advanceDueDates(next, today), nowYm), clock, ids)
             return afterIncome to null
         }
         val months = ArrayList<LocalDate>()
-        var cur = LocalDate(marks.first().substring(0, 4).toInt(), marks.first().substring(5, 7).toInt(), 1)
+        var cur: LocalDate = start
         var guard = 0
         while (cur.ymKey() < nowYm && guard++ < 120) { cur = cur.firstOfNextMonth(); months.add(cur) }
         var swept = 0L
@@ -192,7 +194,7 @@ object NewMonth {
 
     /** The Profile marked processed up to [ym]; a later mark already kept stays (SPEC R70). */
     private fun markProcessed(d: ProfileData, ym: String): ProfileData =
-        if ((d.settings.lastMonthProcessed ?: "") >= ym) d else d.copy(settings = d.settings.copy(lastMonthProcessed = ym))
+        if ((monthMark(d.settings.lastMonthProcessed) ?: "") >= ym) d else d.copy(settings = d.settings.copy(lastMonthProcessed = ym))
 
     private const val FIELD = '\t'
 

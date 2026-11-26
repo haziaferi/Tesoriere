@@ -389,7 +389,7 @@ object Trash {
         }
         val expenses = p.expenses.filter { e -> n.recurringExpenses.none { it.id == e.id } }.map { e ->
             back += TransactionKey.RecurringKey(e.id).stored
-            e.copy(profileId = n.profileId, categoryId = filed(e.categoryId)!!, lastSweptMonth = maxOf(e.lastSweptMonth ?: "", today.ymKey()))
+            e.copy(profileId = n.profileId, categoryId = filed(e.categoryId)!!, lastSweptMonth = maxOf(monthMark(e.lastSweptMonth) ?: "", today.ymKey()))
         }
         if (expenses.isNotEmpty()) {
             // only the restored expenses' due dates move on to today (SPEC R61)
