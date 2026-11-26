@@ -317,3 +317,4 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-26 · R127 · changed · a receipt side holding bank keys restored as a pair leaves its one row kept once · builder
 - 2026-11-26 · R119 · changed · a part whose category does not exist takes one given in its place, else CATEGORY_MISSING · owner
 - 2026-11-26 · R128 · changed · the pair keeps its own parts less the difference part while they add up to the total · owner
+- 2026-11-26 · R127 · changed · only a payment recorded since the delete, not one there already, is offered or taken as the pair · builder

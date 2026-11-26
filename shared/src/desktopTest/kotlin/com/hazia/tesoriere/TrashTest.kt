@@ -1071,6 +1071,46 @@ class TrashTest {
         }
     }
 
+    // SPEC:R127 SPEC:R125 SPEC:R26
+    @Test fun `R127 of two coffees, one paired with its receipt, the receipt deleted is not offered the other coffee's payment as its pair`() {
+        clock.setDay(mar10)
+        val row = coffeeRow.copy(fitid = null)
+        val d0 = recordReceipt(foodWorld(), coffee())
+        val rv = StatementImport.review(d0, listOf(row, row), mar10)
+        val bp = Pairing.pairBankWithPayment(d0, "pay-r", rv.first { it.pairPaymentId != null }, null, clock, "tx-pair", rv)
+        val d1 = StatementImport.confirm(bp.data, bp.review.map {
+            if (it.pairPaymentId != null) it else it.copy(include = true, draft = PaymentDraft(row.date, cents("4.50"), PaymentSource.Savings, it.payee, listOf(Part("food", cents("4.50")))))
+        }, clock, ids)
+        assertEquals(cents("991.00"), d1.savingsAmount)
+        val (after, p) = assertNotNull(Trash.deletePayment(d1, "pay-r", clock, ids))
+        val other = after.payments.single().id
+        assertEquals(emptyList(), Trash.restoreNotices(after, p), "the other coffee was recorded before the delete")
+        assertEquals(RestoreProblem.CANNOT_PAIR, Trash.restoreProblem(after, p, pairWith = other))
+        assertEquals(after, Trash.restore(after, p, clock, ids, pairWith = other))
+        val back = Trash.restore(after, p, clock, ids)
+        assertEquals(2, back.payments.size)
+        assertEquals(cents("991.00"), back.savingsAmount)
+        assertEquals(cents("9.00"), Spent.of(back, "food", "2026-03"))
+    }
+
+    // SPEC:R127
+    @Test fun `R127 a receipt or a bank payment deleted is not offered as its pair a payment recorded before the delete`() {
+        clock.setDay(mar10)
+        // a 4.50 receipt and a 4.50 bank payment, the suggestion turned down, both there before either delete
+        val d0 = recordReceipt(foodWorld(), coffee())
+        val turned = StatementImport.review(d0, listOf(coffeeRow), mar10).map {
+            it.copy(pairPaymentId = null, include = true, draft = PaymentDraft(it.row.date, cents("4.50"), PaymentSource.Savings, it.payee, listOf(Part("food", cents("4.50")))))
+        }
+        val both = StatementImport.confirm(d0, turned, clock, ids)
+        val bankId = both.payments.single { it.id != "pay-r" }.id
+        val (noReceipt, pr) = assertNotNull(Trash.deletePayment(both, "pay-r", clock, ids))
+        assertEquals(emptyList(), Trash.restoreNotices(noReceipt, pr))
+        assertEquals(RestoreProblem.CANNOT_PAIR, Trash.restoreProblem(noReceipt, pr, pairWith = bankId))
+        val (noBank, pb) = assertNotNull(Trash.deletePayment(both, bankId, clock, ids))
+        assertEquals(emptyList(), Trash.restoreNotices(noBank, pb))
+        assertEquals(RestoreProblem.CANNOT_PAIR, Trash.restoreProblem(noBank, pb, pairWith = "pay-r"))
+    }
+
     // SPEC:R127 SPEC:R26 SPEC:R128
     @Test fun `R127 a paired 4_50 coffee deleted, its row ticked as DUPLICATE, restored as that pair keeps the row once`() {
         clock.setDay(mar10)

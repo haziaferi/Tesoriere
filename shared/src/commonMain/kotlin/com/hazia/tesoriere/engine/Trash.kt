@@ -103,6 +103,12 @@ data class TrashPayload(
      * is `RECORDED_AGAIN` only when more hold them.
      */
     val keysHeld: Map<String, Int> = emptyMap(),
+    /**
+     * Payment id to the payments that could have been its pair at its delete, as R127 names them:
+     * recorded before it went, they are never offered or taken as its pair, only a payment
+     * recorded since is (SPEC R127). An item kept with no entry falls back on [keysHeld].
+     */
+    val pairsAtDelete: Map<String, List<String>> = emptyMap(),
     /** A whole Profile (SPEC R126). */
     val profile: TrashedProfile? = null,
 )
@@ -257,7 +263,10 @@ object Trash {
         val p = d.payments.firstOrNull { it.id == id } ?: return null
         val after = Payments.remove(d, id, clock, ids())
         val held = holding(after, p, except = null)
-        return after to TrashPayload(payments = listOf(p), written = written(d, after), keysHeld = if (held > 0) mapOf(id to held) else emptyMap())
+        return after to TrashPayload(
+            payments = listOf(p), written = written(d, after), keysHeld = if (held > 0) mapOf(id to held) else emptyMap(),
+            pairsAtDelete = mapOf(id to pairCandidates(after, p)),
+        )
     }
 
     /** A whole Profile (SPEC R126); deleting the receipt Profile frees the receipt folder (SPEC R112). */
@@ -331,7 +340,7 @@ object Trash {
         p.payments.filter { x -> d.payments.none { it.id == x.id } }.flatMap { pay ->
             listOfNotNull(
                 Payments.reinstateNotice(d, pay, settled = settled(d, p, pay))?.let { RestoreNotice.Source(it) },
-                pairFor(d, pay)?.let { RestoreNotice.PairAvailable(it, pairNotice(d, pay, it)) },
+                pairFor(d, p, pay)?.let { RestoreNotice.PairAvailable(it, pairNotice(d, pay, it)) },
             )
         }
 
@@ -439,20 +448,38 @@ object Trash {
     }
 
     /**
-     * The payment recorded since that [pay] could be restored as the pair of (SPEC R127): for a
-     * receipt holding no bank keys, the best bank row's payment Pairing.paymentCandidates finds;
-     * for a receipt holding them, a payment with no receipt holding one of them; for a bank row's
-     * payment, the best receipt payment Pairing.receiptCandidates finds. Null for none, or a refund.
+     * The payments of [d] that [pay] could be restored as the pair of (SPEC R127), best first: for a
+     * receipt holding no bank keys, the bank rows' payments Pairing.paymentCandidates finds; for a
+     * receipt holding them, the payments with no receipt holding its row's keys (StatementImport.sameRow,
+     * so by FITID when both have one); for a bank row's payment, the receipt payments
+     * Pairing.receiptCandidates finds. None for a refund.
      */
-    private fun pairFor(d: ProfileData, pay: Payment): String? = when (sideOf(pay)) {
+    private fun pairCandidates(d: ProfileData, pay: Payment): List<String> = when (sideOf(pay)) {
         Side.RECEIPT -> {
             val held = pay.bankKeys
-            if (held != null) d.payments.firstOrNull { o -> o.receiptId == null && o.total > 0 && o.bankKeys?.let { StatementImport.sameRow(it, held) } == true }?.id
-            else Receipts.reopen(d, pay)?.let { Pairing.paymentCandidates(d, it.file).firstOrNull()?.first }
+            if (held != null) d.payments.filter { o -> o.id != pay.id && o.receiptId == null && o.total > 0 && o.bankKeys?.let { StatementImport.sameRow(it, held) } == true }.map { it.id }
+            else Receipts.reopen(d, pay)?.let { r -> Pairing.paymentCandidates(d, r.file).map { it.first } }.orEmpty()
         }
-        Side.BANK -> Pairing.receiptCandidates(d, bankRow(pay)).firstOrNull()?.first
-        null -> null
+        Side.BANK -> Pairing.receiptCandidates(d, bankRow(pay)).map { it.first }
+        null -> emptyList()
     }
+
+    /**
+     * The payments recorded since [pay]'s delete that it may be restored as the pair of (SPEC R127),
+     * best first: its [pairCandidates] less those that were candidates at its delete
+     * ([TrashPayload.pairsAtDelete]). For an item kept with no such entry, a receipt holding bank
+     * keys takes a partner only while more payments hold its row's keys than at its delete.
+     */
+    private fun offered(d: ProfileData, p: TrashPayload, pay: Payment): List<String> {
+        val now = pairCandidates(d, pay)
+        val before = p.pairsAtDelete[pay.id]
+        if (before != null) return now.filter { it !in before }
+        if (sideOf(pay) == Side.RECEIPT && pay.bankKeys != null && holding(d, pay, except = null) <= (p.keysHeld[pay.id] ?: 0)) return emptyList()
+        return now
+    }
+
+    /** The best payment recorded since that [pay] could be restored as the pair of (SPEC R127); null for none. */
+    private fun pairFor(d: ProfileData, p: TrashPayload, pay: Payment): String? = offered(d, p, pay).firstOrNull()
 
     /** The warning the pair of [pay] with [partner] would carry, the difference not yet filed (SPEC R127). */
     private fun pairNotice(d: ProfileData, pay: Payment, partner: String): PaymentNotice? = when (sideOf(pay)) {
@@ -469,6 +496,10 @@ object Trash {
      */
     private fun pairProblem(d: ProfileData, p: TrashPayload, pairWith: String, differenceCategoryId: String?, replacement: String?): RestoreProblem? {
         val pay = p.payments.singleOrNull()?.takeIf { x -> d.payments.none { it.id == x.id } } ?: return RestoreProblem.CANNOT_PAIR
+        // only a payment recorded since its delete completes it: one there before was not its pair (SPEC R127)
+        if (pairWith in p.pairsAtDelete[pay.id].orEmpty()) return RestoreProblem.CANNOT_PAIR
+        // a receipt holding bank keys is completed only by a payment recorded since from its very row
+        if (sideOf(pay) == Side.RECEIPT && pay.bankKeys != null && pairWith !in offered(d, p, pay)) return RestoreProblem.CANNOT_PAIR
         return when (sideOf(pay)) {
             Side.RECEIPT -> {
                 val live = d.categories.mapTo(HashSet()) { it.id }
