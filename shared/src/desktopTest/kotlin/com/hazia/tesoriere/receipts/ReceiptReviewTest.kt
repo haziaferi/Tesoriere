@@ -21,7 +21,6 @@ import com.hazia.tesoriere.payments.Spent
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -212,7 +211,7 @@ class ReceiptReviewTest {
         assertEquals(listOf<ReviewNote>(ReviewNote.Unlinked("ch-garden")), Receipts.notes(d0, r))
         assertFalse(Receipts.canConfirm(d0, r))
         assertEquals(ReceiptProblem.UNLINKED, Receipts.problem(d0, r))
-        assertFailsWith<IllegalArgumentException> { Receipts.confirm(d0, r, clock, "pay-1") }
+        assertEquals(d0, Receipts.confirm(d0, r, clock, "pay-1"), "refused, it changes nothing")
 
         val added = Receipts.addAsNew(r, "ch-garden", "c-new", Fixture.PROFILE)
         assertEquals(listOf(Category("c-new", Fixture.PROFILE, "Garden", planned = 0)), added.addedCategories)
@@ -328,13 +327,13 @@ class ReceiptReviewTest {
         assertEquals("p-a", app1.receiptProfileId)
         assertEquals("folder-handle-1", a1.receiptSettings!!.folder)
         assertFalse(Receipts.offersFolder(app1, "p-b"))
-        assertFailsWith<IllegalArgumentException> { Receipts.chooseFolder(app1, b, "folder-handle-2") }
+        assertEquals(app1 to b, Receipts.chooseFolder(app1, b, "folder-handle-2"), "refused, it changes nothing")
 
         val file = receipt("rc-1", store, day, line("bread", "2.40", "ch-groc", "Groceries"))
         val inB = Receipts.open(b, file)
         assertFalse(Receipts.canConfirm(b, inB))
         assertEquals(ReceiptProblem.NOT_RECEIPT_PROFILE, Receipts.problem(b, inB))
-        assertFailsWith<IllegalArgumentException> { Receipts.confirm(b, inB, clock, "pay-1") }
+        assertEquals(b, Receipts.confirm(b, inB, clock, "pay-1"), "refused, it changes nothing")
         val a2 = Receipts.confirm(a1, Receipts.open(a1, file), clock, "pay-1")
         assertEquals(1, a2.payments.size)
         assertTrue(b.payments.isEmpty())
@@ -386,7 +385,7 @@ class ReceiptReviewTest {
         val d1 = Receipts.confirm(d0, Receipts.open(d0, fiveLines()), clock, "pay-1")
         val again = Receipts.open(d1, fiveLines())
         assertEquals(ReceiptProblem.ALREADY_RECORDED, Receipts.problem(d1, again))
-        assertFailsWith<IllegalArgumentException> { Receipts.confirm(d1, again, clock, "pay-2") }
+        assertEquals(d1, Receipts.confirm(d1, again, clock, "pay-2"), "refused, it changes nothing")
     }
 
     // SPEC:R115 SPEC:R30 SPEC:R47
@@ -408,5 +407,18 @@ class ReceiptReviewTest {
         val d0 = world()
         val r = Receipts.setSource(Receipts.open(d0, fiveLines()), PaymentSource.Goal("gone"))
         assertEquals(ReceiptProblem.CANNOT_SAVE, Receipts.problem(d0, r))
+    }
+
+    // SPEC:R31 SPEC:R32 SPEC:R34 SPEC:R114
+    @Test fun `R114 an answer, a move or a link change that names nothing there changes nothing, never a throw`() {
+        val d = world()
+        val r = Receipts.open(d, fiveLines())
+        assertEquals(r, Receipts.link(r, "ch-none", "groc"))
+        assertEquals(r, Receipts.addAsNew(r, "ch-none", "c-new", Fixture.PROFILE))
+        assertEquals(r, Receipts.moveLine(r, 5, "groc"))
+        assertEquals(r, Receipts.moveLine(r, -1, "groc"))
+        assertEquals(d, Receipts.changeLink(d, "ch-groc", "nope"))
+        val noReceipts = d.copy(receiptSettings = null)
+        assertEquals(noReceipts, Receipts.changeLink(noReceipts, "ch-groc", "groc"))
     }
 }

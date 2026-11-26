@@ -342,16 +342,15 @@ object Trash {
      * category is gone files under [replacementCategoryId] (SPEC R123). An item whose id is in the
      * Profile again is left as it is. With [pairWith], the payment comes back as the pair of that
      * payment, with its difference filed under [differenceCategoryId], instead of on its own, and
-     * its delete's rows stay (SPEC R127). Refused while [restoreProblem] finds one; a Profile is
-     * restored by [restoreProfile].
+     * its delete's rows stay (SPEC R127). While [restoreProblem] finds one, [d] comes back
+     * unchanged; so it does for a Profile, which [restoreProfile] restores.
      */
     fun restore(
         d: ProfileData, p: TrashPayload, clock: Clock, ids: () -> String, replacementCategoryId: String? = null,
         pairWith: String? = null, differenceCategoryId: String? = null,
     ): ProfileData {
-        require(p.profile == null) { "a Profile is restored with restoreProfile (SPEC R126)" }
-        val problem = restoreProblem(d, p, replacementCategoryId, pairWith, differenceCategoryId)
-        require(problem == null) { "the item cannot be restored: $problem (SPEC R122)" }
+        if (p.profile != null) return d
+        if (restoreProblem(d, p, replacementCategoryId, pairWith, differenceCategoryId) != null) return d
         val today = clock.today()
         var n = d
         // the keys whose item comes back: the rows its delete wrote are undone with it

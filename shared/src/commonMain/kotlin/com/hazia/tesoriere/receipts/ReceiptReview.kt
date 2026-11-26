@@ -85,9 +85,9 @@ object Receipts {
     fun offersFolder(app: AppState, profileId: String): Boolean =
         app.receiptProfileId == null || app.receiptProfileId == profileId
 
-    /** Makes [d]'s Profile the receipt Profile with [folder] (SPEC R112). Refused while another Profile holds one. */
+    /** Makes [d]'s Profile the receipt Profile with [folder] (SPEC R112). While another Profile holds one, nothing changes. */
     fun chooseFolder(app: AppState, d: ProfileData, folder: String): Pair<AppState, ProfileData> {
-        require(offersFolder(app, d.profileId)) { "another Profile holds the receipt folder (SPEC R112)" }
+        if (!offersFolder(app, d.profileId)) return app to d
         val s = d.receiptSettings ?: ReceiptSettings(d.profileId)
         return app.copy(receiptProfileId = d.profileId) to d.copy(receiptSettings = s.copy(folder = folder))
     }
@@ -105,9 +105,10 @@ object Receipts {
      * Files line [index] under [categoryId] by hand, for this receipt only; no link changes, and a
      * later answer for its Chatelaine category leaves it where it is (SPEC R31, R114). Moving it to
      * the category it is in already changes nothing; moving it back to the one it would hold unmoved
-     * makes it unmoved again.
+     * makes it unmoved again. An index that is no line's changes nothing.
      */
     fun moveLine(r: ReceiptReview, index: Int, categoryId: String): ReceiptReview {
+        if (index !in r.file.lines.indices || index !in r.lineCategories.indices) return r
         val cats = r.lineCategories.toMutableList().also { it[index] = categoryId }
         // back to where it would be unmoved, the answer given since or else where it opened: no longer moved (SPEC R114)
         val home = r.newLinks[r.file.lines[index].categoryId] ?: r.openedCategories[index]
@@ -123,7 +124,8 @@ object Receipts {
 
     /** Adds Chatelaine category [chatelaineId] as a new category [newCategoryId], with its Chatelaine name and 0.00 planned (SPEC R32, R114). */
     fun addAsNew(r: ReceiptReview, chatelaineId: String, newCategoryId: String, profileId: String): ReceiptReview {
-        val name = r.file.lines.first { it.categoryId == chatelaineId }.categoryName.trim()
+        // no line of that Chatelaine category: nothing to answer
+        val name = r.file.lines.firstOrNull { it.categoryId == chatelaineId }?.categoryName?.trim() ?: return r
         return answer(r, chatelaineId, newCategoryId, Category(newCategoryId, profileId, name, planned = 0))
     }
 
@@ -201,11 +203,10 @@ object Receipts {
     /**
      * Records the review as payment [id] through Payments.record (SPEC R115), with the receipt's id
      * and every line, and keeps the receipt id, the links, by name or by the user, the added
-     * categories and the store's source. Refused while [problem] finds one.
+     * categories and the store's source. While [problem] finds one, [d] comes back unchanged.
      */
     fun confirm(d: ProfileData, r: ReceiptReview, clock: Clock, id: String): ProfileData {
-        val problem = problem(d, r)
-        require(problem == null) { "the receipt cannot be confirmed: $problem (SPEC R115)" }
+        if (problem(d, r) != null) return d
         val written = Payments.record(withAdded(d, r), draft(r), clock, id)
         return keep(d, written, r, id)
     }
@@ -249,20 +250,24 @@ object Receipts {
         return ReceiptReview(file, p.source, p.receiptLines.map { it.categoryId }, emptyMap(), emptyList(), sourcePicked = true)
     }
 
-    /** Changes a link for the receipts recorded after it; recorded lines stay where they were filed (SPEC R34). */
+    /**
+     * Changes a link for the receipts recorded after it; recorded lines stay where they were filed
+     * (SPEC R34). Outside the receipt Profile, or to a category that does not exist, nothing changes.
+     */
     fun changeLink(d: ProfileData, chatelaineId: String, categoryId: String): ProfileData {
-        val s = requireNotNull(d.receiptSettings) { "not the receipt Profile (SPEC R112)" }
-        require(d.categories.any { it.id == categoryId }) { "no such category" }
+        val s = d.receiptSettings ?: return d
+        if (d.categories.none { it.id == categoryId }) return d
         return d.copy(receiptSettings = s.copy(categoryLinks = s.categoryLinks + (chatelaineId to categoryId)))
     }
 
     /**
      * An answer for [chatelaineId] (SPEC R114): every line of it the user has not moved by hand goes
      * to [target], whatever category it opened in or an earlier answer gave; a category an earlier
-     * answer added is dropped once no line and no link holds it.
+     * answer added is dropped once no line and no link holds it. With no line of [chatelaineId],
+     * there is nothing to answer and [r] comes back unchanged.
      */
     private fun answer(r: ReceiptReview, chatelaineId: String, target: String, added: Category?): ReceiptReview {
-        require(r.file.lines.any { it.categoryId == chatelaineId }) { "no line of that Chatelaine category" }
+        if (r.file.lines.none { it.categoryId == chatelaineId }) return r
         val cats = r.file.lines.mapIndexed { i, l ->
             if (l.categoryId == chatelaineId && i !in r.moved) target else r.lineCategories[i]
         }

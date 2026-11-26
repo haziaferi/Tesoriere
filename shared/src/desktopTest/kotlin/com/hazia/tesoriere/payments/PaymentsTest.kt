@@ -43,6 +43,8 @@ class PaymentsTest {
         val (after, _) = Trash.deletePayment(d1, "pay-1", clock) { "tx-1" }!!
         assertEquals(after, Payments.edit(after, "pay-1", draft("40.00", PaymentSource.Savings, "groc" to "40.00"), clock, "tx-2"))
         assertEquals(after, Payments.edit(after, "nope", draft("40.00", PaymentSource.Savings, "groc" to "40.00"), clock, "tx-3"))
+        // a draft that cannot be saved, parts short of the total, changes nothing either
+        assertEquals(d1, Payments.edit(d1, "pay-1", draft("42.30", PaymentSource.Savings, "groc" to "40.00"), clock, "tx-4"))
     }
 
     // SPEC:R23
@@ -54,7 +56,7 @@ class PaymentsTest {
         val whole = draft("42.30", PaymentSource.Savings, "groc" to "30.00", "home" to "12.00", "fun" to "0.30")
         assertEquals(0L, Payments.remainder(whole))
         assertTrue(Payments.canSave(d, whole))
-        assertFailsWith<IllegalArgumentException> { Payments.record(d, short, clock, "pay-1") }
+        assertEquals(d, Payments.record(d, short, clock, "pay-1"), "refused, it changes nothing")
     }
 
     // SPEC:R22 SPEC:R54 SPEC:R25
@@ -326,7 +328,7 @@ class PaymentsTest {
         val diff = Part("fun", cents("-0.20"), difference = true)
         assertTrue(Payments.canSave(d, pay(*items, diff), null, pairing = true))
         assertFalse(Payments.canSave(d, pay(*items, diff)), "only pairing writes a difference part")
-        assertFailsWith<IllegalArgumentException> { Payments.record(d, pay(*items, diff), clock, "pay-1") }
+        assertEquals(d, Payments.record(d, pay(*items, diff), clock, "pay-1"), "refused, it changes nothing")
         assertFalse(Payments.canSave(d, pay(*items, Part("fun", cents("-0.20"))), null, pairing = true))
         assertFalse(Payments.canSave(d, pay(*items, Part("fun", cents("-0.10"), difference = true), Part("fun", cents("-0.10"), difference = true)), null, pairing = true))
         // a refund's difference part may be positive; its item parts stay negative

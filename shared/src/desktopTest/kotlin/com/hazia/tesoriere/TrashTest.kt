@@ -52,7 +52,6 @@ import com.hazia.tesoriere.statements.StatementImport
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -253,6 +252,7 @@ class TrashTest {
         assertEquals(d0, back)
         assertEquals(Fixture.PROFILE, app2.receiptProfileId)
         assertEquals("p-0", app2.activeProfileId, "the restored Profile is not opened")
+        assertEquals(world(), Trash.restore(world(), p, clock, ids), "a Profile is restored with restoreProfile; restore changes nothing")
     }
 
     // SPEC:R126 SPEC:R112
@@ -366,7 +366,7 @@ class TrashTest {
 
         val removed = Payments.remove(after, "p1", clock, "tx-r")
         assertEquals(RestoreProblem.WRITTEN_SINCE, Trash.restoreProblem(removed, p))
-        assertFailsWith<IllegalArgumentException> { Trash.restore(removed, p, clock, ids) }
+        assertEquals(removed, Trash.restore(removed, p, clock, ids), "refused, it changes nothing")
     }
 
     // SPEC:R122 SPEC:R54 SPEC:R88
@@ -713,7 +713,7 @@ class TrashTest {
         val (d, p, bankId) = receiptThenRow("42.50")
         assertEquals(listOf<RestoreNotice>(RestoreNotice.PairAvailable(bankId)), Trash.restoreNotices(d, p))
         assertEquals(RestoreProblem.CANNOT_PAIR, Trash.restoreProblem(d, p, pairWith = bankId))
-        assertFailsWith<IllegalArgumentException> { Trash.restore(d, p, clock, ids, pairWith = bankId) }
+        assertEquals(d, Trash.restore(d, p, clock, ids, pairWith = bankId), "refused, it changes nothing")
         val paired = Trash.restore(d, p, clock, ids, pairWith = bankId, differenceCategoryId = "fun")
         val one = paired.payments.single()
         assertEquals(cents("42.50"), one.total)
