@@ -150,6 +150,14 @@ class LedgerTest {
         assertEquals(d0, Writes.goalSavedEdit(d0, "g1", cents("40.00"), null, TestClock(day), "t1"))
     }
 
+    // SPEC:R50 SPEC:R52
+    @Test fun `R52 a Goal that does not exist, or set below zero, changes nothing`() {
+        val d0 = profile(goals = listOf(goal("g1", saved = "40.00")))
+        assertEquals(d0, Writes.goalSavedEdit(d0, "g1", cents("-1.00"), null, TestClock(day), "t1"))
+        assertEquals(d0, Writes.goalSavedEdit(d0, "gone", cents("10.00"), null, TestClock(day), "t1"))
+        assertEquals(d0, Writes.goalQuickAdd(d0, "gone", cents("10.00"), null, TestClock(day), "t1"))
+    }
+
     // ---- pairs ---------------------------------------------------------------------------
 
     private val t0 = Instant.parse("2026-09-14T10:00:00Z")

@@ -7,7 +7,6 @@ import com.hazia.tesoriere.cents
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 
 class SpentTest {
     private val clock = TestClock(LocalDate(2026, 4, 10))
@@ -45,6 +44,7 @@ class SpentTest {
 
     // SPEC:R25
     @Test fun `R25 a month still to come cannot be adjusted`() {
-        assertFailsWith<IllegalArgumentException> { Spent.adjust(world, "groc", "2026-05", cents("1.00"), clock, "adj-1") }
+        assertEquals(world, Spent.adjust(world, "groc", "2026-05", cents("1.00"), clock, "adj-1"))
+        assertEquals(world, Spent.adjust(world, "gone", "2026-04", cents("1.00"), clock, "adj-1"), "nor a category that does not exist")
     }
 }

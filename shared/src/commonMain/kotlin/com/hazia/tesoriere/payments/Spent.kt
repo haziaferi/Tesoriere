@@ -38,12 +38,13 @@ object Spent {
      * Sets the category's spent for [ym] to [newValue] by logging the difference as an adjustment
      * (SPEC R25), which moves Savings by its opposite (SPEC R51). The row is dated today when [ym]
      * is the current month, else the last day of [ym], so it counts in that month only. A month
-     * still to come cannot be adjusted; an adjustment to the same figure logs nothing.
+     * still to come cannot be adjusted; an adjustment to the same figure logs nothing. A month still
+     * to come, or a category that does not exist, gives [d] back unchanged.
      */
     fun adjust(d: ProfileData, categoryId: String, ym: String, newValue: Money, clock: Clock, id: String): ProfileData {
         val today = clock.today()
-        require(ym <= today.ymKey()) { "a month still to come cannot be adjusted: $ym" }
-        val c = d.categories.first { it.id == categoryId }
+        if (ym > today.ymKey()) return d
+        val c = d.categories.firstOrNull { it.id == categoryId } ?: return d
         val delta = newValue - of(d, categoryId, ym)
         if (delta == 0L) return d
         val date = if (ym == today.ymKey()) today else ym.split('-').let { (y, m) -> dateWithDay(y.toInt(), m.toInt(), 31) }
