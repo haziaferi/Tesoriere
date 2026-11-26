@@ -8,6 +8,7 @@ import com.hazia.tesoriere.model.Money
 import kotlinx.datetime.LocalDate
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.UseSerializers
 import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
@@ -31,24 +32,31 @@ sealed interface PaymentSource {
     data class Account(val id: String) : PaymentSource { override val stored get() = "account:$id" }
 
     companion object {
-        fun parse(s: String): PaymentSource {
+        /** The source stored as [s], or null for a string that is no source: storage may be corrupted. */
+        fun parse(s: String): PaymentSource? {
             if (s == "savings") return Savings
             val i = s.indexOf(':')
-            require(i > 0 && i < s.length - 1) { "not a payment source: $s" }
+            if (i <= 0 || i >= s.length - 1) return null
             val id = s.substring(i + 1)
             return when (s.substring(0, i)) {
                 "goal" -> Goal(id)
                 "account" -> Account(id)
-                else -> throw IllegalArgumentException("not a payment source: $s")
+                else -> null
             }
         }
     }
 }
 
+/**
+ * A source as its stored string. A string that is no source fails the decoding of what holds it,
+ * as kotlinx.serialization reports any malformed input, with a SerializationException its caller
+ * catches, as Trash.decode does.
+ */
 object PaymentSourceSerializer : KSerializer<PaymentSource> {
     override val descriptor = PrimitiveSerialDescriptor("com.hazia.tesoriere.PaymentSource", PrimitiveKind.STRING)
     override fun serialize(encoder: Encoder, value: PaymentSource) = encoder.encodeString(value.stored)
-    override fun deserialize(decoder: Decoder): PaymentSource = PaymentSource.parse(decoder.decodeString())
+    override fun deserialize(decoder: Decoder): PaymentSource =
+        decoder.decodeString().let { PaymentSource.parse(it) ?: throw SerializationException("not a payment source: $it") }
 }
 
 /**

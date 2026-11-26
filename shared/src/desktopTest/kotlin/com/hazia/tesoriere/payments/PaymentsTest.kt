@@ -16,6 +16,7 @@ import com.hazia.tesoriere.model.AccountType
 import com.hazia.tesoriere.model.ProfileData
 import com.hazia.tesoriere.model.StoredLabels
 import kotlinx.datetime.LocalDate
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -381,6 +382,9 @@ class PaymentsTest {
         }
         assertEquals("goal:g-1", PaymentSource.Goal("g-1").stored)
         assertEquals("account:a-1", PaymentSource.Account("a-1").stored)
-        assertFailsWith<IllegalArgumentException> { PaymentSource.parse("wallet:1") }
+        // a stored string that is no source, a corrupted one, reads as none
+        for (bad in listOf("wallet:1", "goal:", ":g-1", "goal", "")) assertNull(PaymentSource.parse(bad), bad)
+        // and fails the decoding of the payment that holds it, as any malformed input does
+        assertFailsWith<SerializationException> { Json.decodeFromString(PaymentSource.serializer(), "\"wallet:1\"") }
     }
 }

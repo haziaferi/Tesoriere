@@ -30,10 +30,11 @@ sealed class TransactionKey(val stored: String) {
     data class GoalSpendKey(val id: String) : TransactionKey("spend:$id")
 
     companion object {
-        fun parse(s: String): TransactionKey {
+        /** The key stored as [s], or null for a string that is no key: a stored row may be corrupted. */
+        fun parse(s: String): TransactionKey? {
             if (s == "savings") return SavingsKey
             val i = s.indexOf(':')
-            require(i > 0) { "not a transaction key: $s" }
+            if (i <= 0) return null
             val id = s.substring(i + 1)
             return when (s.substring(0, i)) {
                 "goal" -> GoalKey(id)
@@ -41,7 +42,7 @@ sealed class TransactionKey(val stored: String) {
                 "rec" -> RecurringKey(id)
                 "acct" -> AccountKey(id)
                 "spend" -> GoalSpendKey(id)
-                else -> throw IllegalArgumentException("not a transaction key: $s")
+                else -> null
             }
         }
     }
@@ -74,11 +75,15 @@ object Ledger {
     /** How far apart two rows of a pair may be logged (SPEC R53). */
     val PAIR_WINDOW = 48.hours
 
-    /** SPEC R51's table, in one place: the Savings movement follows from the key and is never stored. */
+    /**
+     * SPEC R51's table, in one place: the Savings movement follows from the key and is never stored.
+     * A key that cannot be read, a corrupted row, moves nothing.
+     */
     fun savingsEffect(tx: Transaction): Money = when (TransactionKey.parse(tx.key)) {
         TransactionKey.SavingsKey -> tx.amount
         is TransactionKey.AccountKey -> 0
         is TransactionKey.GoalSpendKey -> 0      // it left Savings when it went into the Goal
+        null -> 0
         else -> -tx.amount
     }
 
@@ -98,7 +103,7 @@ object Ledger {
         is TransactionKey.RecurringKey -> if (tx.accountPayoff) null else RowSpent(tx.categoryId, tx.amount)
         TransactionKey.SavingsKey, is TransactionKey.GoalSpendKey -> tx.categoryId?.let { RowSpent(it, -tx.amount) }
         is TransactionKey.AccountKey -> tx.categoryId?.let { RowSpent(it, tx.amount) }
-        is TransactionKey.GoalKey -> null
+        is TransactionKey.GoalKey, null -> null
     }
 
     /**
