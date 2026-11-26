@@ -113,14 +113,15 @@ object Payments {
      * and applying the new one (SPEC R54), with the share Savings pays for a short Goal worked out
      * again once the old share is returned. Its id, logged instant, receipt and bank keys stay.
      * What a Goal deleted since moves in Savings is logged as one `savings` row [txId], dated
-     * today, when it is not zero.
+     * today, when it is not zero. An id no payment holds, one in the Trash say, gives [d] back unchanged.
      */
     fun edit(d: ProfileData, paymentId: String, draft: PaymentDraft, clock: Clock, txId: String): ProfileData =
         edit(d, paymentId, draft, clock, txId, pairing = false)
 
     /** [edit] for pairing (SPEC R119), which may write a difference part (SPEC R23, R39). */
     internal fun edit(d: ProfileData, paymentId: String, draft: PaymentDraft, clock: Clock, txId: String, pairing: Boolean): ProfileData {
-        val old = d.payments.first { it.id == paymentId }
+        // an unknown id, such as a payment in the Trash, changes nothing, as remove does
+        val old = d.payments.firstOrNull { it.id == paymentId } ?: return d
         require(canSave(d, draft, paymentId, pairing)) { "the payment cannot be saved" }
         val new = old.copy(
             date = draft.date, total = draft.total, source = draft.source, payee = draft.payee?.takeIf { it.isNotBlank() }, parts = draft.parts,

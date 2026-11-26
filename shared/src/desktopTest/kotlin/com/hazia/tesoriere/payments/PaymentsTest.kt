@@ -8,6 +8,7 @@ import com.hazia.tesoriere.TestClock
 import com.hazia.tesoriere.cents
 import com.hazia.tesoriere.engine.Accounts
 import com.hazia.tesoriere.engine.GoalEditing
+import com.hazia.tesoriere.engine.Trash
 import com.hazia.tesoriere.engine.Reports
 import com.hazia.tesoriere.engine.Writes
 import com.hazia.tesoriere.model.Account
@@ -35,6 +36,14 @@ class PaymentsTest {
 
     private fun draft(total: String, source: PaymentSource = PaymentSource.Savings, vararg parts: Pair<String?, String>, date: LocalDate = day) =
         PaymentDraft(date, cents(total), source, payee = "Corner shop", parts = parts.map { (c, a) -> Part(c, cents(a)) })
+
+    // SPEC:R125 SPEC:R54
+    @Test fun `R125 editing a 42_30 payment that is in the Trash changes nothing, never a throw`() {
+        val d1 = Payments.record(world(), draft("42.30", PaymentSource.Savings, "groc" to "42.30"), clock, "pay-1")
+        val (after, _) = Trash.deletePayment(d1, "pay-1", clock) { "tx-1" }!!
+        assertEquals(after, Payments.edit(after, "pay-1", draft("40.00", PaymentSource.Savings, "groc" to "40.00"), clock, "tx-2"))
+        assertEquals(after, Payments.edit(after, "nope", draft("40.00", PaymentSource.Savings, "groc" to "40.00"), clock, "tx-3"))
+    }
 
     // SPEC:R23
     @Test fun `R23 a 42_30 payment with parts 30_00 and 12_00 leaves 0_30 and cannot be saved`() {

@@ -296,3 +296,4 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-26 · R125 · changed · bank keys held again only by more payments than at the delete, FITID first; twins restore · builder
 - 2026-11-26 · R127 · changed · RECORDED_AGAIN as R125 counts; a bank side's twins stand for rows of its review · builder
 - 2026-11-26 · R127 · changed · a receipt side's difference defaults to its old difference part's category while that exists · builder
+- 2026-11-26 · R125 · changed · editing a payment in the Trash changes nothing · builder
