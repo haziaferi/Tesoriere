@@ -626,7 +626,7 @@ object StatementImport {
         val notices = MutableList<PaymentNotice?>(rows.size) { null }
         var rules = d.importState.payeeRules
         val keys = d.importState.importedKeys.toMutableList()
-        val since = pairedSince(d, rows)
+        val since = recordedSince(d, rows)
         for (i in recordOrder(rows)) {
             val rr = rows[i]
             // a row named as a receipt's pair is recorded by pairing, never as new spending, and a row
@@ -728,12 +728,32 @@ object StatementImport {
     }
 
     /**
+     * The rows of [rows] recorded since the review was built (SPEC R107, R119), which Confirm leaves
+     * alone: those [pairedSince] finds paired since, and, by synthetic key, as many more rows that
+     * did not arrive `DUPLICATE` as [recordedRows] now finds recorded beyond them, by another review's
+     * Confirm say, money in and payoffs included, which no payment shows; unticked rows are taken
+     * first, as they record nothing, then the rows in the review's order.
+     */
+    internal fun recordedSince(d: ProfileData, rows: List<ReviewRow>): Set<Int> {
+        val out = HashSet(pairedSince(d, rows))
+        val newly = recordedRows(d, rows.map { it.keys }).filter { rows[it].status != RowStatus.DUPLICATE }
+        for ((syn, group) in newly.groupBy { rows[it].keys.synKey }) {
+            val more = group.size - out.count { rows[it].keys.synKey == syn }
+            if (more <= 0) continue
+            val open = rows.indices.filter { rows[it].keys.synKey == syn && rows[it].status != RowStatus.DUPLICATE && it !in out }
+                .filter { j -> group.any { g -> sameRow(rows[g].keys, rows[j].keys) } }
+            out += open.sortedBy { if (rows[it].include) 1 else 0 }.take(more)
+        }
+        return out
+    }
+
+    /**
      * What the Confirm names against [d] as it stands (SPEC R107): the ticked rows' count, the money out
-     * and the money in, each positive; a row naming a pair (SPEC R118), or one paired by hand since the
-     * review was built (SPEC R119), is not counted.
+     * and the money in, each positive; a row naming a pair (SPEC R118), or one recorded since the
+     * review was built, paired by hand or by another review's Confirm (SPEC R119), is not counted.
      */
     fun confirmSummary(d: ProfileData, rows: List<ReviewRow>): ConfirmSummary {
-        val since = pairedSince(d, rows)
+        val since = recordedSince(d, rows)
         val ticked = rows.filterIndexed { i, it -> it.include && it.pairPaymentId == null && i !in since }
         return ConfirmSummary(
             count = ticked.size,

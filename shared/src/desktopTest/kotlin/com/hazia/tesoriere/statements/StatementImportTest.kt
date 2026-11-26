@@ -844,4 +844,46 @@ class StatementImportTest {
         val d2 = recordAll(d1, wage, wage)
         assertEquals(listOf(RowStatus.DUPLICATE, RowStatus.DUPLICATE, RowStatus.INCOMING), StatementImport.review(d2, listOf(wage, wage, wage), clock.today).map { it.status })
     }
+
+    // --- R107: a review left open while the same rows are recorded elsewhere ---
+
+    // SPEC:R107 SPEC:R26
+    @Test fun `R107 two reviews of one +100_00 row, both confirmed, add it to Savings once`() {
+        val wage = BankRow(LocalDate(2026, 3, 27), cents("100.00"), "BONIFICO", null)
+        val d = world()
+        val r1 = StatementImport.review(d, listOf(wage), clock.today)
+        val r2 = StatementImport.review(d, listOf(wage), clock.today)
+        val a = StatementImport.confirm(d, r2, clock, ids::next)
+        assertEquals(cents("1,100.00"), a.savingsAmount)
+        assertEquals(0, StatementImport.confirmSummary(a, r1).count, "the open review names nothing left to record")
+        assertEquals(cents("1,100.00"), StatementImport.confirm(a, r1, clock, ids::next).savingsAmount)
+    }
+
+    // SPEC:R107 SPEC:R89 SPEC:R26
+    @Test fun `R107 two reviews of one -50_00 card payoff, both confirmed, pay the card once`() {
+        val po = BankRow(LocalDate(2026, 3, 27), -cents("50.00"), "PAGAMENTO ORBITA", null)
+        val d = world()
+        fun open() = StatementImport.review(d, listOf(po), clock.today).map { it.copy(include = true, payoffAccountId = "orbita") }
+        val r1 = open(); val r2 = open()
+        val a = StatementImport.confirm(d, r2, clock, ids::next)
+        val b = StatementImport.confirm(a, r1, clock, ids::next)
+        assertEquals(cents("250.00"), b.accounts.single().balance)
+        assertEquals(cents("950.00"), b.savingsAmount)
+    }
+
+    // SPEC:R107 SPEC:R26 SPEC:R119
+    @Test fun `R107 a review of two coffees left open while another records one of them records only the other`() {
+        val d = world()
+        fun ticked(rows: List<ReviewRow>) = rows.map { it.copy(include = true, draft = StatementImport.draft(it.row, listOf(Part("groc", cents("4.50"))))) }
+        val r1 = ticked(StatementImport.review(d, listOf(coffee(null), coffee(null)), clock.today))
+        val r2 = StatementImport.review(d, listOf(coffee(null), coffee(null)), clock.today)
+        val a = StatementImport.confirm(d, ticked(r2).mapIndexed { i, r -> if (i == 0) r else r.copy(include = false) }, clock, ids::next)
+        assertEquals(1, StatementImport.confirmSummary(a, r1).count)
+        val b = StatementImport.confirm(a, r1, clock, ids::next)
+        assertEquals(2, b.payments.size)
+        assertEquals(cents("9.00"), Spent.of(b, "groc", "2026-03"))
+        // one coffee in both reviews: recorded once
+        val c = StatementImport.confirm(StatementImport.confirm(d, ticked(r2.take(1)), clock, ids::next), ticked(r1.take(1)), clock, ids::next)
+        assertEquals(cents("4.50"), Spent.of(c, "groc", "2026-03"))
+    }
 }
