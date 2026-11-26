@@ -252,6 +252,25 @@ class MergeTest {
         assertEquals(listOf(RowStatus.DUPLICATE, RowStatus.DUPLICATE), StatementImport.review(m, listOf(coffee, coffee), day).map { it.status })
     }
 
+    // SPEC:R129 SPEC:R119 SPEC:R107 SPEC:R26
+    @Test fun `R129 a merge while an import review is open leaves its ticked twin row to be recorded at Confirm`() {
+        val d = twice()
+        val opened = StatementImport.review(d, listOf(coffee, coffee), day)
+        assertEquals(listOf(RowStatus.DUPLICATE, RowStatus.PAIR), opened.map { it.status })
+        // the suggestion turned down, the second coffee ticked under Food
+        val review = opened.map {
+            if (it.status == RowStatus.DUPLICATE) it.copy(include = false)
+            else it.copy(pairPaymentId = null, include = true, draft = StatementImport.draft(it.row, listOf(Part("food", cents("4.50")))))
+        }
+        val m = merge(d)
+        assertEquals(1, StatementImport.confirmSummary(m, review).count, "the merge recorded no new row: it only moved the keys")
+        val out = StatementImport.confirm(m, review, clock) { "pay-c" }
+        assertEquals(listOf("pay-r", "pay-c"), out.payments.map { it.id })
+        assertEquals(cents("991.00"), out.savingsAmount)
+        assertEquals(cents("9.00"), Spent.of(out, "food", "2026-03"))
+        assertEquals(listOf(RowStatus.DUPLICATE, RowStatus.DUPLICATE), StatementImport.review(out, listOf(coffee, coffee), day).map { it.status })
+    }
+
     // SPEC:R129 SPEC:R125
     @Test fun `R129 a merged pair deleted and restored comes back whole, its row still recorded once`() {
         val m = merge(twice())
