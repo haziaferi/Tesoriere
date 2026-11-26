@@ -319,3 +319,5 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-26 · R128 · changed · the pair keeps its own parts less the difference part while they add up to the total · owner
 - 2026-11-26 · R127 · changed · only a payment recorded since the delete, not one there already, is offered or taken as the pair · builder
 - 2026-11-26 · R119 · changed · parts row: the receipt payment's own when it came first; the review's lines when the bank row did · owner
+- 2026-11-26 · R129 · added · merging a receipt payment and a bank payment, both recorded, into one pair; the bank payment removed, not trashed · owner
+- 2026-11-26 · R40 · changed · pairing by hand also works between two payments both recorded already, as R129 says · owner
