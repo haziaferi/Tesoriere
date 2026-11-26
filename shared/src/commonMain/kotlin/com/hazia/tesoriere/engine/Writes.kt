@@ -15,9 +15,9 @@ import kotlinx.datetime.LocalDate
  */
 object Writes {
 
-    /** Money into a Goal; Savings moves by the opposite (SPEC R50). */
+    /** Money into a Goal; Savings moves by the opposite (SPEC R50). A Goal that does not exist gives [d] back unchanged. */
     fun goalQuickAdd(d: ProfileData, goalId: String, amount: Money, payee: String?, clock: Clock, txId: String, date: LocalDate? = null): ProfileData {
-        val g = d.goals.first { it.id == goalId }
+        val g = d.goals.firstOrNull { it.id == goalId } ?: return d
         val next = d.copy(goals = d.goals.map { if (it.id == goalId) it.copy(saved = it.saved + amount) else it })
         val note = payee ?: StoredLabels.fill(StoredLabels.TOWARD, g.name)
         return Ledger.logAndMove(next, Movement(amount, TransactionKey.GoalKey(goalId), g.name, note, date = date), clock, txId).first
@@ -37,10 +37,28 @@ object Writes {
         return Ledger.logAndMove(d, Movement(delta, TransactionKey.SavingsKey, StoredLabels.SAVINGS, payee ?: StoredLabels.CORRECTION), clock, txId).first
     }
 
-    /** A Goal's saved money set directly: any change, either way, moves Savings by its opposite (SPEC R52). */
+    /** Why a Goal's saved money cannot be set directly, as a code, first match in this order (SPEC R52). */
+    enum class GoalSavedProblem {
+        /** The Goal does not exist: deleted since, say. */
+        GOAL_UNKNOWN,
+        /** A Goal cannot hold less than nothing. */
+        BELOW_ZERO,
+    }
+
+    /** Why [goalSavedEdit] would refuse to set Goal [goalId] to [newValue], or null when it would (SPEC R52). */
+    fun goalSavedEditProblem(d: ProfileData, goalId: String, newValue: Money): GoalSavedProblem? = when {
+        d.goals.none { it.id == goalId } -> GoalSavedProblem.GOAL_UNKNOWN
+        newValue < 0 -> GoalSavedProblem.BELOW_ZERO
+        else -> null
+    }
+
+    /**
+     * A Goal's saved money set directly: any change, either way, moves Savings by its opposite (SPEC
+     * R52). While [goalSavedEditProblem] finds one, [d] comes back unchanged.
+     */
     fun goalSavedEdit(d: ProfileData, goalId: String, newValue: Money, payee: String?, clock: Clock, txId: String): ProfileData {
-        val g = d.goals.first { it.id == goalId }
-        require(newValue >= 0) { "a Goal cannot hold less than nothing" }
+        if (goalSavedEditProblem(d, goalId, newValue) != null) return d
+        val g = d.goals.firstOrNull { it.id == goalId } ?: return d
         val delta = newValue - g.saved
         if (delta == 0L) return d
         val next = d.copy(goals = d.goals.map { if (it.id == goalId) it.copy(saved = newValue) else it })

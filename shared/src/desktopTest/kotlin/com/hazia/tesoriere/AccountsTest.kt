@@ -22,7 +22,6 @@ import com.hazia.tesoriere.payments.Spent
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -96,12 +95,9 @@ class AccountsTest {
     // SPEC:R91 SPEC:R67
     @Test fun `R91 taking a loan with no category, or one that does not exist, creates nothing`() {
         val clock = TestClock(today)
-        assertFailsWith<IllegalArgumentException> {
-            Accounts.getLoan(world(), cents("9,800.00"), 0.059, 48, RateType.FIXED, "", "", "", false, clock) { Ids().next() }
-        }
-        assertFailsWith<IllegalArgumentException> {
-            Accounts.getLoan(world(), cents("9,800.00"), 0.059, 48, RateType.FIXED, "", "", "nope", false, clock) { Ids().next() }
-        }
+        val d = world()
+        assertEquals(d, Accounts.getLoan(d, cents("9,800.00"), 0.059, 48, RateType.FIXED, "", "", "", false, clock) { Ids().next() })
+        assertEquals(d, Accounts.getLoan(d, cents("9,800.00"), 0.059, 48, RateType.FIXED, "", "", "nope", false, clock) { Ids().next() })
     }
 
     // SPEC:R91
@@ -222,9 +218,9 @@ class AccountsTest {
         assertEquals("spend:trip" to cents("-60.00"), spend.key to spend.amount)
         assertEquals(StoredLabels.fill(StoredLabels.PAYMENT_TO, "Card"), spend.payee)
         assertEquals(0L, com.hazia.tesoriere.engine.Ledger.savingsEffect(spend))
-        assertFailsWith<IllegalArgumentException> {
-            Accounts.quickAdd(d0, "cc", cents("90.00"), Accounts.Direction.PAYMENT, null, from = Accounts.PayoffFrom.Goal("trip"), clock = clock) { ids.next() }
-        }
+        assertEquals(Accounts.QuickAddProblem.GOAL_SHORT,
+            Accounts.quickAddProblem(d0, "cc", cents("90.00"), Accounts.Direction.PAYMENT, Accounts.PayoffFrom.Goal("trip")))
+        assertEquals(d0, Accounts.quickAdd(d0, "cc", cents("90.00"), Accounts.Direction.PAYMENT, null, from = Accounts.PayoffFrom.Goal("trip"), clock = clock) { ids.next() })
     }
 
     // SPEC:R89 SPEC:R67 SPEC:R25
@@ -255,9 +251,7 @@ class AccountsTest {
         val loan = Account("l", Fixture.PROFILE, "Loan", type = AccountType.LOAN, balance = cents("4,000.00"))
         val d = world(accounts = listOf(loan))
         assertFalse(Accounts.canPayOff(d, loan, Accounts.PayoffFrom.Savings))
-        assertFailsWith<IllegalArgumentException> {
-            Accounts.quickAdd(d, "l", cents("200.00"), Accounts.Direction.PAYMENT, null, from = Accounts.PayoffFrom.Savings, clock = clock) { ids.next() }
-        }
+        assertEquals(d, Accounts.quickAdd(d, "l", cents("200.00"), Accounts.Direction.PAYMENT, null, from = Accounts.PayoffFrom.Savings, clock = clock) { ids.next() })
         val none = Accounts.quickAdd(d, "l", cents("200.00"), Accounts.Direction.PAYMENT, null, from = Accounts.PayoffFrom.None, clock = clock) { ids.next() }
         assertEquals(cents("3,800.00"), none.accounts.single().balance)
     }
@@ -289,9 +283,7 @@ class AccountsTest {
         val d = world(accounts = listOf(loan))
         assertEquals(Accounts.QuickAddProblem.CATEGORY_UNKNOWN,
             Accounts.quickAddProblem(d, "l", cents("200.00"), Accounts.Direction.PAYMENT, Accounts.PayoffFrom.Savings, categoryId = "nowhere"))
-        assertFailsWith<IllegalArgumentException> {
-            Accounts.quickAdd(d, "l", cents("200.00"), Accounts.Direction.PAYMENT, null, from = Accounts.PayoffFrom.Savings, clock = clock, categoryId = "nowhere") { ids.next() }
-        }
+        assertEquals(d, Accounts.quickAdd(d, "l", cents("200.00"), Accounts.Direction.PAYMENT, null, from = Accounts.PayoffFrom.Savings, clock = clock, categoryId = "nowhere") { ids.next() })
         assertNull(Accounts.quickAddProblem(d, "l", cents("200.00"), Accounts.Direction.PAYMENT, Accounts.PayoffFrom.Savings))
         // a card with Fees as its fees category refuses an increase picked under a category that does not exist
         val card = card().copy(feesCategoryId = "c1")
@@ -322,9 +314,19 @@ class AccountsTest {
         assertEquals(cents("4,500.00"), d.accounts.first { it.id == "l" }.balance)
         assertEquals(cents("1,000.00"), d.savingsAmount)                          // an increase is never paired
         assertEquals(StoredLabels.INCREASED, d.transactions.single().payee)
-        assertFailsWith<IllegalArgumentException> {
-            Accounts.quickAdd(d, "cc", cents("40.00"), Accounts.Direction.INCREASE, "Shoes", from = Accounts.PayoffFrom.None, clock = clock) { ids.next() }
-        }
+        assertEquals(d, Accounts.quickAdd(d, "cc", cents("40.00"), Accounts.Direction.INCREASE, "Shoes", from = Accounts.PayoffFrom.None, clock = clock) { ids.next() })
+    }
+
+    // SPEC:R89 SPEC:R93 SPEC:R86
+    @Test fun `R89 an Account that does not exist, deleted since say, is refused with a code and changes nothing`() {
+        val clock = TestClock(today); val ids = Ids()
+        val d = world(accounts = listOf(card()))
+        assertEquals(Accounts.QuickAddProblem.ACCOUNT_UNKNOWN,
+            Accounts.quickAddProblem(d, "gone", cents("40.00"), Accounts.Direction.PAYMENT, Accounts.PayoffFrom.Savings))
+        assertEquals(d, Accounts.quickAdd(d, "gone", cents("40.00"), Accounts.Direction.PAYMENT, null, from = Accounts.PayoffFrom.Savings, clock = clock) { ids.next() })
+        assertEquals(d, Accounts.balanceEdit(d, "gone", cents("40.00"), null, clock, "t-1"))
+        assertEquals(d, Accounts.commitFixedPayment(d, "gone", cents("50.00"), "", "c1", clock, "e-1"))
+        assertEquals(d, Accounts.commitFixedPayment(d, "cc", cents("50.00"), "", "nope", clock, "e-1"), "a category that does not exist")
     }
 
     // SPEC:R94 SPEC:R86

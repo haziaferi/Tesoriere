@@ -61,12 +61,11 @@ object CategoryEditing {
      * Deletes category [id] (SPEC R42, R123): the category and the category links to it go; every
      * recurring expense and Account field that files later rows under it moves to [replacementId]
      * in the same step, their past rows staying where they were filed (SPEC R67). The parts of
-     * payments and the ledger rows filed under it keep its id (SPEC R124). Refused unless
-     * [deleteProblem] finds nothing.
+     * payments and the ledger rows filed under it keep its id (SPEC R124). While [deleteProblem]
+     * finds one, [d] comes back unchanged.
      */
     fun delete(d: ProfileData, id: String, replacementId: String? = null): ProfileData {
-        val problem = deleteProblem(d, id, replacementId)
-        require(problem == null) { "the category cannot be deleted: $problem (SPEC R123)" }
+        if (deleteProblem(d, id, replacementId) != null) return d
         fun moved(c: String?) = if (c == id) replacementId else c
         return d.copy(
             categories = d.categories.filter { it.id != id },

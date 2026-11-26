@@ -96,7 +96,7 @@ object Accounts {
      * Taking the loan (SPEC R91): a Loan and its payment in one step, linked both ways (SPEC R87),
      * the payment first due one month after today and ending on the term's last payment, so nothing
      * sweeps this month (SPEC R64); the Loan's opening row (SPEC R86). The payment's category must
-     * exist (SPEC R67).
+     * exist (SPEC R67): with none that exists, [d] comes back unchanged.
      */
     fun getLoan(
         d: ProfileData, principal: Money, annualRate: Double, termMonths: Int, rateType: RateType,
@@ -117,7 +117,8 @@ object Accounts {
             categoryId = categoryId, firstDueDate = firstDue, dueDate = firstDue, dueDateAnchorDay = anchorDay, dateMode = DateMode.FIXED_DATE,
             lastSweptMonth = today.ymKey(), endDate = today.plusMonthsClamped(m.months, anchorDay), linkedAccountId = acctId, createdOn = today,
         )
-        require(Recurring.canSave(d, exp)) { "a Loan's payment needs a category that exists: '$categoryId'" }
+        // a Loan's payment needs a category that exists
+        if (!Recurring.canSave(d, exp)) return d
         val next = d.copy(accounts = d.accounts + acct, recurringExpenses = d.recurringExpenses + exp)
         return Ledger.logAccountEdit(next, acct.id, acct.name, principal, StoredLabels.OPENING_BALANCE, clock, ids())
     }
@@ -166,10 +167,11 @@ object Accounts {
     /**
      * Committing a card's fixed payment (SPEC R93): a monthly recurring expense linked both ways,
      * first due one month after today, no end date; the card never follows it. The card's earlier
-     * expense loses its back-link, or deleting it would take the card (SPEC R87).
+     * expense loses its back-link, or deleting it would take the card (SPEC R87). An Account that
+     * does not exist, or a category that does not exist, gives [d] back unchanged.
      */
     fun commitFixedPayment(d: ProfileData, accountId: String, amount: Money, name: String, categoryId: String, clock: Clock, expId: String): ProfileData {
-        val a = d.accounts.first { it.id == accountId }
+        val a = d.accounts.firstOrNull { it.id == accountId } ?: return d
         val today = clock.today()
         val firstDue = today.plusMonthsClamped(1, today.day)
         val e = RecurringExpense(
@@ -177,7 +179,8 @@ object Accounts {
             cadence = Cadence.MONTHLY, categoryId = categoryId, firstDueDate = firstDue, dueDate = firstDue, dueDateAnchorDay = today.day,
             dateMode = DateMode.FIXED_DATE, lastSweptMonth = today.ymKey(), linkedAccountId = a.id, createdOn = today,
         )
-        require(Recurring.canSave(d, e)) { "a fixed payment needs a category that exists: '$categoryId'" }
+        // a fixed payment needs a category that exists
+        if (!Recurring.canSave(d, e)) return d
         return d.copy(
             recurringExpenses = d.recurringExpenses.map { if (it.linkedAccountId == a.id) it.copy(linkedAccountId = null) else it } + e,
             accounts = d.accounts.map { if (it.id == a.id) it.copy(linkedRecurringExpenseId = e.id, autoUpdateFromPayments = false) else it },
@@ -189,13 +192,14 @@ object Accounts {
     /**
      * A direct balance edit: logs the change as an `acct:` row; Savings is untouched (SPEC R51,
      * R86). [categoryId] files the row as a card's interest or fees (SPEC R110); the callers that
-     * mean a rise on a card pass it, every other edit leaves the row in no category.
+     * mean a rise on a card pass it, every other edit leaves the row in no category. An Account
+     * that does not exist gives [d] back unchanged.
      */
     fun balanceEdit(
         d: ProfileData, accountId: String, newBalance: Money, payee: String?, clock: Clock, txId: String,
         date: LocalDate? = null, categoryId: String? = null, groupId: String? = null,
     ): ProfileData {
-        val a = d.accounts.first { it.id == accountId }
+        val a = d.accounts.firstOrNull { it.id == accountId } ?: return d
         val delta = newBalance - a.balance
         val next = d.copy(accounts = d.accounts.map { if (it.id == accountId) it.copy(balance = newBalance) else it })
         if (delta == 0L) return next
@@ -229,6 +233,8 @@ object Accounts {
 
     /** Why a quick-add cannot be logged, as a code; how it reads is the design pass's (SPEC R16). */
     enum class QuickAddProblem {
+        /** The Account does not exist: deleted since, say. */
+        ACCOUNT_UNKNOWN,
         /** The category picked for it does not exist; it is never passed over (SPEC R89, R110). */
         CATEGORY_UNKNOWN,
         /** It counts as spending and has no category to count in: a card's rise with no fees category, a Loan's payment with none of its own (SPEC R89, R110). */
@@ -241,7 +247,7 @@ object Accounts {
     fun quickAddProblem(
         d: ProfileData, accountId: String, amount: Money, direction: Direction, from: PayoffFrom, categoryId: String? = null,
     ): QuickAddProblem? {
-        val a = d.accounts.first { it.id == accountId }
+        val a = d.accounts.firstOrNull { it.id == accountId } ?: return QuickAddProblem.ACCOUNT_UNKNOWN
         if (categoryId != null && !categoryExists(d, categoryId)) return QuickAddProblem.CATEGORY_UNKNOWN
         if (direction == Direction.INCREASE) return if (canRise(d, a, categoryId)) null else QuickAddProblem.CATEGORY_MISSING
         if (!canPayOff(d, a, from, categoryId)) return QuickAddProblem.CATEGORY_MISSING
@@ -279,14 +285,14 @@ object Accounts {
      * (SPEC R110); with neither, it is refused, unless the card's charges are not logged. A
      * payment off a Loan with nothing charged to it is filed under [categoryId] if picked, else
      * the Loan's own category, else its linked payment's, and refused with none of them ([canPayOff], SPEC R89).
+     * While [quickAddProblem] finds one, [d] comes back unchanged.
      */
     fun quickAdd(
         d: ProfileData, accountId: String, amount: Money, direction: Direction, payee: String?, from: PayoffFrom,
         clock: Clock, date: LocalDate? = null, categoryId: String? = null, ids: () -> String,
     ): ProfileData {
-        val a = d.accounts.first { it.id == accountId }
-        val problem = quickAddProblem(d, accountId, amount, direction, from, categoryId)
-        require(problem == null) { "the quick-add cannot be logged: $problem (SPEC R89, R110)" }
+        if (quickAddProblem(d, accountId, amount, direction, from, categoryId) != null) return d
+        val a = d.accounts.firstOrNull { it.id == accountId } ?: return d
         val goal = (from as? PayoffFrom.Goal)?.takeIf { direction == Direction.PAYMENT }?.let { f -> d.goals.firstOrNull { it.id == f.id } }
         val signed = if (direction == Direction.PAYMENT) -amount else amount
         val note = payee ?: if (direction == Direction.PAYMENT) StoredLabels.PAID_OFF else StoredLabels.INCREASED
@@ -330,6 +336,7 @@ object Accounts {
         if (rows.isEmpty()) return UndoProblem.NO_SUCH_GROUP
         for (t in rows) {
             if (t.isIncome) return UndoProblem.NOT_A_QUICK_ADD
+            // a key that cannot be read is no quick-add's either
             when (val k = TransactionKey.parse(t.key)) {
                 is TransactionKey.AccountKey -> if (d.accounts.none { it.id == k.id }) return UndoProblem.ACCOUNT_DELETED
                 is TransactionKey.GoalSpendKey -> if (d.goals.none { it.id == k.id }) return UndoProblem.GOAL_DELETED
@@ -344,11 +351,10 @@ object Accounts {
      * Undoes the Account quick-add whose rows share [groupId] (SPEC R111): its rows are deleted
      * together and every figure they moved moves back, the Account's balance, Savings and the
      * Goal's saved money; a category's spent follows, being worked out from the rows left (SPEC
-     * R25). Refused unless [undoQuickAddProblem] finds nothing.
+     * R25). While [undoQuickAddProblem] finds one, [d] comes back unchanged.
      */
     fun undoQuickAdd(d: ProfileData, groupId: String): ProfileData {
-        val problem = undoQuickAddProblem(d, groupId)
-        require(problem == null) { "the quick-add cannot be undone: $problem (SPEC R111)" }
+        if (undoQuickAddProblem(d, groupId) != null) return d
         val rows = d.transactions.filter { it.groupId == groupId }
         var next = d.copy(transactions = d.transactions.filter { it.groupId != groupId })
         for (t in rows) {

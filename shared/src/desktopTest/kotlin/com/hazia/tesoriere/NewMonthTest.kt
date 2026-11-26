@@ -195,4 +195,27 @@ class NewMonthTest {
         val w = world(monthly("rent", "950.00", 1, swept = "2026-09"), monthly("late", "830.00", 5, swept = "2026-09"))
         assertEquals(cents("1,780.00"), Recurring.scheduledTotal(w, LocalDate(2026, 9, 18)))
     }
+
+    // SPEC:R70
+    @Test fun `R70 a stored month mark that is no month, a corrupted one, counts as no mark`() {
+        val clock = TestClock(LocalDate(2026, 9, 1)); val ids = Ids()
+        // the Profile's mark corrupted: the rent's own mark still says August, so September sweeps once
+        val w1 = world(monthly("rent", "950.00", 1)).let { it.copy(settings = it.settings.copy(lastMonthProcessed = "2026")) }
+        val (d1, s1) = NewMonth.runCatchUp(w1, clock) { ids.next() }
+        assertEquals(1, s1?.monthsReplayed)
+        assertEquals(cents("4,050.00"), d1.savingsAmount)
+        assertEquals("2026-09", d1.settings.lastMonthProcessed, "a corrupted mark is written over")
+        assertEquals("2026-09", d1.recurringExpenses.single().lastSweptMonth)
+        // the rent's mark corrupted: the Profile's says August, and the rent sweeps September as if never swept
+        val w2 = world(monthly("rent", "950.00", 1, swept = "2026-xx")).let { it.copy(settings = it.settings.copy(lastMonthProcessed = "2026-08")) }
+        val (d2, _) = NewMonth.runCatchUp(w2, clock) { ids.next() }
+        assertEquals(cents("4,050.00"), d2.savingsAmount)
+        assertEquals("2026-09", d2.recurringExpenses.single().lastSweptMonth)
+        // every mark corrupted: no month to start from, nothing swept, and the Profile marked as processed
+        val w3 = world(monthly("rent", "950.00", 1, swept = "bad")).let { it.copy(settings = it.settings.copy(lastMonthProcessed = "2026-13")) }
+        val (d3, s3) = NewMonth.runCatchUp(w3, clock) { ids.next() }
+        assertNull(s3)
+        assertEquals(cents("5,000.00"), d3.savingsAmount)
+        assertEquals("2026-09", d3.settings.lastMonthProcessed)
+    }
 }

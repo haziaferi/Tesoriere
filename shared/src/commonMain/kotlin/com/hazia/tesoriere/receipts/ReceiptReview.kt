@@ -135,7 +135,7 @@ object Receipts {
     /** The source kept for [store] (SPEC R35, R113), or null when none is kept or its Goal or Account does not exist. */
     fun keptSource(d: ProfileData, store: String): PaymentSource? {
         val stored = d.receiptSettings?.storeSources?.get(store) ?: return null
-        return when (val s = runCatching { PaymentSource.parse(stored) }.getOrNull()) {
+        return when (val s = PaymentSource.parse(stored)) {
             is PaymentSource.Goal -> s.takeIf { d.goals.any { it.id == s.id } }
             is PaymentSource.Account -> s.takeIf { d.accounts.any { it.id == s.id } }
             PaymentSource.Savings -> s

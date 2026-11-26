@@ -7,7 +7,7 @@ import com.hazia.tesoriere.cents
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 
 class SpentTest {
     private val clock = TestClock(LocalDate(2026, 4, 10))
@@ -45,6 +45,15 @@ class SpentTest {
 
     // SPEC:R25
     @Test fun `R25 a month still to come cannot be adjusted`() {
-        assertFailsWith<IllegalArgumentException> { Spent.adjust(world, "groc", "2026-05", cents("1.00"), clock, "adj-1") }
+        assertEquals(Spent.AdjustProblem.MONTH_TO_COME, Spent.adjustProblem(world, "groc", "2026-05", clock.today))
+        assertEquals(world, Spent.adjust(world, "groc", "2026-05", cents("1.00"), clock, "adj-1"))
+        assertEquals(Spent.AdjustProblem.CATEGORY_UNKNOWN, Spent.adjustProblem(world, "gone", "2026-04", clock.today))
+        assertEquals(world, Spent.adjust(world, "gone", "2026-04", cents("1.00"), clock, "adj-1"), "nor a category that does not exist")
+        // a month that is no month: "2026" sorts before "2026-04" and is still refused
+        for (bad in listOf("2026", "2026-13", "2026-1x", "")) {
+            assertEquals(Spent.AdjustProblem.NOT_A_MONTH, Spent.adjustProblem(world, "groc", bad, clock.today), bad)
+            assertEquals(world, Spent.adjust(world, "groc", bad, cents("1.00"), clock, "adj-1"), bad)
+        }
+        assertNull(Spent.adjustProblem(world, "groc", "2026-03", clock.today))
     }
 }

@@ -911,4 +911,11 @@ class StatementImportTest {
         assertEquals(RowStatus.DUPLICATE, StatementImport.review(d1, listOf(gift.copy(fitid = null)), clock.today).single().status, "the CSV row of it is not")
         assertEquals(RowStatus.DUPLICATE, StatementImport.review(d1, listOf(gift), clock.today).single().status)
     }
+
+    // SPEC:R107 SPEC:R21
+    @Test fun `R107 a row of zero moves nothing and makes no payment`() {
+        val zero = BankRow(LocalDate(2026, 3, 10), 0, "ADJUSTMENT", null)
+        assertNull(StatementImport.draft(zero, listOf(Part("groc", 0))))
+        assertEquals(cents("-4.50"), StatementImport.draft(zero.copy(amount = cents("4.50")), listOf(Part("groc", cents("-4.50"))))?.total)
+    }
 }

@@ -5,10 +5,13 @@ import com.hazia.tesoriere.engine.Ledger
 import com.hazia.tesoriere.engine.Movement
 import com.hazia.tesoriere.engine.TransactionKey
 import com.hazia.tesoriere.engine.dateWithDay
+import com.hazia.tesoriere.engine.monthStart
 import com.hazia.tesoriere.engine.ymKey
 import com.hazia.tesoriere.model.Money
 import com.hazia.tesoriere.model.ProfileData
 import com.hazia.tesoriere.model.StoredLabels
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.number
 
 /*
  * Tesoriere's own: a category's spent figure, worked out per month and never stored (SPEC R25).
@@ -34,19 +37,39 @@ object Spent {
         return parts + rows
     }
 
+    /** Why an adjustment cannot be logged, as a code, first match in this order (SPEC R25). */
+    enum class AdjustProblem {
+        /** The month is not written as `YYYY-MM`. */
+        NOT_A_MONTH,
+        /** A month still to come. */
+        MONTH_TO_COME,
+        /** The category does not exist. */
+        CATEGORY_UNKNOWN,
+    }
+
+    /** Why [adjust] would refuse to adjust [categoryId]'s spent for [ym] on [today], or null when it would log it (SPEC R25). */
+    fun adjustProblem(d: ProfileData, categoryId: String, ym: String, today: LocalDate): AdjustProblem? = when {
+        monthStart(ym) == null -> AdjustProblem.NOT_A_MONTH
+        ym > today.ymKey() -> AdjustProblem.MONTH_TO_COME
+        d.categories.none { it.id == categoryId } -> AdjustProblem.CATEGORY_UNKNOWN
+        else -> null
+    }
+
     /**
      * Sets the category's spent for [ym] to [newValue] by logging the difference as an adjustment
      * (SPEC R25), which moves Savings by its opposite (SPEC R51). The row is dated today when [ym]
      * is the current month, else the last day of [ym], so it counts in that month only. A month
-     * still to come cannot be adjusted; an adjustment to the same figure logs nothing.
+     * still to come cannot be adjusted; an adjustment to the same figure logs nothing. While
+     * [adjustProblem] finds one, [d] comes back unchanged.
      */
     fun adjust(d: ProfileData, categoryId: String, ym: String, newValue: Money, clock: Clock, id: String): ProfileData {
         val today = clock.today()
-        require(ym <= today.ymKey()) { "a month still to come cannot be adjusted: $ym" }
-        val c = d.categories.first { it.id == categoryId }
+        if (adjustProblem(d, categoryId, ym, today) != null) return d
+        val c = d.categories.firstOrNull { it.id == categoryId } ?: return d
+        val start = monthStart(ym) ?: return d
         val delta = newValue - of(d, categoryId, ym)
         if (delta == 0L) return d
-        val date = if (ym == today.ymKey()) today else ym.split('-').let { (y, m) -> dateWithDay(y.toInt(), m.toInt(), 31) }
+        val date = if (ym == today.ymKey()) today else dateWithDay(start.year, start.month.number, 31)
         return Ledger.logAndMove(d, Movement(delta, TransactionKey.CategoryKey(categoryId), c.name, StoredLabels.CORRECTION, date = date), clock, id).first
     }
 }

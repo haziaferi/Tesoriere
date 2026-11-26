@@ -14,7 +14,6 @@ import com.hazia.tesoriere.payments.Spent
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -75,7 +74,9 @@ class CardFeesTest {
     // SPEC:R110 SPEC:R109
     @Test fun `R110 a card with no fees category refuses both rises unless one is picked, and one whose charges are not logged takes them under none`() {
         val bare = world(card(fees = null))
-        assertFailsWith<IllegalArgumentException> { bare.increased("12.50") }
+        assertEquals(Accounts.QuickAddProblem.CATEGORY_MISSING,
+            Accounts.quickAddProblem(bare, "cc", cents("12.50"), Accounts.Direction.INCREASE, Accounts.PayoffFrom.None))
+        assertEquals(bare, bare.increased("12.50"))
         val fees = AccountEditing.BalanceRise.FEES
         assertFalse(AccountEditing.canSave(bare, bare.accounts.single().copy(balance = cents("320.00")), rise = fees))
         assertEquals(bare, bare.edited("320.00"))

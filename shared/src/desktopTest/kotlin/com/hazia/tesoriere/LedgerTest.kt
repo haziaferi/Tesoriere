@@ -13,7 +13,6 @@ import com.hazia.tesoriere.model.Transaction
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -65,9 +64,14 @@ class LedgerTest {
 
     // SPEC:R51
     @Test fun `R51 a key that is not in the table is refused`() {
-        assertFailsWith<IllegalArgumentException> { TransactionKey.parse("wallet:1") }
-        assertFailsWith<IllegalArgumentException> { TransactionKey.parse("goal") }
+        assertNull(TransactionKey.parse("wallet:1"))
+        assertNull(TransactionKey.parse("goal"))
+        assertNull(TransactionKey.parse(":g1"))
         assertEquals(TransactionKey.GoalKey("g1"), TransactionKey.parse("goal:g1"))
+        // a stored row whose key cannot be read, a corrupted one, moves nothing and counts nowhere
+        val corrupt = tx("c", "wallet:1", "-30.00", Instant.DISTANT_PAST)
+        assertEquals(0L, Ledger.savingsEffect(corrupt))
+        assertNull(Ledger.spent(corrupt))
     }
 
     // ---- logAndMove ----------------------------------------------------------------------
@@ -144,6 +148,17 @@ class LedgerTest {
     @Test fun `R52 an edit to the same figure logs nothing`() {
         val d0 = profile(goals = listOf(goal("g1", saved = "40.00")))
         assertEquals(d0, Writes.goalSavedEdit(d0, "g1", cents("40.00"), null, TestClock(day), "t1"))
+    }
+
+    // SPEC:R50 SPEC:R52
+    @Test fun `R52 a Goal that does not exist, or set below zero, changes nothing`() {
+        val d0 = profile(goals = listOf(goal("g1", saved = "40.00")))
+        assertEquals(Writes.GoalSavedProblem.BELOW_ZERO, Writes.goalSavedEditProblem(d0, "g1", cents("-1.00")))
+        assertEquals(d0, Writes.goalSavedEdit(d0, "g1", cents("-1.00"), null, TestClock(day), "t1"))
+        assertEquals(Writes.GoalSavedProblem.GOAL_UNKNOWN, Writes.goalSavedEditProblem(d0, "gone", cents("10.00")))
+        assertEquals(d0, Writes.goalSavedEdit(d0, "gone", cents("10.00"), null, TestClock(day), "t1"))
+        assertNull(Writes.goalSavedEditProblem(d0, "g1", 0))
+        assertEquals(d0, Writes.goalQuickAdd(d0, "gone", cents("10.00"), null, TestClock(day), "t1"))
     }
 
     // ---- pairs ---------------------------------------------------------------------------

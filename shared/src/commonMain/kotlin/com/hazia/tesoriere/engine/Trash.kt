@@ -389,7 +389,7 @@ object Trash {
         }
         val expenses = p.expenses.filter { e -> n.recurringExpenses.none { it.id == e.id } }.map { e ->
             back += TransactionKey.RecurringKey(e.id).stored
-            e.copy(profileId = n.profileId, categoryId = filed(e.categoryId)!!, lastSweptMonth = maxOf(e.lastSweptMonth ?: "", today.ymKey()))
+            e.copy(profileId = n.profileId, categoryId = filed(e.categoryId)!!, lastSweptMonth = maxOf(monthMark(e.lastSweptMonth) ?: "", today.ymKey()))
         }
         if (expenses.isNotEmpty()) {
             // only the restored expenses' due dates move on to today (SPEC R61)
@@ -636,7 +636,8 @@ object Trash {
      * same payoff and share marks.
      */
     private fun undoRow(d: ProfileData, t: Transaction, clock: Clock, id: String): ProfileData {
-        val key = TransactionKey.parse(t.key)
+        // a delete writes only keys it can read; one that cannot be read is left as it is
+        val key = TransactionKey.parse(t.key) ?: return d
         val moved = moveTarget(d, key, -t.amount)
         val m = Movement(
             -t.amount, key, t.targetLabel, StoredLabels.RESTORED, date = t.date,
@@ -647,8 +648,9 @@ object Trash {
 
     /** Row [t] back in the ledger as it was, at its place in logged order, moving its target and Savings again. */
     private fun reAdd(d: ProfileData, t: Transaction): ProfileData {
+        // a key that cannot be read, a corrupted row, comes back moving nothing
         val key = TransactionKey.parse(t.key)
-        var n = moveTarget(d, key, t.amount)
+        var n = if (key == null) d else moveTarget(d, key, t.amount)
         val effect = Ledger.savingsEffect(t)
         if (effect != 0L || key == TransactionKey.SavingsKey) n = n.copy(savings = n.savings.copy(amount = (n.savings.amount ?: 0) + effect))
         val at = n.transactions.indexOfFirst { it.loggedAt > t.loggedAt }.let { if (it < 0) n.transactions.size else it }

@@ -30,7 +30,8 @@ import kotlin.math.abs
  * as a payment, and pairing edits that payment, through Payments.edit, into the pair. Nothing is
  * paired without a call to [Pairing.pairBankWithPayment] or [Pairing.pairReceiptWithPayment]
  * (SPEC R37); a suggestion only names a payment. [Pairing.unpair] turns a pair back into the
- * receipt's payment alone, its bank row free to arrive again (SPEC R128).
+ * receipt's payment alone, its bank row free to arrive again (SPEC R128). [Pairing.merge] makes
+ * one pair of a receipt payment and a bank payment both recorded already (SPEC R129).
  */
 
 /** The most a pair's totals may differ and still be suggested, in cents (SPEC R37). */
@@ -76,7 +77,112 @@ enum class UnpairProblem {
     CANNOT_SAVE,
 }
 
+/** Why two recorded payments cannot be merged into a pair, as a code, first match in this order (SPEC R129). */
+enum class MergeProblem {
+    /** Either payment does not exist. */
+    PAYMENT_UNKNOWN,
+    /** Either payment is a refund. */
+    REFUND,
+    /** The receipt side holds bank keys, or no receipt. */
+    NOT_A_RECEIPT_PAYMENT,
+    /** The bank side holds a receipt, or no bank keys. */
+    NOT_A_BANK_PAYMENT,
+    /** A part of the receipt payment files under a category that does not exist, and none that exists is given in its place (SPEC R119). */
+    CATEGORY_MISSING,
+    /** The totals differ and no category that exists is picked for the difference (SPEC R39). */
+    DIFFERENCE_UNFILED,
+    /** The merged payment could not be saved (SPEC R23, R54). */
+    CANNOT_SAVE,
+}
+
+/**
+ * The warnings a merge carries (SPEC R129): [merged], the merged payment's, as for any payment
+ * edit (SPEC R54, R109), worked out once the bank payment is removed; [removed], the bank
+ * payment's own, a source deleted since that its removal moves Savings or a row for (SPEC R54).
+ */
+data class MergeNotice(val merged: PaymentNotice?, val removed: PaymentNotice?)
+
 object Pairing {
+
+    // --- two payments recorded, merged into a pair (SPEC R129) ---
+
+    /**
+     * What receipt payment [receiptPaymentId] becomes when merged with bank payment [bankPaymentId]
+     * (SPEC R129): as paired with that payment's bank row (SPEC R119), the bank payment's total its
+     * total; null for an unknown id.
+     */
+    fun mergeDraft(
+        d: ProfileData, receiptPaymentId: String, bankPaymentId: String, differenceCategoryId: String?, replacementCategoryId: String? = null,
+    ): PaymentDraft? {
+        val r = d.payments.firstOrNull { it.id == receiptPaymentId } ?: return null
+        val b = d.payments.firstOrNull { it.id == bankPaymentId } ?: return null
+        return receiptFirstDraft(d, r, b.total, differenceCategoryId, replacementCategoryId)
+    }
+
+    /** Why receipt payment [receiptPaymentId] and bank payment [bankPaymentId] cannot be merged, or null (SPEC R129). */
+    fun mergeProblem(
+        d: ProfileData, receiptPaymentId: String, bankPaymentId: String, differenceCategoryId: String?, replacementCategoryId: String? = null,
+    ): MergeProblem? {
+        val r = d.payments.firstOrNull { it.id == receiptPaymentId }
+        val b = d.payments.firstOrNull { it.id == bankPaymentId }
+        if (r == null || b == null) return MergeProblem.PAYMENT_UNKNOWN
+        if (r.total <= 0 || b.total <= 0) return MergeProblem.REFUND
+        if (r.receiptId == null || r.bankKeys != null) return MergeProblem.NOT_A_RECEIPT_PAYMENT
+        if (b.receiptId != null || b.bankKeys == null) return MergeProblem.NOT_A_BANK_PAYMENT
+        val live = d.categories.mapTo(HashSet()) { it.id }
+        if (r.parts.any { !it.difference && it.categoryId !in live } && replacementCategoryId !in live) return MergeProblem.CATEGORY_MISSING
+        if (differencePart(r.total, b.total) != 0L && differenceCategoryId !in live) return MergeProblem.DIFFERENCE_UNFILED
+        val draft = mergeDraft(d, receiptPaymentId, bankPaymentId, differenceCategoryId, replacementCategoryId) ?: return MergeProblem.PAYMENT_UNKNOWN
+        // the bank payment's removal changes no category and no source's existence, so [d] answers as the data after it would
+        return MergeProblem.CANNOT_SAVE.takeIf { !Payments.canSave(d, draft, receiptPaymentId, pairing = true) }
+    }
+
+    /**
+     * The warnings a merge would carry (SPEC R129): the merged payment's, as for any payment edit
+     * (SPEC R54, R109), worked out once the bank payment is removed, so a Goal both took from holds
+     * its share again; and the bank payment's own, its source deleted since (SPEC R54). Null for an unknown id.
+     */
+    fun mergeNotice(
+        d: ProfileData, receiptPaymentId: String, bankPaymentId: String, differenceCategoryId: String?, replacementCategoryId: String? = null,
+    ): MergeNotice? {
+        val draft = mergeDraft(d, receiptPaymentId, bankPaymentId, differenceCategoryId, replacementCategoryId) ?: return null
+        val removed = Payments.remove(d, bankPaymentId, CHECK_CLOCK, "check")
+        return MergeNotice(Payments.draftNotice(removed, draft, editing = receiptPaymentId), Payments.notice(d, bankPaymentId))
+    }
+
+    /**
+     * Merges bank payment [bankPaymentId] into receipt payment [receiptPaymentId], one purchase
+     * recorded twice, into one pair (SPEC R40, R129): the bank payment is removed through
+     * Payments.remove, undoing once what its source moved, and is not kept in the Trash; then
+     * Payments.edit gives the receipt payment the bank payment's total and the difference part,
+     * keeping its parts, day, source and store, and it takes the bank payment's keys. The import's
+     * keys stay as they were: the row kept once, held by the receipt payment from now on (SPEC
+     * R26). The store's link is made the first time the store pairs (SPEC R120). [removeTxId] is
+     * the ledger row the removal writes for a source deleted since, [editTxId] the one the edit
+     * writes (SPEC R54). While [mergeProblem] finds one, [d] comes back unchanged.
+     */
+    fun merge(
+        d: ProfileData, receiptPaymentId: String, bankPaymentId: String, differenceCategoryId: String?, clock: Clock,
+        removeTxId: String, editTxId: String, replacementCategoryId: String? = null,
+    ): ProfileData {
+        if (mergeProblem(d, receiptPaymentId, bankPaymentId, differenceCategoryId, replacementCategoryId) != null) return d
+        val receipt = d.payments.firstOrNull { it.id == receiptPaymentId } ?: return d
+        val bank = d.payments.firstOrNull { it.id == bankPaymentId } ?: return d
+        val keys = bank.bankKeys ?: return d
+        val draft = mergeDraft(d, receiptPaymentId, bankPaymentId, differenceCategoryId, replacementCategoryId) ?: return d
+        // the bank payment first: a Goal it took from holds that share again before the merged payment takes its own (SPEC R54)
+        val removed = Payments.remove(d, bankPaymentId, clock, removeTxId)
+        if (!Payments.canSave(removed, draft, receiptPaymentId, pairing = true)) return d
+        val edited = Payments.edit(removed, receiptPaymentId, draft, clock, editTxId, pairing = true)
+        val merged = edited.copy(payments = edited.payments.map { if (it.id == receiptPaymentId) it.copy(bankKeys = keys) else it })
+        return linkStore(merged, receipt.payee, bank.payee)
+    }
+
+    /** The clock a check removes with: what it writes is dropped, so its instant never reaches the data. */
+    private object CHECK_CLOCK : Clock {
+        override fun today(): LocalDate = LocalDate(1970, 1, 1)
+        override fun now() = kotlin.time.Instant.fromEpochMilliseconds(0)
+    }
 
     // --- unpairing (SPEC R128) ---
 
@@ -266,7 +372,15 @@ object Pairing {
      */
     fun bankPairDraft(d: ProfileData, paymentId: String, row: ReviewRow, differenceCategoryId: String?, replacementCategoryId: String? = null): PaymentDraft? {
         val p = d.payments.firstOrNull { it.id == paymentId } ?: return null
-        val bank = -row.row.amount
+        return receiptFirstDraft(d, p, -row.row.amount, differenceCategoryId, replacementCategoryId)
+    }
+
+    /**
+     * Receipt payment [p] completed by a bank amount [bank] (SPEC R119, R129): its own parts less
+     * any difference part, a part whose category does not exist under [replacementCategoryId], and
+     * the difference part; its day, source and store kept, [bank] its total.
+     */
+    private fun receiptFirstDraft(d: ProfileData, p: Payment, bank: Money, differenceCategoryId: String?, replacementCategoryId: String?): PaymentDraft {
         val live = d.categories.mapTo(HashSet()) { it.id }
         val parts = p.parts.filter { !it.difference }.map { if (it.categoryId in live) it else it.copy(categoryId = replacementCategoryId) }
         return PaymentDraft(p.date, bank, p.source, p.payee, withDifference(parts, differencePart(p.total, bank), differenceCategoryId))

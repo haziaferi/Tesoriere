@@ -14,7 +14,6 @@ import com.hazia.tesoriere.payments.Spent
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -360,9 +359,19 @@ class RecurringTest {
         assertTrue(Recurring.canSave(world(), good))
         assertFalse(Recurring.canSave(world(), good.copy(categoryId = "")))
         assertFalse(Recurring.canSave(world(), good.copy(categoryId = "gone")))         // names no category that exists
-        assertFailsWith<IllegalArgumentException> { Recurring.create(world(), good.copy(categoryId = ""), clock) { ids.next() } }
+        assertEquals(world(), Recurring.create(world(), good.copy(categoryId = ""), clock) { ids.next() })
         val d = Recurring.create(world(), good, clock) { ids.next() }
-        assertFailsWith<IllegalArgumentException> { Recurring.edit(d, d.recurringExpenses[0].copy(categoryId = "gone"), clock.today()) }
+        assertEquals(d to null, Recurring.edit(d, d.recurringExpenses[0].copy(categoryId = "gone"), clock.today()))
+    }
+
+    // SPEC:R65
+    @Test fun `R65 an expense deleted since is not edited, its offered difference not applied, and nothing sweeps for it`() {
+        val clock = TestClock(LocalDate(2026, 9, 14)); val ids = Ids()
+        val d = Recurring.create(world(), recurring("e", "60.00", Cadence.MONTHLY, LocalDate(2026, 9, 20), categoryId = "phone"), clock) { ids.next() }
+        val gone = recurring("gone", "60.00", Cadence.MONTHLY, LocalDate(2026, 9, 20), categoryId = "phone")
+        assertEquals(d to null, Recurring.edit(d, gone, clock.today()))
+        assertEquals(d, Recurring.applyReconcile(d, Recurring.Reconcile("gone", cents("10.00"), LocalDate(2026, 9, 20)), clock) { ids.next() })
+        assertEquals(d to 0L, Recurring.sweepOccurrences(d, "gone", LocalDate(2026, 10, 1), clock) { ids.next() })
     }
 
     // SPEC:R67 SPEC:R25 SPEC:R21
