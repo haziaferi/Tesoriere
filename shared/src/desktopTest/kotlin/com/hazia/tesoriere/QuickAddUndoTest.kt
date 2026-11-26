@@ -14,7 +14,6 @@ import com.hazia.tesoriere.payments.Spent
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -94,9 +93,12 @@ class QuickAddUndoTest {
         val group = paid.lastGroup()
         val cardGone = Accounts.deleteCascade(paid, "cc", clock) { ids.next() }
         assertEquals(Accounts.UndoProblem.ACCOUNT_DELETED, Accounts.undoQuickAddProblem(cardGone, group))
-        assertFailsWith<IllegalArgumentException> { Accounts.undoQuickAdd(cardGone, group) }
+        assertEquals(cardGone, Accounts.undoQuickAdd(cardGone, group))
         val goalGone = GoalEditing.delete(paid, "trip", returnSaved = true, clock) { ids.next() }
         assertEquals(Accounts.UndoProblem.GOAL_DELETED, Accounts.undoQuickAddProblem(goalGone, group))
+        assertEquals(goalGone, Accounts.undoQuickAdd(goalGone, group))
+        assertEquals(Accounts.UndoProblem.NO_SUCH_GROUP, Accounts.undoQuickAddProblem(paid, "nope"))
+        assertEquals(paid, Accounts.undoQuickAdd(paid, "nope"))
     }
 
     // SPEC:R111 SPEC:R53 SPEC:R63
