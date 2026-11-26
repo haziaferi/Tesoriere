@@ -219,11 +219,12 @@ object Pairing {
 
     /**
      * Why receipt payment [paymentId] and bank row [row] cannot be paired, or null (SPEC R119).
-     * [review] is the import review [row] is in, when it is: a payment holding the synthetic key
-     * of [row] and of its twins there stands for one of them only (StatementImport.rowRecorded).
+     * [review] is the import review [row] is in, every row of it, so a payment holding the synthetic
+     * key of [row] and of its twins there stands for one of them only (StatementImport.rowRecorded);
+     * a caller outside an import passes the rows it stands for, or an empty list.
      */
     fun bankPairProblem(
-        d: ProfileData, paymentId: String, row: ReviewRow, differenceCategoryId: String?, review: List<ReviewRow> = emptyList(),
+        d: ProfileData, paymentId: String, row: ReviewRow, differenceCategoryId: String?, review: List<ReviewRow>,
     ): PairProblem? {
         val p = d.payments.firstOrNull { it.id == paymentId }
         if (p == null || !receiptSide(p)) return PairProblem.PAYMENT_NOT_PAIRABLE
@@ -244,14 +245,14 @@ object Pairing {
      * R119): Payments.edit gives it the bank amount as its total and the difference part, keeping
      * its day and source; it gains the row's keys, which the import keeps too (SPEC R26), and the
      * store's link the first time the store pairs (SPEC R120). [txId] is the ledger row a deleted
-     * source's edit may write (SPEC R54); [review] is as for [bankPairProblem].
+     * source's edit may write (SPEC R54); [review] is as for [bankPairProblem]. While
+     * [bankPairProblem] finds a problem, [d] comes back unchanged.
      */
     fun pairBankWithPayment(
         d: ProfileData, paymentId: String, row: ReviewRow, differenceCategoryId: String?, clock: Clock, txId: String,
-        review: List<ReviewRow> = emptyList(),
+        review: List<ReviewRow>,
     ): ProfileData {
-        val problem = bankPairProblem(d, paymentId, row, differenceCategoryId, review)
-        require(problem == null) { "the pair cannot be recorded: $problem (SPEC R119)" }
+        if (bankPairProblem(d, paymentId, row, differenceCategoryId, review) != null) return d
         val store = d.payments.first { it.id == paymentId }.payee
         val edited = Payments.edit(d, paymentId, bankPairDraft(d, paymentId, row, differenceCategoryId)!!, clock, txId, pairing = true)
         return linkStore(withKeys(edited, paymentId, row), store, row.row.description)
@@ -312,14 +313,14 @@ object Pairing {
      * R38, R40, R119): Payments.edit gives it the receipt's parts, day, source and store, with the
      * difference part, keeping its total and keys, its source as [pairSource] has it; then the
      * receipt is kept as its Confirm keeps it (SPEC R115), the store keeping the pair's source, and
-     * the store's link made the first time the store pairs (SPEC R120).
+     * the store's link made the first time the store pairs (SPEC R120). While [receiptPairProblem]
+     * finds a problem, [d] comes back unchanged.
      */
     fun pairReceiptWithPayment(
         d: ProfileData, paymentId: String, review: ReceiptReview, differenceCategoryId: String?, clock: Clock, txId: String,
         receiptParts: List<Part>? = null,
     ): ProfileData {
-        val problem = receiptPairProblem(d, paymentId, review, differenceCategoryId, receiptParts)
-        require(problem == null) { "the pair cannot be recorded: $problem (SPEC R119)" }
+        if (receiptPairProblem(d, paymentId, review, differenceCategoryId, receiptParts) != null) return d
         val bankText = d.payments.first { it.id == paymentId }.payee
         val base = Receipts.withAdded(d, review)
         val draft = receiptPairDraft(d, paymentId, review, differenceCategoryId, receiptParts)!!
