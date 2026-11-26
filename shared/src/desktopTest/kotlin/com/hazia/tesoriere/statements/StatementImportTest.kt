@@ -749,4 +749,46 @@ class StatementImportTest {
         assertEquals(LocalDate(2026, 3, 3), mercato.date)
         assertEquals(1240L, mercato.total)
     }
+
+    /** The rows paired since, worked out as before the index (SPEC R119): every payment against every row. */
+    private fun pairedSinceByScan(d: ProfileData, rows: List<ReviewRow>): Set<Int> {
+        val taken = HashSet<Int>()
+        for (p in d.payments) {
+            val held = p.bankKeys ?: continue
+            val open = rows.indices.filter { it !in taken && rows[it].status != RowStatus.DUPLICATE && StatementImport.sameRow(rows[it].keys, held) }
+            val pick = open.firstOrNull { rows[it].pairPaymentId == p.id } ?: open.firstOrNull { rows[it].keys == held } ?: open.firstOrNull() ?: continue
+            taken += pick
+        }
+        return taken
+    }
+
+    // SPEC:R119 SPEC:R26
+    @OptIn(ExperimentalTime::class)
+    @Test fun `R119 2,000 payments against a 200-row statement give the rows paired since as every payment against every row does`() {
+        val day = LocalDate(2026, 3, 1)
+        // 200 rows: FITID rows, twin coffees with no FITID, rows whose FITIDs share one synthetic key, some arrived DUPLICATE
+        val rows = (0 until 200).map { i ->
+            val date = LocalDate(2026, 3, 1 + i % 28)
+            val fitid = when (i % 4) { 0 -> "F-$i"; 1 -> null; 2 -> "T-${i / 8}-${i % 8}"; else -> null }
+            val amount = -(100L + if (i % 4 == 1) 350L else i.toLong())
+            val row = BankRow(date, amount, if (i % 4 == 2) "TWIN SHOP" else "SHOP ${i % 4 == 1}", fitid)
+            ReviewRow(row, StatementImport.keys(row), "shop", if (i % 13 == 0) RowStatus.DUPLICATE else RowStatus.READY, true, null, null,
+                if (i % 17 == 0) "pay-${i * 3}" else null)
+        }
+        // 2,000 payments: most hold keys of no row, some a row's keys, some a twin's, some a FITID of their own over a row's synthetic key
+        val payments = (0 until 2000).map { j ->
+            val keys = when {
+                j % 10 == 0 -> rows[(j / 10) % 200].keys
+                j % 10 == 3 -> rows[(j * 7) % 200].keys.copy(fitid = null)
+                j % 10 == 6 -> rows[(j * 3) % 200].keys.copy(fitid = "X-$j")
+                j % 10 == 9 -> null
+                else -> BankKeys("N-$j", "syn:2025-01-01|-${j}.00|elsewhere")
+            }
+            Payment("pay-$j", Fixture.PROFILE, day, Instant.fromEpochMilliseconds(j.toLong()), 100, PaymentSource.Savings, "shop", listOf(Part("groc", 100)), bankKeys = keys)
+        }
+        val d = profile().copy(payments = payments)
+        val expected = pairedSinceByScan(d, rows)
+        assertTrue(expected.size > 20, "the case pairs rows: ${expected.size}")
+        assertEquals(expected, StatementImport.pairedSince(d, rows))
+    }
 }

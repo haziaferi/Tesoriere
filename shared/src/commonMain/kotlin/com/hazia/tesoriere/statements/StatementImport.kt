@@ -594,13 +594,27 @@ object StatementImport {
      * coffees on one day with no FITID, is still recorded. A payment's keys and a row's are of one
      * row by [sameRow]: their FITIDs when both have one. Each payment takes the row naming it as
      * its pair, else a row with the very keys it holds, else the first row of the same keys. A
-     * row that arrived DUPLICATE is recorded when ticked (SPEC R107).
+     * row that arrived DUPLICATE is recorded when ticked (SPEC R107). It runs in every check of the
+     * review, so the rows that did not arrive DUPLICATE are indexed once by FITID and by synthetic
+     * key, and only payments whose keys meet the index are looked at.
      */
-    private fun pairedSince(d: ProfileData, rows: List<ReviewRow>): Set<Int> {
+    internal fun pairedSince(d: ProfileData, rows: List<ReviewRow>): Set<Int> {
+        val byFit = HashMap<String, MutableList<Int>>()
+        val bySyn = HashMap<String, MutableList<Int>>()
+        for (i in rows.indices) {
+            val k = rows[i].keys
+            if (rows[i].status == RowStatus.DUPLICATE) continue
+            k.fitid?.let { byFit.getOrPut(it) { ArrayList() }.add(i) }
+            bySyn.getOrPut(k.synKey) { ArrayList() }.add(i)
+        }
         val taken = HashSet<Int>()
         for (p in d.payments) {
             val held = p.bankKeys ?: continue
-            val open = rows.indices.filter { it !in taken && rows[it].status != RowStatus.DUPLICATE && sameRow(rows[it].keys, held) }
+            val bySynHeld = bySyn[held.synKey].orEmpty()
+            // [sameRow]: a FITID meets rows of that FITID and rows with none sharing the synthetic key
+            val same = if (held.fitid == null) bySynHeld else (byFit[held.fitid].orEmpty() + bySynHeld.filter { rows[it].keys.fitid == null }).sorted()
+            if (same.isEmpty()) continue
+            val open = same.filter { it !in taken }
             val pick = open.firstOrNull { rows[it].pairPaymentId == p.id } ?: open.firstOrNull { rows[it].keys == held } ?: open.firstOrNull() ?: continue
             taken += pick
         }
