@@ -91,11 +91,11 @@ object Hourly {
     /**
      * The payday confirmed (SPEC R81): what arrived lands in Savings as income dated to the
      * payday, carrying the hours and the rate they were logged at, which the learned estimate
-     * reads back, and the shifts it paid go. A confirmed payday has an amount: [arrived] not above
-     * zero gives [d] back unchanged ([nothingThisTime] answers a payday that brought nothing).
+     * reads back, and the shifts it paid go. While [confirmPaydayProblem] finds one, [d] comes back
+     * unchanged ([nothingThisTime] answers a payday that brought nothing).
      */
     fun confirmPayday(d: ProfileData, payday: Payday, arrived: Money, clock: Clock, txId: String): ProfileData {
-        if (arrived <= 0) return d
+        if (confirmPaydayProblem(arrived) != null) return d
         val hours = payday.hours
         val rate = if (hours > 0) (payday.gross / hours).roundToLong() else null
         val moved = Ledger.logAndMove(
@@ -106,6 +106,25 @@ object Hourly {
         ).first
         return answered(moved, payday, paid = true)
     }
+
+    /** Why a payday cannot be confirmed, as a code (SPEC R81). */
+    enum class PaydayProblem {
+        /** What arrived is not above zero: a confirmed payday has an amount. */
+        NO_AMOUNT,
+    }
+
+    /** Why [confirmPayday] would refuse [arrived], or null when it would confirm it (SPEC R81). */
+    fun confirmPaydayProblem(arrived: Money): PaydayProblem? = PaydayProblem.NO_AMOUNT.takeIf { arrived <= 0 }
+
+    /** Why the income type cannot change, as a code (SPEC R79, R83). */
+    enum class TypeProblem {
+        /** Shifts are still logged: they are settled before the type changes (SPEC R83). */
+        SHIFTS_PENDING,
+    }
+
+    /** Why [setType] would refuse to change the income to [type], or null when it would, or when it is [type] already (SPEC R79, R83). */
+    fun setTypeProblem(d: ProfileData, type: IncomeType): TypeProblem? =
+        TypeProblem.SHIFTS_PENDING.takeIf { d.settings.incomeType != type && d.shifts.isNotEmpty() }
 
     /**
      * The payday answered with nothing this time (SPEC R81): with no hours logged that closes
@@ -135,13 +154,13 @@ object Hourly {
     /**
      * The type change (SPEC R79). Hourly has no automatic deposit and counts paydays after
      * [today] only, so neither one behind it nor today's is asked about; back to salaried keeps
-     * SPEC R76's paydays. Shifts are settled first (SPEC R83): while any is logged, [d] comes back
-     * unchanged.
+     * SPEC R76's paydays. Shifts are settled first (SPEC R83): while [setTypeProblem] finds one,
+     * [d] comes back unchanged.
      */
     fun setType(d: ProfileData, type: IncomeType, today: LocalDate): ProfileData {
         val s = d.settings
         if (s.incomeType == type) return d
-        if (d.shifts.isNotEmpty()) return d
+        if (setTypeProblem(d, type) != null) return d
         return d.copy(settings = s.copy(
             incomeType = type,
             incomeAutoDeposit = false,

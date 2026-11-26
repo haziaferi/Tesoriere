@@ -104,8 +104,11 @@ class HourlyIncomeTest {
     @Test fun `R81 a payday cannot be confirmed with 0_00`() {
         val d = hourly().shift(3, 6.0)
         val p = Hourly.duePayday(d, LocalDate(2026, 11, 13))!!
+        assertEquals(Hourly.PaydayProblem.NO_AMOUNT, Hourly.confirmPaydayProblem(0))
         assertEquals(d, Hourly.confirmPayday(d, p, 0, clock, ids.next()))
+        assertEquals(Hourly.PaydayProblem.NO_AMOUNT, Hourly.confirmPaydayProblem(cents("-1.00")))
         assertEquals(d, Hourly.confirmPayday(d, p, cents("-1.00"), clock, ids.next()))
+        assertNull(Hourly.confirmPaydayProblem(cents("0.01")))
     }
 
     // SPEC:R81
@@ -177,7 +180,9 @@ class HourlyIncomeTest {
     // SPEC:R83 SPEC:R79
     @Test fun `R83 discarded, the shifts leave no row and the income can then be made salaried, but not with a shift logged`() {
         val d = hourly().shift(3, 6.0).shift(4, 4.0)
+        assertEquals(Hourly.TypeProblem.SHIFTS_PENDING, Hourly.setTypeProblem(d, IncomeType.SALARIED))
         assertEquals(d, Hourly.setType(d, IncomeType.SALARIED, clock.today))
+        assertNull(Hourly.setTypeProblem(d, IncomeType.HOURLY), "no change of type: nothing to refuse")
         val discarded = Hourly.settleOnSwitch(d, null, clock, ids.next())
         assertTrue(discarded.shifts.isEmpty() && discarded.transactions.isEmpty())
         val salaried = Hourly.setType(discarded, IncomeType.SALARIED, clock.today).settings

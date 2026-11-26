@@ -37,14 +37,28 @@ object Writes {
         return Ledger.logAndMove(d, Movement(delta, TransactionKey.SavingsKey, StoredLabels.SAVINGS, payee ?: StoredLabels.CORRECTION), clock, txId).first
     }
 
+    /** Why a Goal's saved money cannot be set directly, as a code, first match in this order (SPEC R52). */
+    enum class GoalSavedProblem {
+        /** The Goal does not exist: deleted since, say. */
+        GOAL_UNKNOWN,
+        /** A Goal cannot hold less than nothing. */
+        BELOW_ZERO,
+    }
+
+    /** Why [goalSavedEdit] would refuse to set Goal [goalId] to [newValue], or null when it would (SPEC R52). */
+    fun goalSavedEditProblem(d: ProfileData, goalId: String, newValue: Money): GoalSavedProblem? = when {
+        d.goals.none { it.id == goalId } -> GoalSavedProblem.GOAL_UNKNOWN
+        newValue < 0 -> GoalSavedProblem.BELOW_ZERO
+        else -> null
+    }
+
     /**
      * A Goal's saved money set directly: any change, either way, moves Savings by its opposite (SPEC
-     * R52). A Goal that does not exist, or a figure below zero, gives [d] back unchanged.
+     * R52). While [goalSavedEditProblem] finds one, [d] comes back unchanged.
      */
     fun goalSavedEdit(d: ProfileData, goalId: String, newValue: Money, payee: String?, clock: Clock, txId: String): ProfileData {
+        if (goalSavedEditProblem(d, goalId, newValue) != null) return d
         val g = d.goals.firstOrNull { it.id == goalId } ?: return d
-        // a Goal cannot hold less than nothing
-        if (newValue < 0) return d
         val delta = newValue - g.saved
         if (delta == 0L) return d
         val next = d.copy(goals = d.goals.map { if (it.id == goalId) it.copy(saved = newValue) else it })
