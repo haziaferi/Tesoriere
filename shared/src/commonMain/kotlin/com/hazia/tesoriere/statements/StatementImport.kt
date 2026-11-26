@@ -121,6 +121,12 @@ data class ReviewRow(
      * they stood for rows recorded before it, so none of them is a pair made since (SPEC R119).
      */
     val heldAtReview: Set<String> = emptySet(),
+    /**
+     * How many rows of this row's keys the import kept, when the review was built, that no payment
+     * held: a payment deleted to the Trash leaves its row kept (SPEC R125). A payment that takes
+     * the keys since, restored from the Trash say, stands for one of them and records no row.
+     */
+    val unheldAtReview: Int = 0,
 )
 
 /**
@@ -523,6 +529,11 @@ object StatementImport {
         val rowKeys = rows.map(::keys)
         // twins told apart: FITIDs first, then as many rows of a synthetic key as were recorded (SPEC R26)
         val recorded = recordedRows(d, rowKeys)
+        val kept = keptRows(d)
+        /** The rows of [k]'s keys the import keeps and no payment holds: by FITID when it has one, else by synthetic key (SPEC R26, R125). */
+        fun unheld(k: BankKeys): Int =
+            if (k.fitid != null) maxOf(0, kept.count { it.fitid == k.fitid } - d.payments.count { it.bankKeys?.fitid == k.fitid })
+            else maxOf(0, kept.count { it.synKey == k.synKey } - d.payments.count { it.bankKeys?.synKey == k.synKey })
         val holders = d.payments.filter { it.bankKeys != null }.groupBy { it.bankKeys!!.synKey }
         val byFitid = d.payments.filter { it.bankKeys?.fitid != null }.groupBy { it.bankKeys!!.fitid!! }
         /** The payments holding [k]'s row's keys now, before anything in this review is recorded. */
@@ -584,7 +595,7 @@ object StatementImport {
                 row = r, keys = keys, payee = payee, status = status,
                 include = status == RowStatus.READY || status == RowStatus.INCOMING,
                 draft = rule?.let { draft(r, listOf(Part(it, -r.amount))) },
-                payoffAccountId = null, pairPaymentId = pairs[i], heldAtReview = heldBy(keys),
+                payoffAccountId = null, pairPaymentId = pairs[i], heldAtReview = heldBy(keys), unheldAtReview = unheld(keys),
             )
         }.sortedByDescending { it.row.date }
     }
@@ -720,7 +731,9 @@ object StatementImport {
      * row that arrived DUPLICATE is recorded when ticked (SPEC R107). A payment that took the keys
      * from one that held them then, as a merge moves them (SPEC R129), records no row: the holders
      * of a row's keys are counted, those now less those then, each payment that held them then and
-     * holds them no longer cancelling one that took them since. It runs in every check of the
+     * holds them no longer cancelling one that took them since; so does each row the import kept
+     * then that no payment held ([ReviewRow.unheldAtReview]), whose payment a restore from the
+     * Trash brings back (SPEC R125, R127). It runs in every check of the
      * review, so the rows that did not arrive DUPLICATE are indexed once by FITID and by synthetic
      * key, and only payments whose keys meet the index are looked at.
      */
@@ -737,6 +750,7 @@ object StatementImport {
         val keysNow = d.payments.mapNotNull { p -> p.bankKeys?.let { p.id to it } }.toMap()
         // the payments that held a row's keys then and hold them no longer, each cancelling one taker once
         val left = HashSet<String>()
+        val unheldTaken = HashMap<String, Int>()
         val taken = HashSet<Int>()
         for (p in d.payments) {
             val held = p.bankKeys ?: continue
@@ -747,9 +761,13 @@ object StatementImport {
             val same = if (held.fitid == null) bySynHeld else (byFit[held.fitid].orEmpty() + bySynHeld.filter { rows[it].keys.fitid == null }).sorted()
             if (same.isEmpty()) continue
             // its keys taken from a payment that held them then: the row it stands for was recorded before the review
-            val leaver = rows.filter { sameRow(it.keys, held) }.flatMap { r -> r.heldAtReview.filter { id -> keysNow[id]?.let { sameRow(it, r.keys) } != true } }
+            val group = rows.filter { sameRow(it.keys, held) }
+            val leaver = group.flatMap { r -> r.heldAtReview.filter { id -> keysNow[id]?.let { sameRow(it, r.keys) } != true } }
                 .firstOrNull { it !in left }
             if (leaver != null) { left += leaver; continue }
+            // or a row the import kept then that no payment held, as a payment restored from the Trash takes back (SPEC R125, R127)
+            val gk = held.fitid?.let { "fit:$it" } ?: held.synKey
+            if ((unheldTaken[gk] ?: 0) < (group.maxOfOrNull { it.unheldAtReview } ?: 0)) { unheldTaken[gk] = (unheldTaken[gk] ?: 0) + 1; continue }
             val open = same.filter { it !in taken }
             val pick = open.firstOrNull { rows[it].pairPaymentId == p.id } ?: open.firstOrNull { rows[it].keys == held } ?: open.firstOrNull() ?: continue
             taken += pick
