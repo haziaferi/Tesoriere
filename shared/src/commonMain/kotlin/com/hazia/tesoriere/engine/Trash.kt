@@ -454,7 +454,7 @@ object Trash {
 
     /** The warning the pair of [pay] with [partner] would carry, the difference not yet filed (SPEC R127). */
     private fun pairNotice(d: ProfileData, pay: Payment, partner: String): PaymentNotice? = when (sideOf(pay)) {
-        Side.RECEIPT -> receiptSideOf(d, pay, null)?.let { (review, parts) -> Pairing.receiptPairNotice(unrecorded(d, pay), partner, review, null, parts) }
+        Side.RECEIPT -> receiptSideOf(d, pay, null)?.let { (review, parts) -> Pairing.receiptPairNotice(unrecorded(d, pay), partner, review, differenceFor(d, pay, null), parts) }
         Side.BANK -> Pairing.bankPairNotice(unimported(d, pay), partner, reviewRow(pay), null)
         null -> null
     }
@@ -473,7 +473,7 @@ object Trash {
                 val named = pay.parts.filter { !it.difference }.mapNotNull { it.categoryId } + pay.receiptLines.map { it.categoryId }
                 if (named.any { it !in live } && (replacement == null || replacement !in live)) return RestoreProblem.CATEGORY_MISSING
                 val (review, parts) = receiptSideOf(d, pay, replacement) ?: return RestoreProblem.CANNOT_PAIR
-                RestoreProblem.CANNOT_PAIR.takeIf { Pairing.receiptPairProblem(unrecorded(d, pay), pairWith, review, differenceCategoryId, parts) != null }
+                RestoreProblem.CANNOT_PAIR.takeIf { Pairing.receiptPairProblem(unrecorded(d, pay), pairWith, review, differenceFor(d, pay, differenceCategoryId), parts) != null }
             }
             Side.BANK -> RestoreProblem.CANNOT_PAIR.takeIf {
                 Pairing.bankPairProblem(unimported(d, pay), pairWith, reviewRow(pay), differenceCategoryId, twinRows(p, pay)) != null
@@ -495,7 +495,7 @@ object Trash {
     ): ProfileData = when (sideOf(pay)) {
         Side.RECEIPT -> {
             val (review, parts) = requireNotNull(receiptSideOf(d, pay, replacement))
-            val paired = Pairing.pairReceiptWithPayment(unrecorded(d, pay), pairWith, review, differenceCategoryId, clock, txId, parts)
+            val paired = Pairing.pairReceiptWithPayment(unrecorded(d, pay), pairWith, review, differenceFor(d, pay, differenceCategoryId), clock, txId, parts)
             paired.copy(receiptSettings = paired.receiptSettings?.copy(recordedReceiptIds = d.receiptSettings!!.recordedReceiptIds))
         }
         Side.BANK -> {
@@ -504,6 +504,13 @@ object Trash {
         }
         null -> error("not a side of a pair (SPEC R127)")
     }
+
+    /**
+     * Where a receipt side's difference is filed (SPEC R127): the category [given], else the one its
+     * own difference part was filed under when it held one and that category still exists.
+     */
+    private fun differenceFor(d: ProfileData, pay: Payment, given: String?): String? =
+        given ?: pay.parts.firstOrNull { it.difference }?.categoryId?.takeIf { c -> d.categories.any { it.id == c } }
 
     /**
      * Receipt payment [pay] read back as its receipt under review, its lines in the categories they

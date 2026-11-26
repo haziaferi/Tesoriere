@@ -957,4 +957,23 @@ class TrashTest {
             assertEquals(d2.importState.importedKeys, paired.importState.importedKeys)
         }
     }
+
+    // SPEC:R127 SPEC:R39 SPEC:R119
+    @Test fun `R127 a 42_30 receipt paired with a 42_50 row, its 0_20 under Fun, deleted and restored as the pair files the difference under Fun again`() {
+        clock.setDay(mar10)
+        val d1 = recordReceipt(receiptWorld(), shop())
+        val row = BankRow(LocalDate(2026, 3, 12), -cents("42.50"), "POS MERCATO LUME 0423", "FIT-12")
+        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", StatementImport.review(d1, listOf(row), mar10).single(), "fun", clock, "tx-pair")
+        val (after, p) = assertNotNull(Trash.deletePayment(d2, "pay-r", clock, ids))
+        val (d3, newId) = recordRow(after, row, "groc")
+        assertNull(Trash.restoreProblem(d3, p, pairWith = newId), "the old difference part's category is taken")
+        val paired = Trash.restore(d3, p, clock, ids, pairWith = newId)
+        assertEquals(Part("fun", cents("0.20"), difference = true), paired.payments.single().parts.last())
+        assertEquals(cents("0.20"), Spent.of(paired, "fun", "2026-03"))
+        assertEquals(cents("957.50"), paired.savingsAmount)
+        val picked = Trash.restore(d3, p, clock, ids, pairWith = newId, differenceCategoryId = "home")
+        assertEquals(Part("home", cents("0.20"), difference = true), picked.payments.single().parts.last(), "a category picked wins")
+        val (noFun, _) = assertNotNull(Trash.deleteCategory(d3, "fun"))
+        assertEquals(RestoreProblem.CANNOT_PAIR, Trash.restoreProblem(noFun, p, pairWith = newId), "its category gone, one must be picked")
+    }
 }
