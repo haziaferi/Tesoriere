@@ -1982,7 +1982,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 | date | the receipt's day |
 | source | the receipt's: the payment's own when the receipt came first, the review's when the bank row did (R35); but the bank payment's own when the store has no source kept, or one that no longer exists, and the user left the review's source as it opened; the store then keeps the pair's source |
 | payee | the store |
-| parts | one per category whose receipt lines add up to other than zero (R115), and the difference part (R39) |
+| parts | the receipt payment's own, a part under a category that does not exist taking the one given, when the receipt came first; one per category whose receipt lines, as filed in the review, add up to other than zero (R115) when the bank row did; and the difference part (R39) |
 | receipt id and lines | the receipt's; its id joins the recorded ids (R30) |
 | bank keys | the bank row's, also kept among the import's keys, so the row arrives `DUPLICATE` on a later import (R26) |
 | links, added categories and the store's source | kept as a receipt's Confirm keeps them (R115), when the receipt came second |
