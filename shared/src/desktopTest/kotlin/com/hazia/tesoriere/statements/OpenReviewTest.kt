@@ -88,6 +88,25 @@ class OpenReviewTest {
         }
     }
 
+    // SPEC:R107 SPEC:R26
+    @Test fun `R107 a twin recorded by a second review while the first is open leaves the first review's ticked row to be recorded`() {
+        for (fitid in listOf(false, true)) {
+            val a = coffee(if (fitid) "F1" else null); val b = coffee(if (fitid) "F2" else null)
+            val d = world()
+            // review A ticks only the second coffee
+            val rvA = review(d, a, b).mapIndexed { i, it ->
+                it.copy(include = i == 1, draft = StatementImport.draft(it.row, listOf(Part("food", cents("4.50")))))
+            }
+            // review B, open at the same time, records the first
+            val viaB = StatementImport.confirm(d, ticked(review(d, a)), clock, Ids("X")::next)
+            assertEquals(1, StatementImport.confirmSummary(viaB, rvA).count, "fitid=$fitid")
+            val out = StatementImport.confirm(viaB, rvA, clock, Ids("C")::next)
+            assertEquals(listOf("X-1", "C-1"), out.payments.map { it.id }, "fitid=$fitid")
+            assertEquals(cents("991.00"), out.savingsAmount, "fitid=$fitid")
+            assertEquals(listOf(RowStatus.DUPLICATE, RowStatus.DUPLICATE), review(out, a, b).map { it.status }, "fitid=$fitid")
+        }
+    }
+
     // SPEC:R119 SPEC:R118 SPEC:R107
     @Test fun `R119 a hand pair confirmed with the review as it was built leaves the ticked row to the pair`() {
         for (fitid in listOf(false, true)) {

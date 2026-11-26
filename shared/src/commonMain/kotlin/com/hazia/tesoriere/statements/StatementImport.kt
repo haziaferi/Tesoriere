@@ -727,9 +727,10 @@ object StatementImport {
      * stands for one row only, so a twin row with the same keys, as two equal coffees on one day
      * with no FITID, is still recorded. A payment's keys and a row's are of one
      * row by [sameRow]: their FITIDs when both have one. Each payment takes the row naming it as
-     * its pair, else a row with the very keys it holds, else the first row of the same keys, a
-     * ticked row before an unticked one in each case, so a review not renamed by the pair leaves
-     * the ticked row to it. A
+     * its pair, else a row with the very keys it holds, else the first row of the same keys; in
+     * each case a pair by hand, holding a receipt, takes a ticked row first, so a review not
+     * renamed by the pair leaves the ticked row to it, and any other payment an unticked row
+     * first, as [recordedSince] does, leaving the ticked row to record. A
      * row that arrived DUPLICATE is recorded when ticked (SPEC R107). A payment that took the keys
      * from one that held them then, as a merge moves them (SPEC R129), records no row: the holders
      * of a row's keys are counted, those now less those then, each payment that held them then and
@@ -770,9 +771,12 @@ object StatementImport {
             // or a row the import kept then that no payment held, as a payment restored from the Trash takes back (SPEC R125, R127)
             val gk = held.fitid?.let { "fit:$it" } ?: held.synKey
             if ((unheldTaken[gk] ?: 0) < (group.maxOfOrNull { it.unheldAtReview } ?: 0)) { unheldTaken[gk] = (unheldTaken[gk] ?: 0) + 1; continue }
-            // when no row names it, a ticked row before an unticked one: the pair took the row the user
-            // ticked, which Confirm would otherwise record a second time (SPEC R118, R119)
-            val open = same.filter { it !in taken }.sortedBy { if (rows[it].include) 0 else 1 }
+            // a pair by hand, holding a receipt, takes a ticked row before an unticked one when no row
+            // names it: it took the row the user ticked, which Confirm would otherwise record a second
+            // time (SPEC R118, R119); any other payment, a twin recorded by another review's Confirm
+            // say, takes an unticked row first, as recordedSince does, the ticked one left to record
+            val tickedFirst = p.receiptId != null
+            val open = same.filter { it !in taken }.sortedBy { if (rows[it].include == tickedFirst) 0 else 1 }
             val pick = open.firstOrNull { rows[it].pairPaymentId == p.id } ?: open.firstOrNull { rows[it].keys == held } ?: open.firstOrNull() ?: continue
             taken += pick
         }
