@@ -6,6 +6,7 @@ import com.hazia.tesoriere.Fixture.goal
 import com.hazia.tesoriere.Fixture.profile
 import com.hazia.tesoriere.Ids
 import com.hazia.tesoriere.engine.Accounts
+import com.hazia.tesoriere.engine.savingsAmount
 import com.hazia.tesoriere.TestClock
 import com.hazia.tesoriere.cents
 import com.hazia.tesoriere.model.Account
@@ -790,5 +791,57 @@ class StatementImportTest {
         val expected = pairedSinceByScan(d, rows)
         assertTrue(expected.size > 20, "the case pairs rows: ${expected.size}")
         assertEquals(expected, StatementImport.pairedSince(d, rows))
+    }
+    // --- R26: twins told apart (owner ruling of 2026-11-26) ---
+
+    private fun coffee(fitid: String?) = BankRow(LocalDate(2026, 3, 11), -cents("4.50"), "BAR CENTRALE", fitid)
+
+    /** [rows] reviewed against [d], every row not `DUPLICATE` ticked under Groceries, and confirmed. */
+    private fun recordAll(d: ProfileData, vararg rows: BankRow): ProfileData {
+        val review = StatementImport.review(d, rows.toList(), clock.today).map {
+            if (it.status == RowStatus.DUPLICATE || it.row.amount > 0) it
+            else it.copy(include = true, draft = StatementImport.draft(it.row, listOf(Part("groc", -it.row.amount))))
+        }
+        return StatementImport.confirm(d, review, clock, ids::next)
+    }
+
+    // SPEC:R26 SPEC:R107
+    @Test fun `R26 F1 recorded, a later statement's F2 of the same day, amount and text arrives READY and records once`() {
+        val d1 = recordAll(world(), coffee("F1"))
+        val later = StatementImport.review(d1, listOf(coffee("F2")), clock.today).single()
+        assertEquals(RowStatus.READY, later.status)
+        assertTrue(later.include)
+        val d2 = recordAll(d1, coffee("F2"))
+        assertEquals(listOf("F1", "F2"), d2.payments.map { it.bankKeys?.fitid })
+        assertEquals(cents("991.00"), d2.savingsAmount)
+        // a statement holding both: F1 is recorded, F2 too now
+        assertEquals(listOf(RowStatus.DUPLICATE, RowStatus.DUPLICATE), StatementImport.review(d2, listOf(coffee("F1"), coffee("F2")), clock.today).map { it.status })
+        val overlap = StatementImport.review(d1, listOf(coffee("F1"), coffee("F2")), clock.today)
+        assertEquals(RowStatus.DUPLICATE, overlap.single { it.row.fitid == "F1" }.status)
+        assertEquals(RowStatus.READY, overlap.single { it.row.fitid == "F2" }.status)
+    }
+
+    // SPEC:R26 SPEC:R107
+    @Test fun `R26 of no-FITID twins with one recorded, a statement holding both has one DUPLICATE and one new, and records only that one`() {
+        val d1 = recordAll(world(), coffee(null))
+        val review = StatementImport.review(d1, listOf(coffee(null), coffee(null)), clock.today)
+        assertEquals(1, review.count { it.status == RowStatus.DUPLICATE })
+        assertEquals(1, review.count { it.status == RowStatus.READY })
+        val d2 = recordAll(d1, coffee(null), coffee(null))
+        assertEquals(2, d2.payments.size, "the payment held at the review stands for the DUPLICATE row, not the new one")
+        assertEquals(cents("991.00"), d2.savingsAmount)
+        assertEquals(listOf(RowStatus.DUPLICATE, RowStatus.DUPLICATE), StatementImport.review(d2, listOf(coffee(null), coffee(null)), clock.today).map { it.status })
+    }
+
+    // SPEC:R26 SPEC:R107
+    @Test fun `R26 a row of money into Savings, recorded with no payment, arrives DUPLICATE on the next import`() {
+        val wage = BankRow(LocalDate(2026, 3, 27), cents("1,450.00"), "STIPENDIO MARZO", null)
+        val d1 = recordAll(world(), wage)
+        assertEquals(cents("2,450.00"), d1.savingsAmount)
+        assertTrue(d1.payments.isEmpty())
+        assertEquals(RowStatus.DUPLICATE, StatementImport.review(d1, listOf(wage), clock.today).single().status)
+        // and so does its twin when both were recorded, while a third of the same day arrives new
+        val d2 = recordAll(d1, wage, wage)
+        assertEquals(listOf(RowStatus.DUPLICATE, RowStatus.DUPLICATE, RowStatus.INCOMING), StatementImport.review(d2, listOf(wage, wage, wage), clock.today).map { it.status })
     }
 }

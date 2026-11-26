@@ -273,7 +273,11 @@ data class Shift(
 @Entity(tableName = "import_state")
 data class ImportState(
     @PrimaryKey val profileId: String,
-    /** Rows already recorded: `fit:<FITID>` and `syn:date|amount|description`, both kept. */
+    /**
+     * Rows already recorded: each recorded row appends `fit:<FITID>`, when it has one, then
+     * `syn:date|amount|description`, so twins of one day are counted (SPEC R26); keys kept before
+     * every row appended its own may hold a synthetic key once for several rows.
+     */
     val importedKeys: List<String> = emptyList(),
     /** Normalised payee to category id, learned from the user's filing. */
     val payeeRules: Map<String, String> = emptyMap(),

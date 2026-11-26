@@ -641,6 +641,23 @@ class PairingTest {
         assertEquals(cents("999.80"), d2.savingsAmount, "the Goal held 42.10; Savings pays 0.20 (R54)")
     }
 
+    // SPEC:R128 SPEC:R26
+    @Test fun `R128 F1 paired while its twin F2 is recorded, unpaired, arrives as new on the next import and F2 DUPLICATE`() {
+        val d1 = recordReceipt(world(), shop())
+        val rows = listOf(row("42.30", on(11), fitid = "F1"), row("42.30", on(11), fitid = "F2"))
+        val review = reviewOf(d1, *rows.toTypedArray())
+        val pairRow = review.single { it.pairPaymentId == "pay-r" }
+        val other = review.single { it.pairPaymentId == null }
+        val filed = other.copy(include = true, draft = StatementImport.draft(other.row, listOf(Part("groc", cents("42.30")))))
+        val paired = Pairing.pairBankWithPayment(d1, "pay-r", pairRow, null, clock, "tx-1", review)
+        val d2 = StatementImport.confirm(paired, listOf(pairRow, filed), clock) { "imp-1" }
+        assertEquals(2, d2.payments.size)
+        val un = Pairing.unpair(d2, "pay-r", clock, "tx-2", emptyList())
+        val again = reviewOf(un, *rows.toTypedArray())
+        assertTrue(again.single { it.row.fitid == pairRow.row.fitid }.status in setOf(RowStatus.PAIR, RowStatus.READY))
+        assertEquals(RowStatus.DUPLICATE, again.single { it.row.fitid == other.row.fitid }.status)
+    }
+
     // --- R128: unpairing ---
 
     /** A 42.10 receipt (Groceries 30.00, Household 12.10) from Savings paired by hand with a -42.30 row, its 0.20 under Fun. */

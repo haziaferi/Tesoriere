@@ -1017,10 +1017,13 @@ class TrashTest {
     }
 
     // SPEC:R128 SPEC:R26 SPEC:R41
-    @Test fun `R128 of two -4_50 twins with no FITID, one in the Trash, the other unpaired keeps the shared key, and no row arrives as new`() {
+    @Test fun `R128 of two -4_50 twins with no FITID, one in the Trash, the other unpaired keeps the trashed twin's key, and only one row arrives as new`() {
         val (un, _, rows) = twinUnpaired(null to null)
-        assertTrue(StatementImport.keys(rows[0]).synKey in un.importState.importedKeys, "the trashed twin still holds it")
-        assertEquals(listOf(RowStatus.DUPLICATE, RowStatus.DUPLICATE), StatementImport.review(un, rows, mar10).map { it.status })
+        assertEquals(1, un.importState.importedKeys.count { it == StatementImport.keys(rows[0]).synKey }, "the trashed twin's row stays recorded")
+        // the twins counted (R26): the trashed twin's row DUPLICATE, the unpaired one's new
+        val review = StatementImport.review(un, rows, mar10)
+        assertEquals(1, review.count { it.status == RowStatus.DUPLICATE })
+        assertEquals(1, review.count { it.status != RowStatus.DUPLICATE })
     }
 
     // SPEC:R128 SPEC:R26

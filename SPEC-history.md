@@ -303,3 +303,7 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-26 · R119 · changed · source row: the bank payment's own when the store has none kept and the review's was left; store keeps it · owner
 - 2026-11-26 · R125 · changed · a deleted payment's row stays recorded when a twin of it is unpaired since · builder
 - 2026-11-26 · R122 · changed · RECORDED_AGAIN when more payments hold the bank row than at the delete, as R125 counts · owner
+- 2026-11-26 · R26 · changed · twins told apart: FITID first, else as many rows of a synthetic key as recorded; each row kept once · owner
+- 2026-11-26 · R107 · changed · DUPLICATE: recorded already, as R26 counts · owner
+- 2026-11-26 · R128 · changed · the unpaired row's keys leave the import's keys once; a recorded twin stays recorded · owner
+- 2026-11-26 · R125 · changed · of no-FITID twins, a deleted one's row stays recorded when the other is unpaired, the other's arrives new · builder

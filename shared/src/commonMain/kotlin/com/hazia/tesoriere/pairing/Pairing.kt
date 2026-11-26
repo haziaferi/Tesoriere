@@ -96,24 +96,28 @@ object Pairing {
 
     /**
      * Unpairs [paymentId] (SPEC R128): Payments.edit makes it the receipt's payment alone, and its
-     * bank keys leave it and the import's keys, so its row arrives as new on the next import (SPEC
-     * R26): its FITID key always, its synthetic key only while no other payment, in the Profile or
-     * among the payments of [trash] (the Trash's items; those of this Profile are read), holds the keys of the same
-     * row by StatementImport.sameRow, so a twin in the Trash still keeps its row recorded (SPEC
-     * R41). The receipt id stays recorded and the store link stays (SPEC R36). [txId] is the ledger
-     * row a deleted source's edit may write (SPEC R54). While [unpairProblem] finds one, [d] comes
-     * back unchanged.
+     * bank keys leave it and the import's keys, its row's kept keys taken out once, so its row
+     * arrives as new on the next import (SPEC R26). A row with no FITID keeps its synthetic key
+     * while fewer would be kept than other payments hold, in the Profile or among the payments of
+     * [trash] (the Trash's items; those of this Profile are read), by StatementImport.sameRow, as
+     * keys kept before each row kept its own may be: a twin in the Trash keeps its row recorded
+     * (SPEC R41). The receipt id stays recorded and the store link stays (SPEC R36). [txId] is the
+     * ledger row a deleted source's edit may write (SPEC R54). While [unpairProblem] finds one, [d]
+     * comes back unchanged.
      */
     fun unpair(d: ProfileData, paymentId: String, clock: Clock, txId: String, trash: List<TrashItem>): ProfileData {
-        if (unpairProblem(d, paymentId) != null) return d
-        val held = d.payments.first { it.id == paymentId }.bankKeys!!
+        val held = d.payments.firstOrNull { it.id == paymentId }?.bankKeys
+        if (unpairProblem(d, paymentId) != null || held == null) return d
+        val draft = unpairDraft(d, paymentId) ?: return d
+        val kept = d.importState.importedKeys
+        val without = StatementImport.withoutRow(kept, held)
         val trashed = trash.filter { it.profileId == d.profileId }.flatMap { Trash.decode(it.payload)?.payments.orEmpty() }
-        val twin = (d.payments + trashed).any { o -> o.id != paymentId && o.bankKeys?.let { StatementImport.sameRow(it, held) } == true }
-        val keys = listOfNotNull(held.fitid?.let { "fit:$it" }, held.synKey.takeIf { !twin }).toSet()
-        val edited = Payments.edit(d, paymentId, unpairDraft(d, paymentId)!!, clock, txId)
+        val twins = (d.payments + trashed).count { o -> o.id != paymentId && o.bankKeys?.let { StatementImport.sameRow(it, held) } == true }
+        val keys = if (held.fitid == null && without.count { it == held.synKey } < twins) kept else without
+        val edited = Payments.edit(d, paymentId, draft, clock, txId)
         return edited.copy(
             payments = edited.payments.map { if (it.id == paymentId) it.copy(bankKeys = null) else it },
-            importState = edited.importState.copy(importedKeys = edited.importState.importedKeys.filter { it !in keys }),
+            importState = edited.importState.copy(importedKeys = keys),
         )
     }
 
@@ -354,14 +358,11 @@ object Pairing {
         if (difference == 0L) parts else parts + Part(categoryId, difference, difference = true)
 
     /** The row's keys on the payment and among the import's keys, so a later import finds it a duplicate (SPEC R26, R119). */
-    private fun withKeys(d: ProfileData, paymentId: String, row: ReviewRow): ProfileData {
-        val keys = d.importState.importedKeys.toMutableList()
-        for (k in StatementImport.keyStrings(row.keys)) if (k !in keys) keys.add(k)
-        return d.copy(
-            payments = d.payments.map { if (it.id == paymentId) it.copy(bankKeys = row.keys) else it },
-            importState = d.importState.copy(importedKeys = keys),
-        )
-    }
+    private fun withKeys(d: ProfileData, paymentId: String, row: ReviewRow): ProfileData = d.copy(
+        payments = d.payments.map { if (it.id == paymentId) it.copy(bankKeys = row.keys) else it },
+        // the row kept once more, so twins are counted (SPEC R26)
+        importState = d.importState.copy(importedKeys = StatementImport.withRow(d.importState.importedKeys, row.keys)),
+    )
 
     /** The store's link, made the first time it pairs: the bank text's rule name (SPEC R36, R120). */
     private fun linkStore(d: ProfileData, store: String?, bankText: String?): ProfileData {
