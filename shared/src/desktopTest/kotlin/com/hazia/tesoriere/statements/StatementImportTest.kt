@@ -886,4 +886,30 @@ class StatementImportTest {
         val c = StatementImport.confirm(StatementImport.confirm(d, ticked(r2.take(1)), clock, ids::next), ticked(r1.take(1)), clock, ids::next)
         assertEquals(cents("4.50"), Spent.of(c, "groc", "2026-03"))
     }
+
+    // --- R26: keys kept by the deduplicating code before every row kept its own ---
+
+    // SPEC:R26
+    @Test fun `R26 an old list fit F1, S, fit F2, T reads F2 alone, so a CSV row T and an OFX row T of F7 arrive recorded`() {
+        val shop = BankRow(LocalDate(2026, 3, 18), -cents("12.00"), "SHOP", null)
+        val s = StatementImport.keys(coffee("F1")).synKey
+        val t = StatementImport.keys(shop).synKey
+        val old = world().let { it.copy(importState = it.importState.copy(importedKeys = listOf("fit:F1", s, "fit:F2", t))) }
+        assertEquals(RowStatus.DUPLICATE, StatementImport.review(old, listOf(shop), clock.today).single().status)
+        assertEquals(RowStatus.DUPLICATE, StatementImport.review(old, listOf(shop.copy(fitid = "F7")), clock.today).single().status)
+        // with a payment holding F2 and T, T is F2's: the OFX row of F7 is a row of its own
+        val held = old.copy(payments = listOf(Payment("pay-2", Fixture.PROFILE, shop.date, Instant.fromEpochMilliseconds(0), 1200, PaymentSource.Savings,
+            "SHOP", listOf(Part("groc", 1200)), bankKeys = BankKeys("F2", t))))
+        assertEquals(RowStatus.READY, StatementImport.review(held, listOf(shop.copy(fitid = "F7")), clock.today).single().status)
+    }
+
+    // SPEC:R26 SPEC:R107
+    @Test fun `R26 an OFX row of money into Savings with a FITID, recorded with no payment, keeps its synthetic key as its own`() {
+        val gift = BankRow(LocalDate(2026, 3, 27), cents("20.00"), "REGALO", "G1")
+        val d1 = recordAll(world(), gift)
+        assertTrue(d1.payments.isEmpty())
+        assertEquals(RowStatus.INCOMING, StatementImport.review(d1, listOf(gift.copy(fitid = "G2")), clock.today).single().status, "a twin with its own FITID is new")
+        assertEquals(RowStatus.DUPLICATE, StatementImport.review(d1, listOf(gift.copy(fitid = null)), clock.today).single().status, "the CSV row of it is not")
+        assertEquals(RowStatus.DUPLICATE, StatementImport.review(d1, listOf(gift), clock.today).single().status)
+    }
 }

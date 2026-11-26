@@ -274,9 +274,10 @@ data class Shift(
 data class ImportState(
     @PrimaryKey val profileId: String,
     /**
-     * Rows already recorded: each recorded row appends `fit:<FITID>`, when it has one, then
-     * `syn:date|amount|description`, so twins of one day are counted (SPEC R26); keys kept before
-     * every row appended its own may hold a synthetic key once for several rows.
+     * Rows already recorded: each recorded row appends `fit:<FITID>` then `fsyn:date|amount|description`
+     * when it has a FITID, else `syn:date|amount|description`, so twins of one day are counted (SPEC
+     * R26). Keys kept before every row appended its own may hold a synthetic key once for several
+     * rows, as `syn:` after a FITID key; StatementImport.keptRows reads both.
      */
     val importedKeys: List<String> = emptyList(),
     /** Normalised payee to category id, learned from the user's filing. */

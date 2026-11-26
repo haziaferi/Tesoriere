@@ -123,7 +123,8 @@ class PairingTest {
         assertEquals(cents("957.70"), d2.savings.amount)
         // the row is recorded now: a later import of it is a duplicate
         assertEquals(RowStatus.DUPLICATE, reviewOf(d2, bank).single().status)
-        assertTrue(StatementImport.keyStrings(StatementImport.keys(bank)).all { it in d2.importState.importedKeys })
+        val k = StatementImport.keys(bank)
+        assertTrue(StatementImport.KeptRow(k.fitid, k.synKey) in StatementImport.keptRows(d2), "the import keeps the row's two keys")
     }
 
     // SPEC:R38 SPEC:R119 SPEC:R35

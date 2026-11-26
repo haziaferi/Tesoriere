@@ -339,8 +339,11 @@ object StatementImport {
         return BankKeys(r.fitid, "syn:${r.date}|${r.amount.toMajor2()}|${desc.take(40).lowercase()}")
     }
 
-    /** [k] as the strings kept in `ImportState.importedKeys`: `fit:<FITID>` when there is one, then the synthetic key. */
+    /** [k]'s two keys as strings (SPEC R26): `fit:<FITID>` when there is one, then the synthetic key. [withRow] keeps them. */
     fun keyStrings(k: BankKeys): List<String> = listOfNotNull(k.fitid?.let { "fit:$it" }, k.synKey)
+
+    /** How a row with a FITID keeps its synthetic key, right after its FITID key: `f` before it, `fsyn:…`. */
+    private const val FITID_SYN = "f"
 
     /**
      * Whether [a] and [b] key one bank row (SPEC R26, R119): by their FITIDs when both have one,
@@ -350,32 +353,48 @@ object StatementImport {
 
     /**
      * One recorded row as `ImportState.importedKeys` keeps it (SPEC R26): each recorded row appends
-     * its FITID key, when it has one, then its synthetic key, so a synthetic key right after a
-     * FITID key is that row's. [synKey] is null for a FITID key kept alone, as keys kept before
-     * every row appended its own were when the synthetic key was there already.
+     * its FITID key, when it has one, then its synthetic key, marked `fsyn:` after a FITID key.
+     * [synKey] is the plain `syn:` key, null for a FITID key kept alone.
      */
     internal data class KeptRow(val fitid: String?, val synKey: String?)
 
-    /** The recorded rows [kept] holds, in the order they were recorded (SPEC R26). */
-    internal fun keptRows(kept: List<String>): List<KeptRow> {
+    /**
+     * The recorded rows [d]'s import keeps, in the order they were recorded (SPEC R26). A FITID key
+     * is followed by its own `fsyn:` key. Keys kept by the deduplicating code before every row kept
+     * its own have a plain `syn:` key after a FITID key, which may be another row's: it is read as
+     * the FITID's only when a payment holding that FITID holds that synthetic key, and else as a
+     * row recorded with no FITID, the FITID key standing alone.
+     */
+    internal fun keptRows(d: ProfileData): List<KeptRow> {
+        val kept = d.importState.importedKeys
+        val synOf = d.payments.mapNotNull { it.bankKeys }.filter { it.fitid != null }.groupBy({ it.fitid!! }, { it.synKey })
         val out = ArrayList<KeptRow>()
         var i = 0
         while (i < kept.size) {
             val k = kept[i]
-            if (k.startsWith("fit:")) {
-                val syn = kept.getOrNull(i + 1)?.takeIf { it.startsWith("syn:") }
-                out += KeptRow(k.removePrefix("fit:"), syn)
-                i += if (syn != null) 2 else 1
-            } else {
-                out += KeptRow(null, k)
-                i++
+            val next = kept.getOrNull(i + 1)
+            when {
+                k.startsWith("fit:") -> {
+                    val fitid = k.removePrefix("fit:")
+                    val syn = when {
+                        next != null && next.startsWith(FITID_SYN + "syn:") -> next.removePrefix(FITID_SYN)
+                        next != null && next.startsWith("syn:") && synOf[fitid]?.contains(next) == true -> next
+                        else -> null
+                    }
+                    out += KeptRow(fitid, syn)
+                    i += if (syn != null) 2 else 1
+                }
+                // a marked key with no FITID key before it: a row recorded with a FITID, which is not known
+                k.startsWith(FITID_SYN + "syn:") -> { out += KeptRow("", k.removePrefix(FITID_SYN)); i++ }
+                else -> { out += KeptRow(null, k); i++ }
             }
         }
         return out
     }
 
-    /** [kept] with one recorded row of keys [k] appended (SPEC R26): every recorded row is kept once. */
-    internal fun withRow(kept: List<String>, k: BankKeys): List<String> = kept + keyStrings(k)
+    /** [kept] with one recorded row of keys [k] appended (SPEC R26): every recorded row is kept once, a FITID row's synthetic key marked. */
+    internal fun withRow(kept: List<String>, k: BankKeys): List<String> =
+        kept + listOfNotNull(k.fitid?.let { "fit:$it" }, if (k.fitid != null) FITID_SYN + k.synKey else k.synKey)
 
     /**
      * [kept] less one recorded row of keys [k] (SPEC R26, R125, R128): the last FITID key of its
@@ -387,7 +406,7 @@ object StatementImport {
         if (k.fitid != null) {
             val at = out.lastIndexOf("fit:${k.fitid}")
             if (at < 0) return kept
-            if (out.getOrNull(at + 1) == k.synKey) out.removeAt(at + 1)
+            if (out.getOrNull(at + 1) == FITID_SYN + k.synKey || out.getOrNull(at + 1) == k.synKey) out.removeAt(at + 1)
             out.removeAt(at)
             return out
         }
@@ -417,7 +436,7 @@ object StatementImport {
      * the rows of the statement recorded by their FITID taking theirs.
      */
     internal fun recordedRows(d: ProfileData, rows: List<BankKeys>): Set<Int> {
-        val kept = keptRows(d.importState.importedKeys)
+        val kept = keptRows(d)
         val done = rows.indices.filterTo(HashSet()) { i -> rows[i].fitid?.let { recordedByFitid(d, kept, it) } == true }
         for ((syn, group) in rows.indices.filter { it !in done }.groupBy { rows[it].synKey }) {
             val withFit = group.filter { rows[it].fitid != null }
@@ -432,7 +451,7 @@ object StatementImport {
 
     /** How many rows recorded with no FITID carry synthetic key [syn]: the ones a row with a FITID is compared with (SPEC R26). */
     internal fun recordedWithoutFitid(d: ProfileData, syn: String): Int =
-        heldBySyn(d, keptRows(d.importState.importedKeys), syn, withoutFitid = true)
+        heldBySyn(d, keptRows(d), syn, withoutFitid = true)
 
     /**
      * Whether [row] is recorded already (SPEC R26, R119), worked out as [recordedRows] works out the
@@ -447,7 +466,7 @@ object StatementImport {
         val rows = if (at >= 0) review else review + row
         val i = if (at >= 0) at else rows.lastIndex
         val keys = rows.map { it.keys }
-        val kept = keptRows(d.importState.importedKeys)
+        val kept = keptRows(d)
         val k = keys[i]
         if (k.fitid != null && recordedByFitid(d, kept, k.fitid)) return true
         val recorded = recordedRows(d, keys)
@@ -684,7 +703,7 @@ object StatementImport {
             if (written == null) { ok = false; continue }
             next = written
             // every recorded row kept once, so twins are counted (SPEC R26)
-            keys.addAll(keyStrings(rr.keys))
+            keys.addAll(withRow(emptyList(), rr.keys))
         }
         val state = next.copy(importState = next.importState.copy(importedKeys = keys, payeeRules = rules, lastImportDate = clock.today()))
         return Run(ok, notices, state)
