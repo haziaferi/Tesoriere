@@ -68,7 +68,9 @@ data class BankPairing(val data: ProfileData, val review: List<ReviewRow>)
 enum class UnpairProblem {
     /** The payment does not exist, or does not hold both a receipt and bank keys. */
     NOT_A_PAIR,
-    /** The receipt's payment alone could not be saved: a line's category deleted since (SPEC R23). */
+    /** A line's category does not exist, and no category that exists is given in its place (SPEC R128). */
+    CATEGORY_MISSING,
+    /** The receipt's payment alone could not be saved, its parts or its source refused (SPEC R23, R54). */
     CANNOT_SAVE,
 }
 
@@ -79,26 +81,39 @@ object Pairing {
     /**
      * What pair [paymentId] becomes unpaired (SPEC R128): the receipt's payment alone, its total the
      * sum of its lines' price paid, one part per category its lines are filed under now adding up to
-     * other than zero, its day, source and payee kept; null for a payment that is not a pair.
+     * other than zero, a category that does not exist taking [replacementCategoryId] in its place
+     * (the lines keep theirs, SPEC R124), its day, source and payee kept; null for a payment that is
+     * not a pair.
      */
-    fun unpairDraft(d: ProfileData, paymentId: String): PaymentDraft? {
+    fun unpairDraft(d: ProfileData, paymentId: String, replacementCategoryId: String? = null): PaymentDraft? {
         val p = d.payments.firstOrNull { it.id == paymentId } ?: return null
         if (p.receiptId == null || p.bankKeys == null || p.receiptLines.isEmpty()) return null
-        val sums = LinkedHashMap<String, Money>()
-        for (l in p.receiptLines) sums[l.categoryId] = (sums[l.categoryId] ?: 0L) + l.pricePaid
+        val live = d.categories.mapTo(HashSet()) { it.id }
+        val sums = LinkedHashMap<String?, Money>()
+        for (l in p.receiptLines) {
+            val c = if (l.categoryId in live) l.categoryId else replacementCategoryId
+            sums[c] = (sums[c] ?: 0L) + l.pricePaid
+        }
         val parts = sums.filter { it.value != 0L }.map { (c, amount) -> Part(c, amount) }
         return PaymentDraft(p.date, p.receiptLines.sumOf { it.pricePaid }, p.source, p.payee, parts)
     }
 
-    /** Why [paymentId] cannot be unpaired, or null (SPEC R128). */
-    fun unpairProblem(d: ProfileData, paymentId: String): UnpairProblem? {
-        val draft = unpairDraft(d, paymentId) ?: return UnpairProblem.NOT_A_PAIR
+    /**
+     * Why [paymentId] cannot be unpaired, or null (SPEC R128): not a pair; a line's category that
+     * does not exist with no category that exists given in its place ([replacementCategoryId]); or
+     * the receipt's payment alone refused by the payment path.
+     */
+    fun unpairProblem(d: ProfileData, paymentId: String, replacementCategoryId: String? = null): UnpairProblem? {
+        val p = d.payments.firstOrNull { it.id == paymentId } ?: return UnpairProblem.NOT_A_PAIR
+        val draft = unpairDraft(d, paymentId, replacementCategoryId) ?: return UnpairProblem.NOT_A_PAIR
+        val live = d.categories.mapTo(HashSet()) { it.id }
+        if (p.receiptLines.any { it.categoryId !in live } && replacementCategoryId !in live) return UnpairProblem.CATEGORY_MISSING
         return UnpairProblem.CANNOT_SAVE.takeIf { !Payments.canSave(d, draft, paymentId) }
     }
 
     /** The warning the receipt's payment alone would carry, as for any payment edit (SPEC R54, R109); null for none. */
-    fun unpairNotice(d: ProfileData, paymentId: String): PaymentNotice? =
-        unpairDraft(d, paymentId)?.let { Payments.draftNotice(d, it, editing = paymentId) }
+    fun unpairNotice(d: ProfileData, paymentId: String, replacementCategoryId: String? = null): PaymentNotice? =
+        unpairDraft(d, paymentId, replacementCategoryId)?.let { Payments.draftNotice(d, it, editing = paymentId) }
 
     /**
      * Unpairs [paymentId] (SPEC R128): Payments.edit makes it the receipt's payment alone, and its
@@ -108,13 +123,16 @@ object Pairing {
      * [trash] (the Trash's items; those of this Profile are read), by StatementImport.sameRow, as
      * keys kept before each row kept its own may be: a twin in the Trash keeps its row recorded
      * (SPEC R41). The receipt id stays recorded and the store link stays (SPEC R36). [txId] is the
-     * ledger row a deleted source's edit may write (SPEC R54). While [unpairProblem] finds one, [d]
+     * ledger row a deleted source's edit may write (SPEC R54). A line whose category does not exist
+     * files its part under [replacementCategoryId] (SPEC R128). While [unpairProblem] finds one, [d]
      * comes back unchanged.
      */
-    fun unpair(d: ProfileData, paymentId: String, clock: Clock, txId: String, trash: List<TrashItem>): ProfileData {
+    fun unpair(
+        d: ProfileData, paymentId: String, clock: Clock, txId: String, trash: List<TrashItem>, replacementCategoryId: String? = null,
+    ): ProfileData {
         val held = d.payments.firstOrNull { it.id == paymentId }?.bankKeys
-        if (unpairProblem(d, paymentId) != null || held == null) return d
-        val draft = unpairDraft(d, paymentId) ?: return d
+        if (unpairProblem(d, paymentId, replacementCategoryId) != null || held == null) return d
+        val draft = unpairDraft(d, paymentId, replacementCategoryId) ?: return d
         val kept = d.importState.importedKeys
         val without = StatementImport.withoutRow(kept, d.payments, held)
         val trashed = trash.filter { it.profileId == d.profileId }.flatMap { Trash.decode(it.payload)?.payments.orEmpty() }

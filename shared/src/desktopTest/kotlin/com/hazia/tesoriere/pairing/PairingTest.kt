@@ -765,10 +765,28 @@ class PairingTest {
         val bankOnly = StatementImport.confirm(d1, reviewOf(d1, row("10.00", on(12))).map { it.copy(pairPaymentId = null, include = true, draft = StatementImport.draft(it.row, listOf(Part("fun", cents("10.00"))))) }, clock) { "pay-b" }
         assertEquals(UnpairProblem.NOT_A_PAIR, Pairing.unpairProblem(bankOnly, "pay-b"))
         assertEquals(bankOnly, Pairing.unpair(bankOnly, "pay-b", clock, "tx-2", emptyList()))
-        // a line's category gone: the receipt's payment alone could not be saved, and nothing changes
+        // a line's category gone and none given in its place: refused, and nothing changes
         val noHome = pairedWithDifference().first.let { it.copy(categories = it.categories.filter { c -> c.id != "home" }) }
-        assertEquals(UnpairProblem.CANNOT_SAVE, Pairing.unpairProblem(noHome, "pay-r"))
+        assertEquals(UnpairProblem.CATEGORY_MISSING, Pairing.unpairProblem(noHome, "pay-r"))
         assertEquals(noHome, Pairing.unpair(noHome, "pay-r", clock, "tx-3", emptyList()))
+    }
+
+    // SPEC:R128 SPEC:R123 SPEC:R124
+    @Test fun `R128 a pair whose Fun line's category was deleted is refused CATEGORY_MISSING, and with Household given unpairs that part under Household`() {
+        val d1 = recordReceipt(world(), receipt("rc-f", store, day, line("pasta", "30.00", "ch-groc", "Groceries"), line("game", "12.30", "ch-fun", "Fun")))
+        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", reviewOf(d1, row("42.30", on(12))).single(), null, clock, "tx-1", emptyList()).data
+        val noFun = d2.copy(categories = d2.categories.filter { it.id != "fun" })
+        assertEquals(UnpairProblem.CATEGORY_MISSING, Pairing.unpairProblem(noFun, "pay-r"))
+        assertEquals(noFun, Pairing.unpair(noFun, "pay-r", clock, "tx-2", emptyList()))
+        assertEquals(UnpairProblem.CATEGORY_MISSING, Pairing.unpairProblem(noFun, "pay-r", replacementCategoryId = "nope"), "a category given must exist")
+        assertNull(Pairing.unpairProblem(noFun, "pay-r", replacementCategoryId = "home"))
+        val un = Pairing.unpair(noFun, "pay-r", clock, "tx-2", emptyList(), replacementCategoryId = "home")
+        val p = un.payments.single()
+        assertNull(p.bankKeys)
+        assertEquals(listOf(Part("groc", cents("30.00")), Part("home", cents("12.30"))), p.parts)
+        assertEquals(listOf("groc", "fun"), p.receiptLines.map { it.categoryId }, "the lines keep the category they were recorded under")
+        assertEquals(cents("12.30"), Spent.of(un, "home", "2026-03"))
+        assertEquals(cents("957.70"), un.savingsAmount)
     }
 
     // SPEC:R128 SPEC:R54
