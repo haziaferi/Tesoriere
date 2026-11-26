@@ -730,6 +730,32 @@ class PairingTest {
         assertEquals(cents("12.30"), Spent.of(paired, "fun", "2026-03"))
     }
 
+    // SPEC:R128 SPEC:R24
+    @Test fun `R128 a 4_50 receipt under Food moved by hand to Groceries, paired and unpaired, keeps Groceries 4_50`() {
+        val base = world().let { it.copy(categories = it.categories + category("food", "Food")) }
+        val d1 = recordReceipt(base, receipt("rc-c", "Bar Centrale", day, line("caffe", "4.50", "ch-food", "Food")))
+        val r = d1.payments.single()
+        val moved = Payments.edit(d1, "pay-r", PaymentDraft(r.date, r.total, r.source, r.payee, listOf(Part("groc", r.total))), clock, "tx-e")
+        val paired = Pairing.pairBankWithPayment(moved, "pay-r", reviewOf(moved, row("4.50", on(11), "BAR CENTRALE")).single(), null, clock, "tx-1", emptyList()).data
+        val un = Pairing.unpair(paired, "pay-r", clock, "tx-2", emptyList())
+        assertEquals(listOf(Part("groc", cents("4.50"))), un.payments.single().parts)
+        assertEquals(listOf("food"), un.payments.single().receiptLines.map { it.categoryId }, "the line keeps its recorded category")
+        assertEquals(cents("4.50"), Spent.of(un, "groc", "2026-03"))
+        assertEquals(0L, Spent.of(un, "food", "2026-03"))
+    }
+
+    // SPEC:R128
+    @Test fun `R128 a pair whose item parts were edited to add up to other than its lines unpairs into parts rebuilt from the lines`() {
+        val (d, _) = pairedWithDifference()
+        val p = d.payments.single()
+        // the 0.20 difference folded into Household by an edit: the item parts add up to 42.30, the lines to 42.10
+        val folded = Payments.edit(d, "pay-r", PaymentDraft(p.date, p.total, p.source, p.payee, listOf(Part("groc", cents("30.00")), Part("home", cents("12.30")))), clock, "tx-e")
+        assertEquals(cents("42.30"), folded.payments.single().parts.sumOf { it.amount })
+        val un = Pairing.unpair(folded, "pay-r", clock, "tx-2", emptyList())
+        assertEquals(listOf(Part("groc", cents("30.00")), Part("home", cents("12.10"))), un.payments.single().parts)
+        assertEquals(cents("42.10"), un.payments.single().total)
+    }
+
     // --- R128: unpairing ---
 
     /** A 42.10 receipt (Groceries 30.00, Household 12.10) from Savings paired by hand with a -42.30 row, its 0.20 under Fun. */

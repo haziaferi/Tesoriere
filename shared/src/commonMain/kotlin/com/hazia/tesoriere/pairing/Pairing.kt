@@ -81,27 +81,36 @@ object Pairing {
     // --- unpairing (SPEC R128) ---
 
     /**
+     * The parts pair [p] keeps when unpaired (SPEC R128), before a category gone is replaced: its
+     * own parts less the difference part while they add up to its lines' price paid, so a part
+     * moved by hand stays where it was moved, as a receipt side keeps its parts (SPEC R127); else,
+     * an edit having changed their sum, one part per category its lines are filed under, adding up
+     * to other than zero.
+     */
+    private fun unpairBaseParts(p: Payment): List<Part> {
+        val own = p.parts.filter { !it.difference }
+        if (own.isNotEmpty() && own.sumOf { it.amount } == p.receiptLines.sumOf { it.pricePaid }) return own
+        val sums = LinkedHashMap<String?, Money>()
+        for (l in p.receiptLines) sums[l.categoryId] = (sums[l.categoryId] ?: 0L) + l.pricePaid
+        return sums.filter { it.value != 0L }.map { (c, amount) -> Part(c, amount) }
+    }
+
+    /**
      * What pair [paymentId] becomes unpaired (SPEC R128): the receipt's payment alone, its total the
-     * sum of its lines' price paid, one part per category its lines are filed under now adding up to
-     * other than zero, a category that does not exist taking [replacementCategoryId] in its place
-     * (the lines keep theirs, SPEC R124), its day, source and payee kept; null for a payment that is
-     * not a pair.
+     * sum of its lines' price paid, its parts as [unpairBaseParts] keeps them, a part whose category
+     * does not exist taking [replacementCategoryId] in its place (the lines keep theirs, SPEC R124),
+     * its day, source and payee kept; null for a payment that is not a pair.
      */
     fun unpairDraft(d: ProfileData, paymentId: String, replacementCategoryId: String? = null): PaymentDraft? {
         val p = d.payments.firstOrNull { it.id == paymentId } ?: return null
         if (p.receiptId == null || p.bankKeys == null || p.receiptLines.isEmpty()) return null
         val live = d.categories.mapTo(HashSet()) { it.id }
-        val sums = LinkedHashMap<String?, Money>()
-        for (l in p.receiptLines) {
-            val c = if (l.categoryId in live) l.categoryId else replacementCategoryId
-            sums[c] = (sums[c] ?: 0L) + l.pricePaid
-        }
-        val parts = sums.filter { it.value != 0L }.map { (c, amount) -> Part(c, amount) }
+        val parts = unpairBaseParts(p).map { if (it.categoryId in live) it else it.copy(categoryId = replacementCategoryId) }
         return PaymentDraft(p.date, p.receiptLines.sumOf { it.pricePaid }, p.source, p.payee, parts)
     }
 
     /**
-     * Why [paymentId] cannot be unpaired, or null (SPEC R128): not a pair; a line's category that
+     * Why [paymentId] cannot be unpaired, or null (SPEC R128): not a pair; a part's category that
      * does not exist with no category that exists given in its place ([replacementCategoryId]); or
      * the receipt's payment alone refused by the payment path.
      */
@@ -109,7 +118,7 @@ object Pairing {
         val p = d.payments.firstOrNull { it.id == paymentId } ?: return UnpairProblem.NOT_A_PAIR
         val draft = unpairDraft(d, paymentId, replacementCategoryId) ?: return UnpairProblem.NOT_A_PAIR
         val live = d.categories.mapTo(HashSet()) { it.id }
-        if (p.receiptLines.any { it.categoryId !in live } && replacementCategoryId !in live) return UnpairProblem.CATEGORY_MISSING
+        if (unpairBaseParts(p).any { it.categoryId !in live } && replacementCategoryId !in live) return UnpairProblem.CATEGORY_MISSING
         return UnpairProblem.CANNOT_SAVE.takeIf { !Payments.canSave(d, draft, paymentId) }
     }
 
