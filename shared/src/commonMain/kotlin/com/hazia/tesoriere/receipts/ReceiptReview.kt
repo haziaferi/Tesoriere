@@ -29,7 +29,9 @@ import com.hazia.tesoriere.payments.ReceiptLine
  * user added in it (SPEC R114). Links made by name are not held here: Confirm makes them again
  * from the Profile (SPEC R115). [openedSource] is the source the review opened with and [moved] the
  * indices of the lines the user moved by hand, so the review knows its changes (SPEC R33, R114);
- * [openedCategories] the category each line opened in.
+ * [openedCategories] the category each line opened in. [sourcePicked] is whether [source] was
+ * picked, by the user or as a recorded payment's own: a pair with a bank row recorded first keeps
+ * the bank payment's source while it is not and the store has none kept (SPEC R35, R119).
  */
 data class ReceiptReview(
     val file: ReceiptFile,
@@ -40,6 +42,7 @@ data class ReceiptReview(
     val openedSource: PaymentSource = source,
     val moved: Set<Int> = emptySet(),
     val openedCategories: List<String?> = lineCategories,
+    val sourcePicked: Boolean = false,
 )
 
 /** What a review notes for one Chatelaine category (SPEC R114). Codes, not wording (SPEC R16). */
@@ -124,7 +127,19 @@ object Receipts {
         return answer(r, chatelaineId, newCategoryId, Category(newCategoryId, profileId, name, planned = 0))
     }
 
-    fun setSource(r: ReceiptReview, source: PaymentSource): ReceiptReview = r.copy(source = source)
+    /** The user picks the receipt's source (SPEC R35), the one it opened with included. */
+    fun setSource(r: ReceiptReview, source: PaymentSource): ReceiptReview = r.copy(source = source, sourcePicked = true)
+
+    /** The source kept for [store] (SPEC R35, R113), or null when none is kept or its Goal or Account does not exist. */
+    fun keptSource(d: ProfileData, store: String): PaymentSource? {
+        val stored = d.receiptSettings?.storeSources?.get(store) ?: return null
+        return when (val s = runCatching { PaymentSource.parse(stored) }.getOrNull()) {
+            is PaymentSource.Goal -> s.takeIf { d.goals.any { it.id == s.id } }
+            is PaymentSource.Account -> s.takeIf { d.accounts.any { it.id == s.id } }
+            PaymentSource.Savings -> s
+            null -> null
+        }
+    }
 
     /**
      * What waits for the user, one note per Chatelaine category in the order the lines first name
@@ -224,14 +239,14 @@ object Receipts {
      * Recorded receipt payment [p] read back as its receipt under review, so it can be paired on a
      * restore from the Trash (SPEC R125): the file from its receipt id, store, day and lines, in the
      * Profile's currency, its total the sum of the lines (Chatelaine's spec, rule 123); each line in
-     * the category it was filed under; the payment's source. Null for a payment with no receipt.
+     * the category it was filed under; the payment's source, as picked (SPEC R35). Null for a payment with no receipt.
      */
     fun reopen(d: ProfileData, p: Payment): ReceiptReview? {
         val id = p.receiptId ?: return null
         if (p.receiptLines.isEmpty()) return null
         val lines = p.receiptLines.map { ReceiptFileLine(it.name, it.pack, it.quantity, it.pricePaid, it.chatelaineCategoryId, it.chatelaineCategoryName) }
         val file = ReceiptFile(ReceiptPickup.HIGHEST_FORMAT, id, p.payee ?: "", p.date, d.settings.currency, lines.sumOf { it.pricePaid }, lines)
-        return ReceiptReview(file, p.source, p.receiptLines.map { it.categoryId }, emptyMap(), emptyList())
+        return ReceiptReview(file, p.source, p.receiptLines.map { it.categoryId }, emptyMap(), emptyList(), sourcePicked = true)
     }
 
     /** Changes a link for the receipts recorded after it; recorded lines stay where they were filed (SPEC R34). */
@@ -276,12 +291,5 @@ object Receipts {
     private fun sameName(a: String, b: String) = a.trim().equals(b.trim(), ignoreCase = true)
 
     /** The store's last source, or Savings when there is none or its Goal or Account does not exist (SPEC R35, R113). */
-    private fun sourceFor(d: ProfileData, store: String): PaymentSource {
-        val stored = d.receiptSettings?.storeSources?.get(store) ?: return PaymentSource.Savings
-        return when (val s = runCatching { PaymentSource.parse(stored) }.getOrNull()) {
-            is PaymentSource.Goal -> s.takeIf { d.goals.any { it.id == s.id } }
-            is PaymentSource.Account -> s.takeIf { d.accounts.any { it.id == s.id } }
-            PaymentSource.Savings, null -> null
-        } ?: PaymentSource.Savings
-    }
+    private fun sourceFor(d: ProfileData, store: String): PaymentSource = keptSource(d, store) ?: PaymentSource.Savings
 }

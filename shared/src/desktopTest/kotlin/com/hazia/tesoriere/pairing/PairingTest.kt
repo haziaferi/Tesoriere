@@ -434,7 +434,8 @@ class PairingTest {
         val d0 = world()
         val d1 = StatementImport.confirm(d0, reviewOf(d0, row("42.10", on(11))).map { it.copy(draft = StatementImport.draft(it.row, listOf(Part("groc", cents("42.10"))), PaymentSource.Goal("trip"))) }, clock) { "pay-b" }
         val gone = d1.copy(goals = emptyList())
-        val d2 = Pairing.pairReceiptWithPayment(gone, "pay-b", Receipts.open(gone, shop(home = "12.10")), null, clock, "tx-1")
+        // Savings picked: left as it opened, the pair would keep the bank payment's source (SPEC R35)
+        val d2 = Pairing.pairReceiptWithPayment(gone, "pay-b", Receipts.setSource(Receipts.open(gone, shop(home = "12.10")), PaymentSource.Savings), null, clock, "tx-1")
         val p = d2.payments.single()
         assertEquals(PaymentSource.Savings, p.source)
         assertEquals(cents("1,000.00"), d2.savings.amount)
@@ -458,7 +459,7 @@ class PairingTest {
         val d0 = world()
         val d1 = StatementImport.confirm(d0, reviewOf(d0, row("42.30", on(11))).map { it.copy(draft = StatementImport.draft(it.row, listOf(Part("groc", cents("42.30"))), PaymentSource.Account("card"))) }, clock) { "pay-b" }
         val gone = d1.copy(accounts = emptyList())
-        val d2 = Pairing.pairReceiptWithPayment(gone, "pay-b", Receipts.open(gone, shop()), null, clock, "tx-1")
+        val d2 = Pairing.pairReceiptWithPayment(gone, "pay-b", Receipts.setSource(Receipts.open(gone, shop()), PaymentSource.Savings), null, clock, "tx-1")
         assertEquals(PaymentSource.Savings, d2.payments.single().source)
         assertEquals(cents("957.70"), d2.savings.amount)
         val t = d2.transactions.single { it.key == "acct:card" }
@@ -578,6 +579,52 @@ class PairingTest {
         assertEquals(listOf("F1", "F2"), after.payments.map { it.bankKeys?.fitid })
         assertEquals(cents("991.00"), after.savingsAmount)
         assertEquals(cents("9.00"), Spent.of(after, "food", "2026-03"))
+    }
+
+    // --- R35, R119: a pair's source when the store has none kept ---
+
+    /** A -42.30 row of 12 March charged to the card at 0.00 under Groceries, recorded first as pay-b. */
+    private fun chargedRowFirst(d0: ProfileData = world()): ProfileData {
+        val d1 = StatementImport.confirm(d0, reviewOf(d0, row("42.30", on(12))).map {
+            it.copy(include = true, draft = StatementImport.draft(it.row, listOf(Part("groc", cents("42.30"))), PaymentSource.Account("card")))
+        }, clock) { "pay-b" }
+        assertEquals(cents("42.30"), d1.accounts.single().balance)
+        return d1
+    }
+
+    // SPEC:R35 SPEC:R119 SPEC:R113
+    @Test fun `R119 a row charged to a card, then a receipt from a store with no kept source left as it opened, keeps the card`() {
+        val d1 = chargedRowFirst()
+        val review = Receipts.open(d1, shop())
+        assertEquals(PaymentSource.Savings, review.source, "R113 opens with Savings")
+        val d2 = Pairing.pairReceiptWithPayment(d1, "pay-b", review, null, clock, "tx-1")
+        assertEquals(PaymentSource.Account("card"), d2.payments.single().source)
+        assertEquals(cents("42.30"), d2.accounts.single().balance)
+        assertEquals(cents("1,000.00"), d2.savingsAmount)
+        assertEquals("account:card", d2.receiptSettings!!.storeSources[store], "the store keeps the source the pair took")
+        // a kept source that no longer exists counts as none
+        val goneGoal = d1.copy(receiptSettings = d1.receiptSettings!!.copy(storeSources = mapOf(store to "goal:nope")))
+        assertEquals(PaymentSource.Account("card"), Pairing.receiptPairDraft(goneGoal, "pay-b", Receipts.open(goneGoal, shop()), null)?.source)
+    }
+
+    // SPEC:R35 SPEC:R119
+    @Test fun `R119 the same pair with Savings picked in the review moves it to Savings`() {
+        val d1 = chargedRowFirst()
+        val d2 = Pairing.pairReceiptWithPayment(d1, "pay-b", Receipts.setSource(Receipts.open(d1, shop()), PaymentSource.Savings), null, clock, "tx-1")
+        assertEquals(PaymentSource.Savings, d2.payments.single().source)
+        assertEquals(0L, d2.accounts.single().balance)
+        assertEquals(cents("957.70"), d2.savingsAmount)
+    }
+
+    // SPEC:R35 SPEC:R119 SPEC:R54
+    @Test fun `R119 the same pair for a store whose kept source is a Goal takes the Goal`() {
+        val d0 = world().let { it.copy(receiptSettings = it.receiptSettings!!.copy(storeSources = mapOf(store to "goal:trip"))) }
+        val d1 = chargedRowFirst(d0)
+        val d2 = Pairing.pairReceiptWithPayment(d1, "pay-b", Receipts.open(d1, shop()), null, clock, "tx-1")
+        assertEquals(PaymentSource.Goal("trip"), d2.payments.single().source)
+        assertEquals(0L, d2.accounts.single().balance)
+        assertEquals(0L, d2.goals.single().saved)
+        assertEquals(cents("999.80"), d2.savingsAmount, "the Goal held 42.10; Savings pays 0.20 (R54)")
     }
 
     // --- R128: unpairing ---

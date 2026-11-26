@@ -10,6 +10,7 @@ import com.hazia.tesoriere.payments.Part
 import com.hazia.tesoriere.payments.Payment
 import com.hazia.tesoriere.payments.PaymentDraft
 import com.hazia.tesoriere.payments.PaymentNotice
+import com.hazia.tesoriere.payments.PaymentSource
 import com.hazia.tesoriere.payments.Payments
 import com.hazia.tesoriere.receipts.ReceiptFile
 import com.hazia.tesoriere.receipts.ReceiptProblem
@@ -269,8 +270,17 @@ object Pairing {
         val p = d.payments.firstOrNull { it.id == paymentId } ?: return null
         val f = review.file
         val parts = receiptParts ?: Receipts.parts(review)
-        return PaymentDraft(f.date, p.total, review.source, f.store, withDifference(parts, differencePart(receiptTotal(review, receiptParts), p.total), differenceCategoryId))
+        return PaymentDraft(f.date, p.total, pairSource(d, p, review), f.store, withDifference(parts, differencePart(receiptTotal(review, receiptParts), p.total), differenceCategoryId))
     }
+
+    /**
+     * The source of a pair whose bank row came first (SPEC R35, R119): the review's, unless the
+     * store has no source kept (or its Goal or Account is gone) and the review's source was not
+     * picked, Savings only because R113 opened it so: then bank payment [p]'s own, the card it was
+     * charged to say.
+     */
+    private fun pairSource(d: ProfileData, p: Payment, review: ReceiptReview): PaymentSource =
+        if (!review.sourcePicked && Receipts.keptSource(d, review.file.store) == null) p.source else review.source
 
     /** The receipt side's total: its own parts' when given (SPEC R127), else the receipt's. */
     private fun receiptTotal(review: ReceiptReview, receiptParts: List<Part>?): Money = receiptParts?.sumOf { it.amount } ?: review.file.totalPaid
@@ -300,8 +310,9 @@ object Pairing {
     /**
      * Pairs bank payment [paymentId] with the receipt under [review], suggested or by hand (SPEC
      * R38, R40, R119): Payments.edit gives it the receipt's parts, day, source and store, with the
-     * difference part, keeping its total and keys; then the receipt is kept as its Confirm keeps
-     * it (SPEC R115), and the store's link made the first time the store pairs (SPEC R120).
+     * difference part, keeping its total and keys, its source as [pairSource] has it; then the
+     * receipt is kept as its Confirm keeps it (SPEC R115), the store keeping the pair's source, and
+     * the store's link made the first time the store pairs (SPEC R120).
      */
     fun pairReceiptWithPayment(
         d: ProfileData, paymentId: String, review: ReceiptReview, differenceCategoryId: String?, clock: Clock, txId: String,
@@ -311,8 +322,9 @@ object Pairing {
         require(problem == null) { "the pair cannot be recorded: $problem (SPEC R119)" }
         val bankText = d.payments.first { it.id == paymentId }.payee
         val base = Receipts.withAdded(d, review)
-        val edited = Payments.edit(base, paymentId, receiptPairDraft(d, paymentId, review, differenceCategoryId, receiptParts)!!, clock, txId, pairing = true)
-        return linkStore(Receipts.keep(d, edited, review, paymentId), review.file.store, bankText)
+        val draft = receiptPairDraft(d, paymentId, review, differenceCategoryId, receiptParts)!!
+        val edited = Payments.edit(base, paymentId, draft, clock, txId, pairing = true)
+        return linkStore(Receipts.keep(d, edited, review.copy(source = draft.source), paymentId), review.file.store, bankText)
     }
 
     // --- shared ---
