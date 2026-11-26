@@ -26,7 +26,8 @@ import kotlin.math.abs
  * one purchase become one payment (SPEC R36-R40, R118-R120): whichever arrived first was recorded
  * as a payment, and pairing edits that payment, through Payments.edit, into the pair. Nothing is
  * paired without a call to [Pairing.pairBankWithPayment] or [Pairing.pairReceiptWithPayment]
- * (SPEC R37); a suggestion only names a payment.
+ * (SPEC R37); a suggestion only names a payment. [Pairing.unpair] turns a pair back into the
+ * receipt's payment alone, its bank row free to arrive again (SPEC R128).
  */
 
 /** The most a pair's totals may differ and still be suggested, in cents (SPEC R37). */
@@ -54,7 +55,58 @@ enum class PairProblem {
     CANNOT_SAVE,
 }
 
+/** Why a payment cannot be unpaired, as a code (SPEC R128). */
+enum class UnpairProblem {
+    /** The payment does not exist, or does not hold both a receipt and bank keys. */
+    NOT_A_PAIR,
+    /** The receipt's payment alone could not be saved: a line's category deleted since (SPEC R23). */
+    CANNOT_SAVE,
+}
+
 object Pairing {
+
+    // --- unpairing (SPEC R128) ---
+
+    /**
+     * What pair [paymentId] becomes unpaired (SPEC R128): the receipt's payment alone, its total the
+     * sum of its lines' price paid, one part per category its lines are filed under now adding up to
+     * other than zero, its day, source and payee kept; null for a payment that is not a pair.
+     */
+    fun unpairDraft(d: ProfileData, paymentId: String): PaymentDraft? {
+        val p = d.payments.firstOrNull { it.id == paymentId } ?: return null
+        if (p.receiptId == null || p.bankKeys == null || p.receiptLines.isEmpty()) return null
+        val sums = LinkedHashMap<String, Money>()
+        for (l in p.receiptLines) sums[l.categoryId] = (sums[l.categoryId] ?: 0L) + l.pricePaid
+        val parts = sums.filter { it.value != 0L }.map { (c, amount) -> Part(c, amount) }
+        return PaymentDraft(p.date, p.receiptLines.sumOf { it.pricePaid }, p.source, p.payee, parts)
+    }
+
+    /** Why [paymentId] cannot be unpaired, or null (SPEC R128). */
+    fun unpairProblem(d: ProfileData, paymentId: String): UnpairProblem? {
+        val draft = unpairDraft(d, paymentId) ?: return UnpairProblem.NOT_A_PAIR
+        return UnpairProblem.CANNOT_SAVE.takeIf { !Payments.canSave(d, draft, paymentId) }
+    }
+
+    /** The warning the receipt's payment alone would carry, as for any payment edit (SPEC R54, R109); null for none. */
+    fun unpairNotice(d: ProfileData, paymentId: String): PaymentNotice? =
+        unpairDraft(d, paymentId)?.let { Payments.draftNotice(d, it, editing = paymentId) }
+
+    /**
+     * Unpairs [paymentId] (SPEC R128): Payments.edit makes it the receipt's payment alone, and its
+     * bank keys leave it and the import's keys, so its row arrives as new on the next import (SPEC
+     * R26). The receipt id stays recorded and the store link stays (SPEC R36). [txId] is the ledger
+     * row a deleted source's edit may write (SPEC R54). While [unpairProblem] finds one, [d] comes
+     * back unchanged.
+     */
+    fun unpair(d: ProfileData, paymentId: String, clock: Clock, txId: String): ProfileData {
+        if (unpairProblem(d, paymentId) != null) return d
+        val keys = StatementImport.keyStrings(d.payments.first { it.id == paymentId }.bankKeys!!).toSet()
+        val edited = Payments.edit(d, paymentId, unpairDraft(d, paymentId)!!, clock, txId)
+        return edited.copy(
+            payments = edited.payments.map { if (it.id == paymentId) it.copy(bankKeys = null) else it },
+            importState = edited.importState.copy(importedKeys = edited.importState.importedKeys.filter { it !in keys }),
+        )
+    }
 
     /**
      * How a receipt of [receiptTotal] on [receiptDate] meets bank row [bank] (SPEC R37), or null:

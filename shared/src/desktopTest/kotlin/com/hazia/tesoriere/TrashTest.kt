@@ -976,4 +976,22 @@ class TrashTest {
         val (noFun, _) = assertNotNull(Trash.deleteCategory(d3, "fun"))
         assertEquals(RestoreProblem.CANNOT_PAIR, Trash.restoreProblem(noFun, p, pairWith = newId), "its category gone, one must be picked")
     }
+
+    // SPEC:R128 SPEC:R41 SPEC:R125 SPEC:R127
+    @Test fun `R128 a pair unpaired, deleted and restored comes back as the receipt's payment alone, and as its row's pair once the row is recorded`() {
+        clock.setDay(mar10)
+        val d1 = recordReceipt(receiptWorld(), shop())
+        val row = BankRow(LocalDate(2026, 3, 12), -cents("42.30"), "POS MERCATO LUME 0423", "FIT-12")
+        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", StatementImport.review(d1, listOf(row), mar10).single(), null, clock, "tx-pair")
+        val un = Pairing.unpair(d2, "pay-r", clock, "tx-un")
+        assertEquals(d1.payments, un.payments)
+        val (after, p) = assertNotNull(Trash.deletePayment(un, "pay-r", clock, ids))
+        assertNull(Trash.restoreProblem(after, p))
+        assertEquals(figures(un, "2026-03"), figures(Trash.restore(after, p, clock, ids), "2026-03"))
+        val (withRow, bankId) = recordRow(after, row, "groc")
+        assertEquals(listOf<RestoreNotice>(RestoreNotice.PairAvailable(bankId)), Trash.restoreNotices(withRow, p))
+        val paired = Trash.restore(withRow, p, clock, ids, pairWith = bankId)
+        assertEquals(1, paired.payments.size)
+        assertEquals(cents("957.70"), paired.savingsAmount)
+    }
 }

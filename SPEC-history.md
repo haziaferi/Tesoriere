@@ -298,3 +298,4 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-26 · R127 · changed · a receipt side's difference defaults to its old difference part's category while that exists · builder
 - 2026-11-26 · R125 · changed · editing a payment in the Trash changes nothing · builder
 - 2026-11-26 · R117 · changed · a totalPaid above 1,000,000,000.00 is unreadable · builder
+- 2026-11-26 · R128 · added · a pair unpaired is the receipt's payment alone; its row's keys are dropped so the row arrives as new · owner

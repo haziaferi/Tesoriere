@@ -121,6 +121,7 @@ Kinds: O owner rule · D decided · I inherited · A assumed · Q open.
 | D-R40 | Pairing by hand | 15. One payment, two sources |
 | D-R118 | Suggesting a pair | 15. One payment, two sources |
 | D-R119 | Recording a pair | 15. One payment, two sources |
+| D-R128 | Unpairing | 15. One payment, two sources |
 | D-R121 | The Trash | 16. The Trash |
 | D-R122 | Restoring from the Trash | 16. The Trash |
 | D-R123 | Deleting a category | 16. The Trash |
@@ -1995,6 +1996,28 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-26 · builder · own words
 
+### D-R128 · Unpairing
+
+**Rule:** Unpairing a pair, a payment holding a receipt and bank keys, turns it back through the payment path (R54) into the receipt's payment alone, as below. Its bank keys leave the payment and the import's keys, so its bank row arrives as new on the next import and can be recorded on its own (R26); its receipt id stays recorded (R30) and the store link stays (R36). Any other payment, or one that does not exist, is not unpaired and nothing changes.
+
+**Values:**
+
+| Field | After unpairing |
+|---|---|
+| total | the sum of the receipt lines' price paid |
+| parts | one per category whose lines add up to other than zero, under the categories the lines are filed under at the unpairing (R115); no difference part |
+| date and source | unchanged; a short Goal or a deleted source as R54 says |
+| receipt id and lines | unchanged |
+| bank keys | none |
+
+**Evidence:** Owner, 2026-11-26.
+
+**Acceptance:** A 42.10 receipt from Savings at 1,000.00, paired by hand with a -42.30 row and its 0.20 filed under Fun, unpaired: one payment of 42.10 with the receipt's parts and no keys, Savings at 957.90 and Fun's spent back; the row then arrives `PAIR` again, and turned down and ticked it is recorded on its own, Savings at 915.60. Unpairing a receipt payment with no bank keys changes nothing.
+
+**Not:** Dropping the store link: a link only ranks (R36).
+
+**Since:** 2026-11-26 · owner · agreed rewording
+
 ## 16. The Trash
 
 ### D-R121 · The Trash
@@ -2295,6 +2318,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R40 · Pairing by hand: A EUR 40.00 receipt and a EUR 41.20 bank row, not suggested, can be paired by hand into one EUR 41.20 payment with a EUR 1.20 part the user files.
 - R118 · Suggesting a pair: A 42.30 receipt recorded on 10 March and a statement row of -42.30 on 12 March: the row arrives `PAIR`, unticked, naming the receipt's payment, and the import's Confirm leaves one payment and Savings as it was, ticked or not; with the suggestion turned down and the row ticked under Groceries, Confirm records it as a second payment; the same row on 14 March arrives `READY`; +42.30 arrives `INCOMING`. A refund, or a payment that holds bank keys already, is never named. With rows of -42.30 on 11 and 12 March, only the 11 March row names it; with rows of -42.40 on 11 March and -42.30 on 12 March, the 12 March row does. Two 42.30 receipts of 10 March and rows of -42.30 on 11 and 12 March: the 11 March row names the receipt recorded first and the 12 March row the other. 42.30 receipts of 10 and 11 March with rows of -42.30 on 11 and 14 March: the 14 March row, which only the 11 March receipt meets, names it, and the 11 March row names the 10 March receipt. A 42.30 receipt of 10 March and a 42.50 receipt of 11 March with rows of -42.30 on 10 and 12 March and -42.50 on 13 March: the 10 March row names the 42.30 receipt, the 13 March row the 42.50 one, and the 12 March row arrives `READY`. A named payment removed while the review is open leaves its row unrecorded by that Confirm, and the next import of the statement offers the row `READY`. A receipt opened while a -42.30 payment recorded from a bank row on 12 March holds no receipt notes it as a pair available, and can still be confirmed.
 - R119 · Recording a pair: A 42.30 receipt from Savings at 1,000.00, then its -42.30 row: one payment of 42.30 from Savings, dated the receipt's day, with the row's keys, Savings at 957.70, and the row `DUPLICATE` on the next import. A -42.30 row filed under Groceries from Savings, then a receipt of Groceries 30.00 and Household 12.30 confirmed with a card: one payment of 42.30 from the card with those two parts, the receipt's day and the row's keys, Savings back at 1,000.00 and the card 42.30 higher. A 42.10 receipt from a Goal holding 42.10, paired with a -42.30 row, warns as R54 says and takes 0.20 from Savings. A -42.30 row dated 14 March, 4 days after its receipt, ticked in the import review and paired by hand before Confirm, leaves one payment and Savings 42.30 lower once. A receipt of 30 March paired with its row of 2 April counts in March's spent. Two rows of -4.50 `BAR CENTRALE` on 11 March with no FITID and one 4.50 receipt under Food: the first pairs, and the second, ticked under Food, is recorded at Confirm, leaving two payments, Savings at 991.00 and Food's March spent at 9.00. Two 4.50 receipts from Bar Centrale on 10 March under Food and those two rows: both arrive `PAIR`, each pairs with one receipt, leaving two payments, Savings at 991.00 and Food at 9.00; so they do with FITIDs F1 and F2, the F1 row then recorded and the F2 row not.
+- R128 · Unpairing: A 42.10 receipt from Savings at 1,000.00, paired by hand with a -42.30 row and its 0.20 filed under Fun, unpaired: one payment of 42.10 with the receipt's parts and no keys, Savings at 957.90 and Fun's spent back; the row then arrives `PAIR` again, and turned down and ticked it is recorded on its own, Savings at 915.60. Unpairing a receipt payment with no bank keys changes nothing.
 - R121 · The Trash: An item deleted on 1 October 2026 is due its notice on 21 October and not on 20 October, and once given is not due again; it is kept on 30 October and goes on 31 October. A monthly expense in the Trash over two month crossings writes no sweep row.
 - R122 · Restoring from the Trash: With Savings at 1,000.00 and a Goal holding 300.00, deleting the Goal with its money returned on 14 September 2026 leaves 1,300.00; restored on 2 October it holds 300.00, Savings is 1,000.00, and a `goal:` row of +300.00 dated 14 September is noted `Restored from the Trash` beside the delete's -300.00. A semimonthly 300.00 expense under Rent created on 1 September from Savings of 2,000.00, deleted on 20 September with its 300.00 returned and restored on 2 October, leaves Savings at 1,400.00 and Rent's September spent at 600.00, and is marked swept for October. A card at 140.00 deleted and restored reads 140.00. A 30.00 payment from a deleted Goal, removed after the delete, refuses the Goal's restore with `WRITTEN_SINCE`; one whose parts were only filed again does not.
 - R123 · Deleting a category: Deleting Phone while a 60.00 monthly expense files under it is refused with `REPLACEMENT_NEEDED`; with Internet given, the expense files under Internet, and Phone's August spent stays 60.00 with its sweep row under Phone; restoring Phone leaves the expense under Internet. A card whose payoff or fees category is Phone, and a Loan whose own category is Phone, move to Internet in the same step. Deleting a category nothing files under needs no other category.

@@ -579,4 +579,75 @@ class PairingTest {
         assertEquals(cents("991.00"), after.savingsAmount)
         assertEquals(cents("9.00"), Spent.of(after, "food", "2026-03"))
     }
+
+    // --- R128: unpairing ---
+
+    /** A 42.10 receipt (Groceries 30.00, Household 12.10) from Savings paired by hand with a -42.30 row, its 0.20 under Fun. */
+    private fun pairedWithDifference(): Pair<ProfileData, BankRow> {
+        val d1 = recordReceipt(world(), shop(home = "12.10"))
+        val bank = row("42.30", on(12))
+        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", reviewOf(d1, bank).single(), "fun", clock, "tx-1")
+        assertEquals(cents("957.70"), d2.savingsAmount)
+        return d2 to bank
+    }
+
+    // SPEC:R128 SPEC:R54 SPEC:R26
+    @Test fun `R128 a 42_10 receipt paired with a -42_30 row, unpaired, is 42_10 with the receipt's parts and no keys, Savings at 957_90`() {
+        val (d, bank) = pairedWithDifference()
+        val paired = d.payments.single()
+        assertNull(Pairing.unpairProblem(d, "pay-r"))
+        val un = Pairing.unpair(d, "pay-r", clock, "tx-2")
+        val p = un.payments.single()
+        assertEquals(cents("42.10"), p.total)
+        assertEquals(listOf(Part("groc", cents("30.00")), Part("home", cents("12.10"))), p.parts)
+        assertNull(p.bankKeys)
+        assertEquals(paired.receiptId, p.receiptId)
+        assertEquals(paired.receiptLines, p.receiptLines)
+        assertEquals(paired.date, p.date)
+        assertEquals(paired.source, p.source)
+        assertEquals(cents("957.90"), un.savingsAmount)
+        assertEquals(0L, Spent.of(un, "fun", "2026-03"))
+        assertEquals(cents("12.10"), Spent.of(un, "home", "2026-03"))
+        assertTrue(StatementImport.keyStrings(paired.bankKeys!!).none { it in un.importState.importedKeys })
+        assertEquals(listOf("rc-1"), un.receiptSettings?.recordedReceiptIds)
+        assertEquals(d.receiptSettings?.storeLinks, un.receiptSettings?.storeLinks, "the link only ranks (R36)")
+
+        // the row arrives as new: suggested as the pair again, and turned down and ticked it is recorded on its own
+        val again = reviewOf(un, bank).single()
+        assertEquals(RowStatus.PAIR, again.status)
+        assertEquals("pay-r", again.pairPaymentId)
+        val declined = again.copy(pairPaymentId = null, include = true, draft = StatementImport.draft(again.row, listOf(Part("groc", cents("42.30")))))
+        val after = StatementImport.confirm(un, listOf(declined), clock) { "imp-1" }
+        assertEquals(2, after.payments.size)
+        assertEquals(cents("915.60"), after.savingsAmount)
+        // or paired again by hand
+        assertNull(Pairing.bankPairProblem(un, "pay-r", again, "fun"))
+    }
+
+    // SPEC:R128
+    @Test fun `R128 unpairing a payment that is no pair, or an unknown id, changes nothing`() {
+        val d1 = recordReceipt(world(), shop())
+        assertEquals(UnpairProblem.NOT_A_PAIR, Pairing.unpairProblem(d1, "pay-r"))
+        assertEquals(d1, Pairing.unpair(d1, "pay-r", clock, "tx-1"))
+        assertEquals(UnpairProblem.NOT_A_PAIR, Pairing.unpairProblem(d1, "nope"))
+        assertEquals(d1, Pairing.unpair(d1, "nope", clock, "tx-1"))
+        val bankOnly = StatementImport.confirm(d1, reviewOf(d1, row("10.00", on(12))).map { it.copy(pairPaymentId = null, include = true, draft = StatementImport.draft(it.row, listOf(Part("fun", cents("10.00"))))) }, clock) { "pay-b" }
+        assertEquals(UnpairProblem.NOT_A_PAIR, Pairing.unpairProblem(bankOnly, "pay-b"))
+        assertEquals(bankOnly, Pairing.unpair(bankOnly, "pay-b", clock, "tx-2"))
+        // a line's category gone: the receipt's payment alone could not be saved, and nothing changes
+        val noHome = pairedWithDifference().first.let { it.copy(categories = it.categories.filter { c -> c.id != "home" }) }
+        assertEquals(UnpairProblem.CANNOT_SAVE, Pairing.unpairProblem(noHome, "pay-r"))
+        assertEquals(noHome, Pairing.unpair(noHome, "pay-r", clock, "tx-3"))
+    }
+
+    // SPEC:R128 SPEC:R54
+    @Test fun `R128 a pair from a Goal holding 0_00, unpaired, returns the 0_20 Savings paid and leaves the Goal at 0_00`() {
+        val d1 = recordReceipt(world(), shop(home = "12.10"), PaymentSource.Goal("trip"))
+        val d2 = Pairing.pairBankWithPayment(d1, "pay-r", reviewOf(d1, row("42.30", on(11))).single(), "fun", clock, "tx-1")
+        assertEquals(cents("999.80"), d2.savingsAmount)
+        val un = Pairing.unpair(d2, "pay-r", clock, "tx-2")
+        assertEquals(cents("1,000.00"), un.savingsAmount)
+        assertEquals(0L, un.goals.single().saved)
+        assertEquals(0L, un.payments.single().fromSavings)
+    }
 }
