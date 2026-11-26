@@ -410,11 +410,13 @@ object Trash {
     }
 
     /**
-     * What a delete moved into Savings, which its restore takes back out: the Savings movement of
-     * the rows it wrote, of the payments it removed, and of the rows it removed (SPEC R121).
+     * What a delete moved into Savings, which its restore into [d] takes back out: the Savings
+     * movement of the rows it wrote, of the payments it removed, and of the rows it removed (SPEC
+     * R121). A payment's row counts only while its source is still gone ([settled]): with the
+     * source back, the restore moves the source and leaves the row (SPEC R125).
      */
-    fun moneyMoved(p: TrashPayload): Money =
-        p.written.sumOf { Ledger.savingsEffect(it) } +
+    fun moneyMoved(d: ProfileData, p: TrashPayload): Money =
+        (if (p.payments.isEmpty() || p.payments.any { settled(d, p, it) }) p.written else emptyList()).sumOf { Ledger.savingsEffect(it) } +
             p.payments.sumOf { when (it.source) { PaymentSource.Savings -> it.total; is PaymentSource.Goal -> it.fromSavings; is PaymentSource.Account -> 0L } } -
             p.transactions.sumOf { Ledger.savingsEffect(it) }
 
