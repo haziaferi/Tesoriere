@@ -1465,7 +1465,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R26 · Statement import
 
-**Rule:** A bank statement in CSV or OFX is read on the device, and every bank row lands in a review as a suggestion (R107); nothing is recorded until one Confirm, which names the money out and the money in apart (R107). Each recorded bank row keeps the two keys below, once per row; a row arrives unticked as already recorded when its FITID was recorded, or, by synthetic key where it or the recorded row has no FITID, while the statement's rows with that key, taken in order, are no more than the rows recorded with it, kept by the import or held by a payment. A payee once filed by the user under one category pre-fills that category (R108).
+**Rule:** A bank statement in CSV or OFX is read on the device, and every bank row lands in a review as a suggestion (R107); nothing is recorded until one Confirm, which names the money out and the money in apart (R107). Each recorded bank row keeps the two keys below, once per row; a row arrives unticked as already recorded when its FITID was recorded, or, by synthetic key where it or the recorded row has no FITID, while the statement's rows with that key, taken in order, are no more than the rows recorded with it, as kept by the import or as held by payments, whichever are more. A payee once filed by the user under one category pre-fills that category (R108).
 
 **Values:**
 
