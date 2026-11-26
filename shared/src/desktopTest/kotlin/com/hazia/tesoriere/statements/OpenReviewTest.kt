@@ -87,4 +87,21 @@ class OpenReviewTest {
             assertEquals(cents("9.00"), Spent.of(out, "food", "2026-03"), "fitid=$fitid")
         }
     }
+
+    // SPEC:R119 SPEC:R118 SPEC:R107
+    @Test fun `R119 a hand pair confirmed with the review as it was built leaves the ticked row to the pair`() {
+        for (fitid in listOf(false, true)) {
+            val a = coffee(if (fitid) "F1" else null); val b = coffee(if (fitid) "F2" else null)
+            val d = recordReceipt(world(), "R")
+            // the first row unticked, the second ticked and paired by hand; Confirm given the review as built
+            val rv = review(d, a, b).mapIndexed { i, it ->
+                it.copy(pairPaymentId = null, include = i == 1, draft = StatementImport.draft(it.row, listOf(Part("food", cents("4.50")))))
+            }
+            val paired = Pairing.pairBankWithPayment(d, "R", rv[1], null, clock, "tx", rv).data
+            assertEquals(0, StatementImport.confirmSummary(paired, rv).count, "fitid=$fitid")
+            val out = StatementImport.confirm(paired, rv, clock, Ids("C")::next)
+            assertEquals(listOf("R"), out.payments.map { it.id }, "fitid=$fitid")
+            assertEquals(cents("995.50"), out.savingsAmount, "fitid=$fitid")
+        }
+    }
 }
