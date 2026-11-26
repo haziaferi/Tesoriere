@@ -33,6 +33,7 @@ import com.hazia.tesoriere.model.ProfileData
 import com.hazia.tesoriere.model.StoredLabels
 import com.hazia.tesoriere.model.TrashItem
 import com.hazia.tesoriere.pairing.Pairing
+import com.hazia.tesoriere.payments.BankKeys
 import com.hazia.tesoriere.payments.Part
 import com.hazia.tesoriere.payments.PaymentDraft
 import com.hazia.tesoriere.payments.PaymentNotice
@@ -1034,5 +1035,39 @@ class TrashTest {
         val review = StatementImport.review(un, rows, mar10)
         assertEquals(RowStatus.DUPLICATE, review.single { it.row.fitid == "F2" }.status)
         assertTrue(review.single { it.row.fitid == "F1" }.status != RowStatus.DUPLICATE)
+    }
+
+    /**
+     * A CSV coffee of 11 March recorded with no FITID, as a payment under Food or, with [asPayoff],
+     * as a payoff of the card from Savings with no payment; then an OFX of F1 and F2 with its
+     * synthetic key, F1 arriving DUPLICATE and F2 recorded under Food; F2's payment deleted, then a
+     * 4.50 receipt recorded. The Profile, the Trash payload, and F2's keys.
+     */
+    private fun csvThenOfxTwin(asPayoff: Boolean): Triple<ProfileData, TrashPayload, BankKeys> {
+        clock.setDay(mar10)
+        val csv = coffeeRow.copy(fitid = null)
+        val start = foodWorld().copy(accounts = listOf(card()))
+        val d1 = if (!asPayoff) recordRows(start, csv) else StatementImport.confirm(start,
+            StatementImport.review(start, listOf(csv), mar10).map { it.copy(include = true, payoffAccountId = "card") }, clock, ids)
+        val review = StatementImport.review(d1, listOf(coffeeRow.copy(fitid = "F1"), coffeeRow.copy(fitid = "F2")), mar10)
+        assertEquals(RowStatus.DUPLICATE, review.single { it.row.fitid == "F1" }.status)
+        val d2 = StatementImport.confirm(d1, review.map {
+            if (it.status == RowStatus.DUPLICATE) it
+            else it.copy(include = true, draft = PaymentDraft(it.row.date, cents("4.50"), PaymentSource.Savings, it.payee, listOf(Part("food", cents("4.50")))))
+        }, clock, ids)
+        val f2 = d2.payments.single { it.bankKeys?.fitid == "F2" }
+        val (after, p) = assertNotNull(Trash.deletePayment(d2, f2.id, clock, ids))
+        return Triple(recordReceipt(after, coffee()), p, f2.bankKeys!!)
+    }
+
+    // SPEC:R127 SPEC:R26 SPEC:R119
+    @Test fun `R127 a deleted OFX coffee F2, its twin recorded from a CSV with no FITID, comes back as the receipt's pair`() {
+        for (asPayoff in listOf(false, true)) {
+            val (d, p, keys) = csvThenOfxTwin(asPayoff)
+            assertEquals(listOf<RestoreNotice>(RestoreNotice.PairAvailable("pay-r")), Trash.restoreNotices(d, p), "payoff $asPayoff")
+            assertNull(Trash.restoreProblem(d, p, pairWith = "pay-r"), "payoff $asPayoff")
+            val paired = Trash.restore(d, p, clock, ids, pairWith = "pay-r")
+            assertEquals(keys, paired.payments.single { it.id == "pay-r" }.bankKeys, "payoff $asPayoff")
+        }
     }
 }

@@ -430,23 +430,34 @@ object StatementImport {
         return done
     }
 
+    /** How many rows recorded with no FITID carry synthetic key [syn]: the ones a row with a FITID is compared with (SPEC R26). */
+    internal fun recordedWithoutFitid(d: ProfileData, syn: String): Int =
+        heldBySyn(d, keptRows(d.importState.importedKeys), syn, withoutFitid = true)
+
     /**
-     * Whether [row] is recorded already (SPEC R26, R119): its FITID recorded; or, by its synthetic
-     * key, when the rows recorded with it, less those the rows of [review] that arrived `DUPLICATE`
-     * with it stand for, outnumber the other rows of [review] that did not: two equal coffees of one
-     * day with no FITID are two rows, and one payment taking their key stands for one of them only.
-     * A row that arrived `DUPLICATE` is recorded while any recorded row carries its key.
+     * Whether [row] is recorded already (SPEC R26, R119), worked out as [recordedRows] works out the
+     * review's statuses, over the rows of [review] (with [row] among them): its FITID recorded; or
+     * every row of [review] it is counted with, of its synthetic key, with a FITID or without as it
+     * is, and whose own FITID is not recorded, recorded by count. Two equal coffees of one day are
+     * two rows, and one payment taking their key stands for one of them only. A row that arrived
+     * `DUPLICATE` is recorded while the count still takes it.
      */
     fun rowRecorded(d: ProfileData, row: ReviewRow, review: List<ReviewRow>): Boolean {
-        val k = row.keys
+        val at = review.indexOfFirst { it === row }.takeIf { it >= 0 } ?: review.indexOf(row)
+        val rows = if (at >= 0) review else review + row
+        val i = if (at >= 0) at else rows.lastIndex
+        val keys = rows.map { it.keys }
         val kept = keptRows(d.importState.importedKeys)
+        val k = keys[i]
         if (k.fitid != null && recordedByFitid(d, kept, k.fitid)) return true
-        val held = heldBySyn(d, kept, k.synKey, withoutFitid = k.fitid != null)
-        if (row.status == RowStatus.DUPLICATE) return held > 0
-        val group = review.filter { sameRow(it.keys, k) }
-        val arrived = group.count { it.status == RowStatus.DUPLICATE }
-        val others = group.count { it.status != RowStatus.DUPLICATE } - 1
-        return held - arrived > maxOf(0, others)
+        val recorded = recordedRows(d, keys)
+        if (rows[i].status == RowStatus.DUPLICATE) return i in recorded
+        // the rows counted with it, as recordedRows groups them; recorded when no slot is left free
+        val group = rows.indices.filter { j ->
+            keys[j].synKey == k.synKey && (keys[j].fitid == null) == (k.fitid == null) &&
+                keys[j].fitid?.let { recordedByFitid(d, kept, it) } != true
+        }
+        return group.all { it in recorded }
     }
 
     private fun Money.toMajor2(): String {

@@ -477,7 +477,7 @@ object Trash {
                 RestoreProblem.CANNOT_PAIR.takeIf { Pairing.receiptPairProblem(unrecorded(d, pay), pairWith, review, differenceFor(d, pay, differenceCategoryId), parts) != null }
             }
             Side.BANK -> RestoreProblem.CANNOT_PAIR.takeIf {
-                Pairing.bankPairProblem(unimported(d, pay), pairWith, reviewRow(pay), differenceCategoryId, twinRows(p, pay)) != null
+                Pairing.bankPairProblem(unimported(d, pay), pairWith, reviewRow(pay), differenceCategoryId, twinRows(d, p, pay)) != null
             }
             null -> RestoreProblem.CANNOT_PAIR
         }
@@ -500,7 +500,7 @@ object Trash {
             paired.copy(receiptSettings = paired.receiptSettings?.copy(recordedReceiptIds = d.receiptSettings!!.recordedReceiptIds))
         }
         Side.BANK -> {
-            val paired = Pairing.pairBankWithPayment(unimported(d, pay), pairWith, reviewRow(pay), differenceCategoryId, clock, txId, twinRows(p, pay))
+            val paired = Pairing.pairBankWithPayment(unimported(d, pay), pairWith, reviewRow(pay), differenceCategoryId, clock, txId, twinRows(d, p, pay))
             paired.copy(importState = paired.importState.copy(importedKeys = d.importState.importedKeys))
         }
         null -> error("not a side of a pair (SPEC R127)")
@@ -533,10 +533,19 @@ object Trash {
     private fun reviewRow(pay: Payment) = ReviewRow(bankRow(pay), requireNotNull(pay.bankKeys), pay.payee ?: "", RowStatus.READY, false, null, null, null)
 
     /**
-     * Bank payment [pay]'s row with the rows its twins stood for at its delete ([TrashPayload.keysHeld]),
-     * as one review: each other payment holding its keys stands for one of them (SPEC R119, R127).
+     * Bank payment [pay]'s row as one review with the rows it was told apart from (SPEC R26, R119,
+     * R127). With no FITID: the rows its twins stood for at its delete ([TrashPayload.keysHeld]),
+     * each other payment holding its keys standing for one of them. With a FITID, its row was told
+     * apart by that FITID: the rows recorded with no FITID that carry its synthetic key stand for
+     * rows of their own, placeholders of FITIDs no row has, so only its FITID says whether its row
+     * is recorded.
      */
-    private fun twinRows(p: TrashPayload, pay: Payment): List<ReviewRow> = List(1 + (p.keysHeld[pay.id] ?: 0)) { reviewRow(pay) }
+    private fun twinRows(d: ProfileData, p: TrashPayload, pay: Payment): List<ReviewRow> {
+        val row = reviewRow(pay)
+        val k = row.keys
+        if (k.fitid == null) return List(1 + (p.keysHeld[pay.id] ?: 0)) { row }
+        return List(StatementImport.recordedWithoutFitid(d, k.synKey)) { row.copy(keys = k.copy(fitid = "\u0000told-apart-$it")) } + row
+    }
 
     /** [d] with [pay]'s receipt id read as not recorded, so pairing takes its receipt again. */
     private fun unrecorded(d: ProfileData, pay: Payment): ProfileData {

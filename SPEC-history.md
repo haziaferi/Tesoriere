@@ -308,3 +308,4 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-26 · R128 · changed · the unpaired row's keys leave the import's keys once; a recorded twin stays recorded · owner
 - 2026-11-26 · R125 · changed · of no-FITID twins, a deleted one's row stays recorded when the other is unpaired, the other's arrives new · builder
 - 2026-11-26 · R119 · changed · a row is recorded already as R26 counts · owner
+- 2026-11-26 · R127 · changed · a bank side with a FITID is told apart by it from the rows recorded with none · builder
