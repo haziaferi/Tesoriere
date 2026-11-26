@@ -529,4 +529,54 @@ class PairingTest {
         assertEquals(cents("991.00"), after.savingsAmount)
         assertEquals(cents("9.00"), Spent.of(after, "food", "2026-03"))
     }
+
+    // --- after review of the receipts and pairs pull request: twins ---
+
+    /** Two 4.50 receipts from Bar Centrale on 10 March under Food, pay-a and pay-b. */
+    private fun twoCoffees(): ProfileData {
+        val base = world().let { it.copy(categories = it.categories + category("food", "Food")) }
+        val a = recordReceipt(base, receipt("rc-a", "Bar Centrale", day, line("caffe", "4.50", "ch-food", "Food")), id = "pay-a")
+        return recordReceipt(a, receipt("rc-b", "Bar Centrale", day, line("caffe", "4.50", "ch-food", "Food")), id = "pay-b")
+    }
+
+    // SPEC:R119 SPEC:R118 SPEC:R26
+    @Test fun `R119 two 4_50 receipts and two -4_50 rows with no FITID pair one each, leaving two payments and Food at 9_00`() {
+        val d = twoCoffees()
+        val coffee = BankRow(on(11), -cents("4.50"), "BAR CENTRALE", null)
+        val review = reviewOf(d, coffee, coffee)
+        assertEquals(setOf("pay-a", "pay-b"), review.mapNotNull { it.pairPaymentId }.toSet())
+        assertTrue(review.all { it.status == RowStatus.PAIR })
+        val r1 = review.single { it.pairPaymentId == "pay-a" }
+        val r2 = review.single { it.pairPaymentId == "pay-b" }
+        val d1 = Pairing.pairBankWithPayment(d, "pay-a", r1, null, clock, "tx-1", review)
+        assertNull(Pairing.bankPairProblem(d1, "pay-b", r2, null, review), "the payment holding the shared key stands for one row only")
+        assertEquals(PairProblem.ROW_RECORDED, Pairing.bankPairProblem(d1, "pay-b", r2, null), "without the review, the key held is the row")
+        val d2 = Pairing.pairBankWithPayment(d1, "pay-b", r2, null, clock, "tx-2", review)
+        assertTrue(StatementImport.rowRecorded(d2, r2, review), "both rows are recorded now")
+        assertTrue(StatementImport.rowRecorded(d2, r1, review))
+        val after = StatementImport.confirm(d2, review, clock) { "imp" }
+        assertEquals(2, after.payments.size)
+        assertTrue(after.payments.all { it.bankKeys == r1.keys })
+        assertEquals(cents("991.00"), after.savingsAmount)
+        assertEquals(cents("9.00"), Spent.of(after, "food", "2026-03"))
+        assertEquals(listOf(RowStatus.DUPLICATE, RowStatus.DUPLICATE), reviewOf(after, coffee, coffee).map { it.status })
+    }
+
+    // SPEC:R119 SPEC:R26
+    @Test fun `R119 two -4_50 rows with FITIDs F1 and F2 pair with two 4_50 receipts, each row compared by its FITID`() {
+        val d = twoCoffees()
+        val c1 = BankRow(on(11), -cents("4.50"), "BAR CENTRALE", "F1")
+        val c2 = BankRow(on(11), -cents("4.50"), "BAR CENTRALE", "F2")
+        val review = reviewOf(d, c1, c2)
+        val r1 = review.single { it.pairPaymentId == "pay-a" }
+        val r2 = review.single { it.pairPaymentId == "pay-b" }
+        val d1 = Pairing.pairBankWithPayment(d, "pay-a", r1, null, clock, "tx-1")
+        assertNull(Pairing.bankPairProblem(d1, "pay-b", r2, null), "F2 is not recorded, though F1's payment holds the same synthetic key")
+        assertEquals(PairProblem.ROW_RECORDED, Pairing.bankPairProblem(d1, "pay-b", r1, null, review), "F1 is")
+        val d2 = Pairing.pairBankWithPayment(d1, "pay-b", r2, null, clock, "tx-2")
+        val after = StatementImport.confirm(d2, review, clock) { "imp" }
+        assertEquals(listOf("F1", "F2"), after.payments.map { it.bankKeys?.fitid })
+        assertEquals(cents("991.00"), after.savingsAmount)
+        assertEquals(cents("9.00"), Spent.of(after, "food", "2026-03"))
+    }
 }

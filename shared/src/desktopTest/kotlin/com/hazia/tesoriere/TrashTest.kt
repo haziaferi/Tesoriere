@@ -898,4 +898,63 @@ class TrashTest {
         assertEquals(cents("957.70"), paired.savingsAmount)
         assertEquals(cents("12.30"), Spent.of(paired, "fun", "2026-03"))
     }
+
+    // ---- after review of the receipts and pairs pull request: twins --------------------------------
+
+    /** [rows] ticked under Food from Savings and confirmed in one import. */
+    private fun recordRows(d: ProfileData, vararg rows: BankRow): ProfileData {
+        val ticked = StatementImport.review(d, rows.toList(), mar10).map {
+            it.copy(include = true, draft = PaymentDraft(it.row.date, -it.row.amount, PaymentSource.Savings, it.payee, listOf(Part("food", -it.row.amount))))
+        }
+        assertTrue(ticked.none { it.status == RowStatus.DUPLICATE })
+        return StatementImport.confirm(d, ticked, clock, ids)
+    }
+
+    // SPEC:R125 SPEC:R26 SPEC:R122
+    @Test fun `R125 of two -4_50 rows F1 and F2 recorded in one import, F2's payment deleted comes back, compared by its FITID`() {
+        clock.setDay(mar10)
+        val d0 = recordRows(foodWorld(), coffeeRow.copy(fitid = "F1"), coffeeRow.copy(fitid = "F2"))
+        val (after, p) = assertNotNull(Trash.deletePayment(d0, d0.payments.single { it.bankKeys?.fitid == "F2" }.id, clock, ids))
+        assertNull(Trash.restoreProblem(after, p))
+        val back = Trash.restore(after, p, clock, ids)
+        assertEquals(figures(d0, "2026-03"), figures(back, "2026-03"))
+        assertEquals(d0.payments, back.payments)
+    }
+
+    // SPEC:R125 SPEC:R26 SPEC:R122 SPEC:R107
+    @Test fun `R125 of two -4_50 twin rows with no FITID, one deleted comes back, and is refused once a third payment holds the key`() {
+        clock.setDay(mar10)
+        val twin = coffeeRow.copy(fitid = null)
+        val d0 = recordRows(foodWorld(), twin, twin)
+        assertEquals(cents("991.00"), d0.savingsAmount)
+        val (after, p) = assertNotNull(Trash.deletePayment(d0, d0.payments.last().id, clock, ids))
+        assertNull(Trash.restoreProblem(after, p), "one other payment held the key at the delete, and one holds it now")
+        val back = Trash.restore(after, p, clock, ids)
+        assertEquals(figures(d0, "2026-03"), figures(back, "2026-03"))
+        assertEquals(p, Trash.decode(Trash.encode(p)), "the count is kept in the Trash item")
+        // the row ticked as DUPLICATE and recorded again meanwhile: two others hold the key
+        val again = StatementImport.review(after, listOf(twin), mar10).single()
+        assertEquals(RowStatus.DUPLICATE, again.status)
+        val d2 = StatementImport.confirm(after, listOf(again.copy(include = true, draft = PaymentDraft(twin.date, cents("4.50"), PaymentSource.Savings, again.payee, listOf(Part("food", cents("4.50")))))), clock, ids)
+        assertEquals(RestoreProblem.RECORDED_AGAIN, Trash.restoreProblem(d2, p))
+    }
+
+    // SPEC:R127 SPEC:R119 SPEC:R26
+    @Test fun `R127 of two -4_50 twin bank payments, one deleted, then its receipt recorded, comes back as the receipt's pair`() {
+        for (fitids in listOf(null to null, "F1" to "F2")) {
+            clock.setDay(mar10)
+            val d0 = recordRows(foodWorld(), coffeeRow.copy(fitid = fitids.first), coffeeRow.copy(fitid = fitids.second))
+            val victim = d0.payments.last()
+            val (after, p) = assertNotNull(Trash.deletePayment(d0, victim.id, clock, ids))
+            val d2 = recordReceipt(after, coffee())
+            assertEquals(listOf<RestoreNotice>(RestoreNotice.PairAvailable("pay-r")), Trash.restoreNotices(d2, p), "FITIDs $fitids")
+            assertNull(Trash.restoreProblem(d2, p, pairWith = "pay-r"), "FITIDs $fitids")
+            val paired = Trash.restore(d2, p, clock, ids, pairWith = "pay-r")
+            assertEquals(2, paired.payments.size)
+            assertEquals(victim.bankKeys, paired.payments.single { it.id == "pay-r" }.bankKeys)
+            assertEquals(cents("991.00"), paired.savingsAmount)
+            assertEquals(cents("9.00"), Spent.of(paired, "food", "2026-03"))
+            assertEquals(d2.importState.importedKeys, paired.importState.importedKeys)
+        }
+    }
 }

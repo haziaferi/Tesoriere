@@ -164,12 +164,18 @@ object Pairing {
         return PaymentDraft(p.date, bank, p.source, p.payee, withDifference(p.parts.filter { !it.difference }, differencePart(p.total, bank), differenceCategoryId))
     }
 
-    /** Why receipt payment [paymentId] and bank row [row] cannot be paired, or null (SPEC R119). */
-    fun bankPairProblem(d: ProfileData, paymentId: String, row: ReviewRow, differenceCategoryId: String?): PairProblem? {
+    /**
+     * Why receipt payment [paymentId] and bank row [row] cannot be paired, or null (SPEC R119).
+     * [review] is the import review [row] is in, when it is: a payment holding the synthetic key
+     * of [row] and of its twins there stands for one of them only (StatementImport.rowRecorded).
+     */
+    fun bankPairProblem(
+        d: ProfileData, paymentId: String, row: ReviewRow, differenceCategoryId: String?, review: List<ReviewRow> = emptyList(),
+    ): PairProblem? {
         val p = d.payments.firstOrNull { it.id == paymentId }
         if (p == null || !receiptSide(p)) return PairProblem.PAYMENT_NOT_PAIRABLE
         if (row.row.amount >= 0) return PairProblem.ROW_NOT_PAIRABLE
-        if (recorded(d, row)) return PairProblem.ROW_RECORDED
+        if (StatementImport.rowRecorded(d, row, review)) return PairProblem.ROW_RECORDED
         if (!canConfirmPair(differencePart(p.total, -row.row.amount), differenceCategoryId)) return PairProblem.DIFFERENCE_UNFILED
         val draft = bankPairDraft(d, paymentId, row, differenceCategoryId) ?: return PairProblem.PAYMENT_NOT_PAIRABLE
         if (!Payments.canSave(d, draft, paymentId, pairing = true)) return PairProblem.CANNOT_SAVE
@@ -185,10 +191,13 @@ object Pairing {
      * R119): Payments.edit gives it the bank amount as its total and the difference part, keeping
      * its day and source; it gains the row's keys, which the import keeps too (SPEC R26), and the
      * store's link the first time the store pairs (SPEC R120). [txId] is the ledger row a deleted
-     * source's edit may write (SPEC R54).
+     * source's edit may write (SPEC R54); [review] is as for [bankPairProblem].
      */
-    fun pairBankWithPayment(d: ProfileData, paymentId: String, row: ReviewRow, differenceCategoryId: String?, clock: Clock, txId: String): ProfileData {
-        val problem = bankPairProblem(d, paymentId, row, differenceCategoryId)
+    fun pairBankWithPayment(
+        d: ProfileData, paymentId: String, row: ReviewRow, differenceCategoryId: String?, clock: Clock, txId: String,
+        review: List<ReviewRow> = emptyList(),
+    ): ProfileData {
+        val problem = bankPairProblem(d, paymentId, row, differenceCategoryId, review)
         require(problem == null) { "the pair cannot be recorded: $problem (SPEC R119)" }
         val store = d.payments.first { it.id == paymentId }.payee
         val edited = Payments.edit(d, paymentId, bankPairDraft(d, paymentId, row, differenceCategoryId)!!, clock, txId, pairing = true)
@@ -266,13 +275,6 @@ object Pairing {
     private fun rank(d: ProfileData, store: String, description: String): Int {
         val link = d.receiptSettings?.storeLinks?.get(store) ?: return 1
         return if (StatementImport.payeeRuleName(description) == link) 0 else 1
-    }
-
-    private fun recorded(d: ProfileData, row: ReviewRow): Boolean {
-        val keys = StatementImport.keyStrings(row.keys)
-        val seen = d.importState.importedKeys.toHashSet()
-        for (p in d.payments) p.bankKeys?.let { seen.addAll(StatementImport.keyStrings(it)) }
-        return keys.any { it in seen }
     }
 
     private fun withDifference(parts: List<Part>, difference: Money, categoryId: String?): List<Part> =

@@ -292,3 +292,6 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-26 · R107 · changed · a PAIR row turned down is recorded as a READY row when ticked · owner
 - 2026-11-26 · R118 · changed · a suggestion the user turns down names no pair · builder
 - 2026-11-26 · R125 · changed · a source deleted before the payment and restored since is moved again; the delete's row stays · builder
+- 2026-11-26 · R119 · changed · a recorded row: FITIDs compared alone when both have one; a synthetic key counted against the review's other rows · builder
+- 2026-11-26 · R125 · changed · bank keys held again only by more payments than at the delete, FITID first; twins restore · builder
+- 2026-11-26 · R127 · changed · RECORDED_AGAIN as R125 counts; a bank side's twins stand for rows of its review · builder

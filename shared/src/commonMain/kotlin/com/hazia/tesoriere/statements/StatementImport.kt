@@ -337,6 +337,32 @@ object StatementImport {
     /** [k] as the strings kept in `ImportState.importedKeys`: `fit:<FITID>` when there is one, then the synthetic key. */
     fun keyStrings(k: BankKeys): List<String> = listOfNotNull(k.fitid?.let { "fit:$it" }, k.synKey)
 
+    /**
+     * Whether [a] and [b] key one bank row (SPEC R26, R119): by their FITIDs when both have one,
+     * so two equal purchases of one day with FITIDs of their own are two rows; else by the synthetic key.
+     */
+    fun sameRow(a: BankKeys, b: BankKeys): Boolean = if (a.fitid != null && b.fitid != null) a.fitid == b.fitid else a.synKey == b.synKey
+
+    /**
+     * Whether [row] is recorded already (SPEC R26, R119): its FITID among the import's keys or on a
+     * payment holding a FITID, or else, by its synthetic key, when the payments holding it (or,
+     * with none, the import's keys holding it, a row recorded with no payment, unless a payment with
+     * a FITID of its own holds it) outnumber the other rows of [review] that did not arrive
+     * `DUPLICATE` with it: two equal coffees of one day with no FITID are two rows, and one payment
+     * holding their key stands for one of them only.
+     */
+    fun rowRecorded(d: ProfileData, row: ReviewRow, review: List<ReviewRow> = emptyList()): Boolean {
+        val k = row.keys
+        val kept = d.importState.importedKeys
+        if (k.fitid != null && "fit:${k.fitid}" in kept) return true
+        val holders = d.payments.mapNotNull { it.bankKeys }.filter { sameRow(it, k) }
+        if (k.fitid != null && holders.any { it.fitid != null }) return true
+        val unexplained = k.synKey in kept && (k.fitid == null || d.payments.none { p -> p.bankKeys?.let { it.fitid != null && it.synKey == k.synKey } == true })
+        val held = maxOf(holders.size, if (unexplained) 1 else 0)
+        val others = review.count { it.status != RowStatus.DUPLICATE && sameRow(it.keys, k) } - (if (row.status != RowStatus.DUPLICATE) 1 else 0)
+        return held > maxOf(0, others)
+    }
+
     private fun Money.toMajor2(): String {
         val a = abs(this)
         return (if (this < 0) "-" else "") + "${a / 100}.${(a % 100).toString().padStart(2, '0')}"
@@ -565,16 +591,16 @@ object StatementImport {
      * The rows of [rows] paired since the review was built (SPEC R119), indices: a row that did not
      * arrive DUPLICATE held keys no payment held then, so each payment holding such a row's keys now
      * took them since, and stands for one row only, so a twin row with the same keys, as two equal
-     * coffees on one day with no FITID, is still recorded. Each payment takes the row naming it as
-     * its pair, else a row with the very keys it holds, else the first row sharing one of them. A
+     * coffees on one day with no FITID, is still recorded. A payment's keys and a row's are of one
+     * row by [sameRow]: their FITIDs when both have one. Each payment takes the row naming it as
+     * its pair, else a row with the very keys it holds, else the first row of the same keys. A
      * row that arrived DUPLICATE is recorded when ticked (SPEC R107).
      */
     private fun pairedSince(d: ProfileData, rows: List<ReviewRow>): Set<Int> {
         val taken = HashSet<Int>()
         for (p in d.payments) {
             val held = p.bankKeys ?: continue
-            val pk = keyStrings(held).toSet()
-            val open = rows.indices.filter { it !in taken && rows[it].status != RowStatus.DUPLICATE && keyStrings(rows[it].keys).any { k -> k in pk } }
+            val open = rows.indices.filter { it !in taken && rows[it].status != RowStatus.DUPLICATE && sameRow(rows[it].keys, held) }
             val pick = open.firstOrNull { rows[it].pairPaymentId == p.id } ?: open.firstOrNull { rows[it].keys == held } ?: open.firstOrNull() ?: continue
             taken += pick
         }
