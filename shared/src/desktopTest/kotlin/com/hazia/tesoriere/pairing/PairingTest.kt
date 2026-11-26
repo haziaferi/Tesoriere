@@ -695,6 +695,22 @@ class PairingTest {
         assertEquals(cents("4.50"), Spent.of(out, "food", "2026-03"))
     }
 
+    // SPEC:R128 SPEC:R26
+    @Test fun `R128 an OFX coffee F1 recorded, a CSV twin paired with a second coffee's receipt and unpaired, arrives as new again`() {
+        val d0 = world()
+        val coffee = BankRow(on(11), -cents("4.50"), "BAR CENTRALE", null)
+        val d1 = StatementImport.confirm(d0, reviewOf(d0, coffee.copy(fitid = "F1")).map {
+            it.copy(include = true, draft = StatementImport.draft(it.row, listOf(Part("groc", cents("4.50")))))
+        }, clock) { "pay-f1" }
+        val d2 = recordReceipt(d1, receipt("rc-b", "Bar Centrale", day, line("caffe", "4.50", "ch-groc", "Groceries")), id = "pay-b")
+        val csv = reviewOf(d2, coffee, coffee)
+        assertEquals(listOf(RowStatus.DUPLICATE, RowStatus.PAIR), csv.map { it.status })
+        val (paired, _) = Pairing.pairBankWithPayment(d2, "pay-b", csv.single { it.status == RowStatus.PAIR }, null, clock, "tx-1", csv)
+        val un = Pairing.unpair(paired, "pay-b", clock, "tx-2", emptyList())
+        assertEquals(d2.importState.importedKeys, un.importState.importedKeys, "the CSV row's keys leave; F1's, its twin, stay")
+        assertEquals(listOf(RowStatus.DUPLICATE, RowStatus.PAIR), reviewOf(un, coffee, coffee).map { it.status })
+    }
+
     // --- R128: unpairing ---
 
     /** A 42.10 receipt (Groceries 30.00, Household 12.10) from Savings paired by hand with a -42.30 row, its 0.20 under Fun. */

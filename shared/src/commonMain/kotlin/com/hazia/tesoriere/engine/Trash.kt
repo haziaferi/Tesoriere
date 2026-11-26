@@ -556,7 +556,7 @@ object Trash {
     /** [d] with [pay]'s row read as not imported, its kept keys taken out once, so pairing takes its row again (SPEC R26). */
     private fun unimported(d: ProfileData, pay: Payment): ProfileData {
         val keys = pay.bankKeys ?: return d
-        return d.copy(importState = d.importState.copy(importedKeys = StatementImport.withoutRow(d.importState.importedKeys, keys)))
+        return d.copy(importState = d.importState.copy(importedKeys = StatementImport.withoutRow(d.importState.importedKeys, d.payments, keys)))
     }
 
     /**

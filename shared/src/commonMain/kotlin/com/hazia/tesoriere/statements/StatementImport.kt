@@ -13,6 +13,7 @@ import com.hazia.tesoriere.model.StoredLabels
 import com.hazia.tesoriere.pairing.Pairing
 import com.hazia.tesoriere.payments.BankKeys
 import com.hazia.tesoriere.payments.Part
+import com.hazia.tesoriere.payments.Payment
 import com.hazia.tesoriere.payments.PaymentDraft
 import com.hazia.tesoriere.payments.PaymentNotice
 import com.hazia.tesoriere.payments.PaymentSource
@@ -365,10 +366,15 @@ object StatementImport {
      * the FITID's only when a payment holding that FITID holds that synthetic key, and else as a
      * row recorded with no FITID, the FITID key standing alone.
      */
-    internal fun keptRows(d: ProfileData): List<KeptRow> {
-        val kept = d.importState.importedKeys
-        val synOf = d.payments.mapNotNull { it.bankKeys }.filter { it.fitid != null }.groupBy({ it.fitid!! }, { it.synKey })
-        val out = ArrayList<KeptRow>()
+    internal fun keptRows(d: ProfileData): List<KeptRow> = keptRows(d.importState.importedKeys, d.payments)
+
+    /** The recorded rows of [kept] as [keptRows] reads them, [payments] telling an old list's FITID rows. */
+    internal fun keptRows(kept: List<String>, payments: List<Payment>): List<KeptRow> = keptSpans(kept, payments).map { it.first }
+
+    /** Each recorded row of [kept] with the entries that keep it, in order: the one reading of the list (SPEC R26). */
+    private fun keptSpans(kept: List<String>, payments: List<Payment>): List<Pair<KeptRow, IntRange>> {
+        val synOf = payments.mapNotNull { it.bankKeys }.filter { it.fitid != null }.groupBy({ it.fitid!! }, { it.synKey })
+        val out = ArrayList<Pair<KeptRow, IntRange>>()
         var i = 0
         while (i < kept.size) {
             val k = kept[i]
@@ -381,12 +387,13 @@ object StatementImport {
                         next != null && next.startsWith("syn:") && synOf[fitid]?.contains(next) == true -> next
                         else -> null
                     }
-                    out += KeptRow(fitid, syn)
-                    i += if (syn != null) 2 else 1
+                    val width = if (syn != null) 2 else 1
+                    out += KeptRow(fitid, syn) to (i until i + width)
+                    i += width
                 }
                 // a marked key with no FITID key before it: a row recorded with a FITID, which is not known
-                k.startsWith(FITID_SYN + "syn:") -> { out += KeptRow("", k.removePrefix(FITID_SYN)); i++ }
-                else -> { out += KeptRow(null, k); i++ }
+                k.startsWith(FITID_SYN + "syn:") -> { out += KeptRow("", k.removePrefix(FITID_SYN)) to (i..i); i++ }
+                else -> { out += KeptRow(null, k) to (i..i); i++ }
             }
         }
         return out
@@ -397,22 +404,15 @@ object StatementImport {
         kept + listOfNotNull(k.fitid?.let { "fit:$it" }, if (k.fitid != null) FITID_SYN + k.synKey else k.synKey)
 
     /**
-     * [kept] less one recorded row of keys [k] (SPEC R26, R125, R128): the last FITID key of its
-     * FITID with the synthetic key kept with it; with no FITID, the last synthetic key kept alone,
-     * else the last one kept at all.
+     * [kept] less one recorded row of keys [k], read as [keptRows] reads it with [payments] (SPEC
+     * R26, R125, R128): the last row of its FITID, with the synthetic key kept with it; with no
+     * FITID, the last row recorded with none carrying its synthetic key. Nothing when none is kept.
      */
-    internal fun withoutRow(kept: List<String>, k: BankKeys): List<String> {
-        val out = kept.toMutableList()
-        if (k.fitid != null) {
-            val at = out.lastIndexOf("fit:${k.fitid}")
-            if (at < 0) return kept
-            if (out.getOrNull(at + 1) == FITID_SYN + k.synKey || out.getOrNull(at + 1) == k.synKey) out.removeAt(at + 1)
-            out.removeAt(at)
-            return out
-        }
-        val alone = out.indices.lastOrNull { out[it] == k.synKey && !(it > 0 && out[it - 1].startsWith("fit:")) } ?: out.lastIndexOf(k.synKey)
-        if (alone >= 0) out.removeAt(alone)
-        return out
+    internal fun withoutRow(kept: List<String>, payments: List<Payment>, k: BankKeys): List<String> {
+        val span = keptSpans(kept, payments).lastOrNull { (row, _) ->
+            if (k.fitid != null) row.fitid == k.fitid else row.fitid == null && row.synKey == k.synKey
+        }?.second ?: return kept
+        return kept.filterIndexed { i, _ -> i !in span }
     }
 
     /** Whether a recorded row of FITID [fitid] is kept or held by a payment (SPEC R26). */

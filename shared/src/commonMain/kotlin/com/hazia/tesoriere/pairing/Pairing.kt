@@ -116,10 +116,12 @@ object Pairing {
         if (unpairProblem(d, paymentId) != null || held == null) return d
         val draft = unpairDraft(d, paymentId) ?: return d
         val kept = d.importState.importedKeys
-        val without = StatementImport.withoutRow(kept, held)
+        val without = StatementImport.withoutRow(kept, d.payments, held)
         val trashed = trash.filter { it.profileId == d.profileId }.flatMap { Trash.decode(it.payload)?.payments.orEmpty() }
         val twins = (d.payments + trashed).count { o -> o.id != paymentId && o.bankKeys?.let { StatementImport.sameRow(it, held) } == true }
-        val keys = if (held.fitid == null && without.count { it == held.synKey } < twins) kept else without
+        // the rows left carrying its synthetic key, read as the review reads them, a FITID twin's included
+        val left = StatementImport.keptRows(without, d.payments).count { it.synKey == held.synKey }
+        val keys = if (held.fitid == null && left < twins) kept else without
         val edited = Payments.edit(d, paymentId, draft, clock, txId)
         return edited.copy(
             payments = edited.payments.map { if (it.id == paymentId) it.copy(bankKeys = null) else it },
