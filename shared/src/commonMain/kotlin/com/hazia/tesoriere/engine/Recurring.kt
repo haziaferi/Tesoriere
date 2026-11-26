@@ -280,10 +280,10 @@ object Recurring {
      * Creation (SPEC R64): `firstDueDate` keeps the entered date, the anchor day and interval are
      * set once, the share is worked out against the moved-forward due date, and one of the four
      * cases decides whether anything sweeps at once. All four mark the month as swept. The draft
-     * must name a category that exists (SPEC R67).
+     * must name a category that exists (SPEC R67): a draft [canSave] refuses gives [d] back unchanged.
      */
     fun create(d: ProfileData, draft: RecurringExpense, clock: Clock, ids: () -> String): ProfileData {
-        require(canSave(d, draft)) { "a recurring expense needs a category that exists: '${draft.categoryId}'" }
+        if (!canSave(d, draft)) return d
         val today = clock.today()
         // the creation day is kept whatever the first due date (SPEC R60, R64)
         var e = derivePlan(draft.copy(profileId = d.profileId, finishedAt = null, lastSweptMonth = null, createdOn = today), today)
@@ -308,11 +308,12 @@ object Recurring {
      * Edit-and-reconcile (SPEC R65): the new settings are stored; if this month has swept and its
      * scheduled amount moved, the difference is offered (never applied here) with the date of the
      * due date it adjusts. The share is worked out again only when the plan changed (SPEC R62). A
-     * changed category applies to rows written from here on (SPEC R67).
+     * changed category applies to rows written from here on (SPEC R67). A draft [canSave] refuses,
+     * or an expense that does not exist, gives [d] back unchanged with nothing to settle.
      */
     fun edit(d: ProfileData, edited: RecurringExpense, today: LocalDate): Pair<ProfileData, Reconcile?> {
-        require(canSave(d, edited)) { "a recurring expense needs a category that exists: '${edited.categoryId}'" }
-        val before = d.recurringExpenses.first { it.id == edited.id }
+        if (!canSave(d, edited)) return d to null
+        val before = d.recurringExpenses.firstOrNull { it.id == edited.id } ?: return d to null
         val sweptThisMonth = before.lastSweptMonth == today.ymKey()
         val beforeAmt = if (sweptThisMonth) sweepAmountForMonth(before, today.year, today.month.number) else 0
         var e = edited.copy(profileId = d.profileId, createdOn = before.createdOn)            // an edit never moves the creation day (SPEC R60)
@@ -343,10 +344,11 @@ object Recurring {
      * Applies an accepted difference: one `rec:` row for it, dated to the due date it adjusts and
      * filed under the expense's category. On an expense linked to a Loan the tracked debt follows
      * the Savings movement, with its own `acct:` row on the same date: a further 200.00 taken
-     * lowers the debt by 200.00 (SPEC R65).
+     * lowers the debt by 200.00 (SPEC R65). An expense deleted since the difference was offered
+     * gives [d] back unchanged.
      */
     fun applyReconcile(d: ProfileData, r: Reconcile, clock: Clock, ids: () -> String): ProfileData {
-        val e = d.recurringExpenses.first { it.id == r.expenseId }
+        val e = d.recurringExpenses.firstOrNull { it.id == r.expenseId } ?: return d
         var next = Ledger.logAndMove(d, row(d, e, r.delta, StoredLabels.EDIT_RECONCILIATION, r.occurrenceDate), clock, ids()).first
         next.accounts.firstOrNull { it.id == e.linkedAccountId && it.type == AccountType.LOAN }?.let { loan ->
             next = Accounts.balanceEdit(next, loan.id, loan.balance - r.delta, StoredLabels.EDIT_RECONCILIATION, clock, ids(), r.occurrenceDate)
@@ -410,10 +412,10 @@ object Recurring {
     /**
      * Sweeps one month (SPEC R63): each due date writes its own row, dated to that due date; a
      * share is one row dated to the 1st. Every row is filed under the expense's category (SPEC
-     * R67). Returns the new state and the total swept.
+     * R67). Returns the new state and the total swept; an expense that does not exist sweeps nothing.
      */
     fun sweepOccurrences(d: ProfileData, expenseId: String, monthDate: LocalDate, clock: Clock, ids: () -> String): Pair<ProfileData, Money> {
-        val e = d.recurringExpenses.first { it.id == expenseId }
+        val e = d.recurringExpenses.firstOrNull { it.id == expenseId } ?: return d to 0
         val dates = occurrenceDatesInMonth(e, monthDate.year, monthDate.month.number)
         var next = d
         if (dates == null) {
