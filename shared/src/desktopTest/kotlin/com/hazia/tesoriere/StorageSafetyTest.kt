@@ -348,6 +348,42 @@ class StorageSafetyTest {
         }
     }
 
+    // SPEC:R130 SPEC:R143 SPEC:R126 SPEC:R23
+    @Test fun `R130 a deleted Profile whose Trash item holds a 30_00 payment that does not add up exports, restores and comes back with it as one uncategorised part`() {
+        val b = ProfileData.fresh("p-b", "B").let { d ->
+            d.copy(
+                categories = listOf(Category("b-groc", "p-b", "Groceries")),
+                payments = listOf(
+                    Payment("pay-b", "p-b", nov26, at, cents("30.00"), PaymentSource.Savings, "Shop", listOf(Part("b-groc", cents("1.00")))),
+                    Payment("pay-b2", "p-b", nov26, at, cents("8.00"), PaymentSource.Savings, "Shop", listOf(Part("b-groc", cents("8.00")))),
+                ),
+            )
+        }
+        val item = com.hazia.tesoriere.model.TrashItem(
+            "tr-b", "p-b", ProfileRepository.PROFILE_KIND, "B", "2026-11-20",
+            Trash.encode(com.hazia.tesoriere.engine.TrashPayload(profile = com.hazia.tesoriere.engine.TrashedProfile.of(b))), warned = true,
+        )
+        val ok = withRepo(TestDb.file()) { repo, db ->
+            repo.createProfile("A", "p-a")
+            db.dao().insertTrashItem(item)
+            assertIs<Export.Ok>(repo.backupFile(nov26))
+        }
+        assertEquals(0, ok.leftOut)
+        assertEquals(1, ok.repaired)
+        val kept = ok.file.trash.single()
+        assertEquals(listOf("tr-b", "2026-11-20", "true"), listOf(kept.id, kept.deletedOn, kept.warned.toString()))
+        val read = assertIs<BackupResult.Ok>(Backup.validate(ok.text)).backup
+        withRepo(TestDb.file()) { repo, db ->
+            assertEquals(Applied.Restored, Backup.apply(db, read, nov26))
+            assertEquals(listOf("tr-b"), repo.trash().map { it.id })
+            val back = assertIs<TrashRestore.Restored>(repo.restore("tr-b")).data
+            assertEquals(listOf(Part(null, cents("30.00"))), back.payments.single { it.id == "pay-b" }.parts)
+            assertEquals(listOf(Part("b-groc", cents("8.00"))), back.payments.single { it.id == "pay-b2" }.parts)
+            assertEquals(listOf("A", "B"), repo.profiles().map { it.name })
+            assertTrue(repo.trash().isEmpty())
+        }
+    }
+
     // SPEC:R130 SPEC:R112
     @Test fun `R130 a Profile that is not the receipt Profile but names a folder exports with no folder`() {
         withRepo(TestDb.file()) { repo, db ->

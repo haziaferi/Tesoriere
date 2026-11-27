@@ -209,7 +209,8 @@ object Backup {
      * it holds, whose deleted Profile is among the Profiles, or whose Profile is neither among the
      * Profiles nor in the Trash. Repaired: any other payment whose parts do not add up, written with
      * one part of its whole total in no category (SPEC R99), so its money and its receipt id and
-     * bank keys stay; and a receipt folder held by a Profile other than the receipt Profile, cleared,
+     * bank keys stay, a payment held in a Trash item as well, the item re-encoded with its day and
+     * notice mark kept; and a receipt folder held by a Profile other than the receipt Profile, cleared,
      * as is a receipt Profile not among the Profiles (SPEC R112). Damage the store tolerates (SPEC
      * R141) never stops an export; a fault of no one record is left for [validate] to name.
      */
@@ -224,10 +225,10 @@ object Backup {
         val kept = profiles.map { d ->
             val rows = d.transactions.filter { TransactionKey.parse(it.key) != null }
             val pays = d.payments.mapNotNull { pay ->
-                when {
-                    Payments.partsAddUp(pay.total, pay.parts) -> pay
-                    pay.total == 0L -> { leftOut++; null }
-                    else -> { repaired++; pay.copy(parts = listOf(Part(null, pay.total))) }
+                when (val r = repairedPayment(pay)) {
+                    null -> { leftOut++; null }
+                    pay -> pay
+                    else -> { repaired++; r }
                 }
             }
             leftOut += d.transactions.size - rows.size
@@ -246,12 +247,17 @@ object Backup {
             item to runCatching { LocalDate.parse(item.deletedOn); Trash.decode(item.payload) }.getOrNull()
         }
         val deleted = HashSet<String>()
-        val keep = HashSet<String>()
+        val keep = HashMap<String, TrashItem>()
         // a deleted Profile's own item first, so the items of its records know it is in the Trash
-        for ((item, p) in read.sortedBy { it.second?.profile == null }) {
-            if (p == null) { leftOut++; continue }
+        for ((item, decoded) in read.sortedBy { it.second?.profile == null }) {
+            if (decoded == null) { leftOut++; continue }
             // of a Profile gone for good: it could never be restored (SPEC R126, R131)
-            if (p.profile == null && item.profileId !in live && item.profileId !in deleted) { leftOut++; continue }
+            if (decoded.profile == null && item.profileId !in live && item.profileId !in deleted) { leftOut++; continue }
+            // its payments repaired as the Profiles' are (SPEC R23, R130), so one bad payment never
+            // keeps a whole item, a deleted Profile's included, out of the file
+            val fixed = repairedPayload(decoded)
+            if (fixed == null) { leftOut++; continue }
+            val p = fixed.payload
             // the item's ids are tried in a set of its own, kept only when the whole item reads
             val trial = seen.child()
             val ok = try {
@@ -267,10 +273,58 @@ object Backup {
             }
             if (!ok) { leftOut++; continue }
             trial.mergeInto(seen)
-            keep += item.id
+            // re-encoded by the Trash's own codec only when repaired; its day and its notice mark stay
+            keep[item.id] = if (fixed.repaired + fixed.dropped == 0) item else item.copy(payload = Trash.encode(p))
+            repaired += fixed.repaired
+            leftOut += fixed.dropped
             p.profile?.let { deleted += item.profileId }
         }
-        return Readable(build(kept, trash.filter { it.id in keep }, activeProfileId, receipt, exportedAt), leftOut, repaired)
+        return Readable(build(kept, trash.mapNotNull { keep[it.id] }, activeProfileId, receipt, exportedAt), leftOut, repaired)
+    }
+
+    /**
+     * [pay] as an export writes it (SPEC R23, R130): as it is when its parts add up; else, for a
+     * total other than 0.00, one part of its whole total in no category, so it counts as
+     * Uncategorised (SPEC R99) and keeps its money, receipt id and bank keys; null for a 0.00 total,
+     * which no part can make whole.
+     */
+    private fun repairedPayment(pay: Payment): Payment? = when {
+        Payments.partsAddUp(pay.total, pay.parts) -> pay
+        pay.total == 0L -> null
+        else -> pay.copy(parts = listOf(Part(null, pay.total)))
+    }
+
+    /** A Trash payload with its payments repaired, how many were, and how many 0.00 ones a deleted Profile dropped. */
+    private class RepairedPayload(val payload: TrashPayload, val repaired: Int, val dropped: Int)
+
+    /**
+     * [p] with every payment it would put back repaired as [repairedPayment] says (SPEC R130): a
+     * deleted Profile's 0.00 payment that does not add up is dropped from it and counted, as one of
+     * the Profiles' is; null when a payment the delete removed is such a one, since the item's
+     * restore stands for that payment, and the item is left out.
+     */
+    private fun repairedPayload(p: TrashPayload): RepairedPayload? {
+        var repaired = 0
+        var dropped = 0
+        val own = p.payments.map { pay ->
+            val r = repairedPayment(pay) ?: return null
+            if (r != pay) repaired++
+            r
+        }
+        val profile = p.profile?.let { tp ->
+            tp.copy(
+                payments = tp.payments.mapNotNull { pay ->
+                    val r = repairedPayment(pay)
+                    when {
+                        r == null -> dropped++
+                        r != pay -> repaired++
+                    }
+                    r
+                },
+            )
+        }
+        if (repaired + dropped == 0) return RepairedPayload(p, 0, 0)
+        return RepairedPayload(p.copy(payments = own, profile = profile), repaired, dropped)
     }
 
     /**
