@@ -402,3 +402,9 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-27 · R148 · changed · PAUSED_NEEDS_PASSWORD owes a notice; PASSWORD_NOT_SAVED; RECORDS_UNREADABLE writes no copy; NOT_MADE from the export; FOLDER_UNREACHABLE is phase 2's · builder
 - 2026-11-27 · R36 · changed · the example store renamed to the invented Granvolta, the earlier name being a real chain · builder
 - 2026-11-27 · R120 · changed · the example store renamed to the invented Granvolta, the earlier name being a real chain · builder
+- 2026-11-27 · R148 · changed · a copy lacking unreadable records is written with RECORDS_UNREADABLE's notice, and no old copy is deleted while it lasts · owner
+- 2026-11-27 · R86 · changed · loanMath gives no figure and getLoanProblem a code (RATE_NOT_FINITE, CATEGORY_MISSING) · builder
+- 2026-11-27 · R130 · changed · a dropped 0.00 payment's receipt id stays among its Profile's recorded receipts · builder
+- 2026-11-27 · R144 · changed · runtime damage reaches the repository's caller as a SQLite exception; phase 2 restarts into the guard · builder
+- 2026-11-27 · R36 · changed · the Granvolta wording confirmed · owner
+- 2026-11-27 · R120 · changed · the Granvolta wording confirmed · owner
