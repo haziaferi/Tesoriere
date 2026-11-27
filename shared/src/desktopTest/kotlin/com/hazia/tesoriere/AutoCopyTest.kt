@@ -37,6 +37,9 @@ class AutoCopyTest {
     private val daily = weekly.copy(every = "daily")
     private val plain = """{"app":"tesoriere","schemaVersion":1,"exportedAt":"2026-11-27","activeProfileId":"p-1","profiles":[]}"""
 
+    /** A whole copy just written: the only kind after which old copies are deleted (SPEC R148). */
+    private val whole = CopyText.Ready(plain)
+
     // SPEC:R148 SPEC:R18
     @Test fun `R148 a fresh install holds no copy row, and no copy is due`() {
         val db = buildInMemoryTesoriereDatabase()
@@ -153,7 +156,7 @@ class AutoCopyTest {
         assertEquals(CopyError.NOT_WRITTEN, AutoCopy.lastError(weekly.copy(lastError = "")))
         for (e in CopyError.entries) assertEquals(e, AutoCopy.lastError(AutoCopy.afterFailure(weekly, e)), e.name)
         assertEquals(
-            listOf("folder_unreachable", "not_written", "password_unreadable", "not_made", "records_unreadable", "password_not_saved", "paused_needs_password"),
+            listOf("folder_unreachable", "not_written", "password_unreadable", "not_made", "records_unreadable", "records_left_out", "password_not_saved", "paused_needs_password"),
             CopyError.entries.map { it.token },
         )
     }
@@ -217,10 +220,10 @@ class AutoCopyTest {
             "tesoriere-copy-2026-02-30-phone.json", "tesoriere-copy-2026-01-01-my-phone.json",
         )
         val folder = (others + pc + phone).shuffled(kotlin.random.Random(7))
-        assertEquals(phone.take(3), AutoCopy.stale(folder, "phone", nov27))
-        assertEquals(emptyList(), AutoCopy.stale(folder, "pc", nov27), "pc has 3, under 14")
-        assertEquals(emptyList(), AutoCopy.stale(phone.take(14), "phone", nov27))
-        assertEquals(emptyList(), AutoCopy.stale(emptyList(), "phone", nov27))
+        assertEquals(phone.take(3), AutoCopy.stale(folder, "phone", nov27, whole))
+        assertEquals(emptyList(), AutoCopy.stale(folder, "pc", nov27, whole), "pc has 3, under 14")
+        assertEquals(emptyList(), AutoCopy.stale(phone.take(14), "phone", nov27, whole))
+        assertEquals(emptyList(), AutoCopy.stale(emptyList(), "phone", nov27, whole))
         assertEquals(14, AutoCopy.KEPT)
     }
 
@@ -229,12 +232,12 @@ class AutoCopyTest {
         val later = (0 until 14).map { AutoCopy.fileName(LocalDate(2027, 1, 1).plusDays(it), "phone") }
         val today = AutoCopy.fileName(nov27, "phone")
         val yesterday = AutoCopy.fileName(LocalDate(2026, 11, 26), "phone")
-        assertEquals(later.take(2), AutoCopy.stale(later + today + yesterday, "phone", nov27), "yesterday's copy stays")
+        assertEquals(later.take(2), AutoCopy.stale(later + today + yesterday, "phone", nov27, whole), "yesterday's copy stays")
         val real = (0 until 13).map { AutoCopy.fileName(nov27.plusDays(-it), "phone") }
-        assertEquals(later.take(13), AutoCopy.stale(later + real, "phone", nov27))
-        assertEquals(later.take(14), AutoCopy.stale(later + real + AutoCopy.fileName(LocalDate(2026, 11, 14), "phone"), "phone", nov27))
+        assertEquals(later.take(13), AutoCopy.stale(later + real, "phone", nov27, whole))
+        assertEquals(later.take(14), AutoCopy.stale(later + real + AutoCopy.fileName(LocalDate(2026, 11, 14), "phone"), "phone", nov27, whole))
         val ahead15 = (0 until 15).map { AutoCopy.fileName(nov27.plusDays(1 + it), "phone") }
-        assertEquals(ahead15.take(2), AutoCopy.stale(ahead15 + today, "phone", nov27), "the day's own copy is kept over any dated later")
+        assertEquals(ahead15.take(2), AutoCopy.stale(ahead15 + today, "phone", nov27, whole), "the day's own copy is kept over any dated later")
     }
 
     // SPEC:R148
@@ -339,17 +342,18 @@ class AutoCopyTest {
     // SPEC:R148 SPEC:R130 SPEC:R141
     @Test fun `R148 an export naming a record it could not read is still copied and owes RECORDS_UNREADABLE once, and an export with no file is NOT_MADE`() {
         val file = com.hazia.tesoriere.engine.BackupFile(exportedAt = "2026-11-27", activeProfileId = "p-1", profiles = emptyList())
-        val whole = com.hazia.tesoriere.data.Export.Ok(file, plain, 0, 0, emptyList())
-        assertEquals(CopyText.Ready(plain), AutoCopy.outcome(whole))
-        val lacking = whole.copy(unreadable = listOf(com.hazia.tesoriere.data.UnreadableRecord("p-1", com.hazia.tesoriere.data.StoredKind.IMPORT_MEMORY, null)))
-        assertEquals(CopyText.Lacking(plain), AutoCopy.outcome(lacking))
+        val export = com.hazia.tesoriere.data.Export.Ok(file, plain, 0, 0, emptyList())
+        assertEquals(CopyText.Ready(plain), AutoCopy.outcome(export))
+        val lacking = export.copy(unreadable = listOf(com.hazia.tesoriere.data.UnreadableRecord("p-1", com.hazia.tesoriere.data.StoredKind.IMPORT_MEMORY, null)))
+        assertEquals(CopyText.Lacking(plain, CopyError.RECORDS_UNREADABLE), AutoCopy.outcome(lacking))
+        assertEquals(CopyText.Lacking(plain, CopyError.RECORDS_UNREADABLE), AutoCopy.outcome(lacking.copy(leftOut = 1)), "unreadable records are named first")
         assertEquals(CopyText.Failed(CopyError.NOT_MADE), AutoCopy.outcome(com.hazia.tesoriere.data.Export.Empty))
         assertEquals(CopyText.Failed(CopyError.NOT_MADE), AutoCopy.outcome(com.hazia.tesoriere.data.Export.Refused(com.hazia.tesoriere.engine.BackupProblem.DAMAGED)))
         // the copy is written, of everything readable, and a notice is owed
         val due = weekly.copy(lastCopy = "2026-11-13")
         assertEquals(CopyText.Ready(plain), AutoCopy.contents(due, (AutoCopy.outcome(lacking) as CopyText.Lacking).text, null, lockOn = false, nov27))
         assertTrue(AutoCopy.noticeOwed(due, CopyError.RECORDS_UNREADABLE))
-        val written = AutoCopy.afterSuccess(due, nov27, lacking = true)
+        val written = AutoCopy.afterSuccess(due, nov27, AutoCopy.outcome(lacking) as CopyText.Lacking)
         assertEquals("2026-11-27", written.lastCopy)
         assertEquals(CopyError.RECORDS_UNREADABLE, AutoCopy.lastError(written))
         assertFalse(AutoCopy.due(written, nov27), "a copy lacking records is a copy written")
@@ -367,9 +371,30 @@ class AutoCopyTest {
     // SPEC:R148 SPEC:R141
     @Test fun `R148 beside 20 copies of phone none goes while records are unreadable, and the 6 oldest go after the first whole copy`() {
         val phone = (0 until 20).map { AutoCopy.fileName(nov27.plusDays(-it), "phone") }.reversed()
-        assertEquals(emptyList(), AutoCopy.stale(phone, "phone", nov27, lacking = true))
-        assertEquals(phone.take(6), AutoCopy.stale(phone, "phone", nov27, lacking = false))
-        assertEquals(phone.take(6), AutoCopy.stale(phone, "phone", nov27))
+        assertEquals(emptyList(), AutoCopy.stale(phone, "phone", nov27, CopyText.Lacking(plain, CopyError.RECORDS_UNREADABLE)))
+        assertEquals(phone.take(6), AutoCopy.stale(phone, "phone", nov27, whole))
+        // nothing written, nothing deleted
+        assertEquals(emptyList(), AutoCopy.stale(phone, "phone", nov27, CopyText.Paused))
+        assertEquals(emptyList(), AutoCopy.stale(phone, "phone", nov27, CopyText.Failed(CopyError.NOT_WRITTEN)))
+    }
+
+    // SPEC:R148 SPEC:R130
+    @Test fun `R148 an export that left 1 record out, with none unreadable, is a copy lacking records, RECORDS_LEFT_OUT, and of 20 copies none goes`() {
+        val file = com.hazia.tesoriere.engine.BackupFile(exportedAt = "2026-11-27", activeProfileId = "p-1", profiles = emptyList())
+        val leftOut = com.hazia.tesoriere.data.Export.Ok(file, plain, 1, 0, emptyList())
+        val out = AutoCopy.outcome(leftOut)
+        assertEquals(CopyText.Lacking(plain, CopyError.RECORDS_LEFT_OUT), out)
+        val phone = (0 until 20).map { AutoCopy.fileName(nov27.plusDays(-it), "phone") }.reversed()
+        assertEquals(emptyList(), AutoCopy.stale(phone, "phone", nov27, out))
+        val due = weekly.copy(lastCopy = "2026-11-13")
+        val written = AutoCopy.afterSuccess(due, nov27, out as CopyText.Lacking)
+        assertEquals("records_left_out", written.lastError)
+        assertEquals(CopyError.RECORDS_LEFT_OUT, AutoCopy.lastError(written))
+        // one run with the copies lacking unreadable records, apart from failures
+        assertFalse(AutoCopy.noticeOwed(written, CopyError.RECORDS_UNREADABLE))
+        assertTrue(AutoCopy.noticeOwed(written, CopyError.FOLDER_UNREACHABLE))
+        // a repaired record is carried: the copy is whole
+        assertEquals(CopyText.Ready(plain), AutoCopy.outcome(leftOut.copy(leftOut = 0, repaired = 2)))
     }
 
     // SPEC:R148 SPEC:R132

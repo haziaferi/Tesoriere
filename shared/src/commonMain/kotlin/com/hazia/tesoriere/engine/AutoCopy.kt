@@ -75,9 +75,16 @@ enum class CopyError(val token: String) {
     /**
      * A notice code, not a failure: the export named records the store cannot read (SPEC R130,
      * R141), and the copy was written of everything else ([CopyText.Lacking], AutoCopy.afterSuccess
-     * with `lacking`); while it lasts no old copy is deleted, so those that still hold the records stay.
+     * with it); while it lasts no old copy is deleted, so those that still hold the records stay.
      */
     RECORDS_UNREADABLE("records_unreadable"),
+
+    /**
+     * A notice code, not a failure: the export left records out that would not read back (SPEC
+     * R130), such as a ledger row whose key no longer reads, a 0.00 payment or a Trash item, and
+     * none the store cannot read; the copy is written of the rest and kept as RECORDS_UNREADABLE is.
+     */
+    RECORDS_LEFT_OUT("records_left_out"),
 
     /** A password was handed in for copies whose schedule holds none sealed: the caller saves it with withPassword first. */
     PASSWORD_NOT_SAVED("password_not_saved"),
@@ -106,11 +113,12 @@ sealed interface CopyText {
     data class Ready(val text: String) : CopyText
 
     /**
-     * The backup's text from an export that names records the store cannot read (SPEC R141): it
-     * is copied all the same (AutoCopy.contents), recorded with AutoCopy.afterSuccess `lacking`,
-     * owing RECORDS_UNREADABLE's notice, and AutoCopy.stale deletes no old copy while it lasts.
+     * The backup's text from an export that lacks records: ones the store cannot read (SPEC R141),
+     * [notice] RECORDS_UNREADABLE, or ones it left out (SPEC R130), RECORDS_LEFT_OUT. It is copied
+     * all the same (AutoCopy.contents), recorded with AutoCopy.afterSuccess, owing [notice]'s
+     * notice, and AutoCopy.stale deletes no old copy after it.
      */
-    data class Lacking(val text: String) : CopyText
+    data class Lacking(val text: String, val notice: CopyError) : CopyText
 
     /** A failure to record (AutoCopy.afterFailure). */
     data class Failed(val error: CopyError) : CopyText
@@ -232,12 +240,14 @@ object AutoCopy {
      * The names in [names] to delete after a copy on [today]: this device's own copies beyond the
      * newest [KEPT], oldest first, those dated after today (a clock that ran ahead) counted as the
      * oldest of all, and never the day's own. A name that is not exactly one of [fileName]'s for
-     * this device, a `YYYY-MM-DD` day and this device's name, is never named. None at all while the
-     * copy just written was [lacking] records the store cannot read (CopyText.Lacking), so the older
-     * copies that still hold them stay; deleting resumes with the first whole copy.
+     * this device, a `YYYY-MM-DD` day and this device's name, is never named. [written] is what was
+     * just copied, [outcome]'s answer for the export: only after a whole copy ([CopyText.Ready]) is
+     * any name given; after a copy lacking records ([CopyText.Lacking]), or nothing written, none,
+     * so the older copies that still hold the records stay and the folder grows by one copy a run.
+     * There is no default, so no caller deletes copies by leaving it out.
      */
-    fun stale(names: List<String>, device: String, today: LocalDate, lacking: Boolean = false): List<String> {
-        if (lacking) return emptyList()
+    fun stale(names: List<String>, device: String, today: LocalDate, written: CopyText): List<String> {
+        if (written !is CopyText.Ready) return emptyList()
         val tail = "-${deviceName(device)}$SUFFIX"
         val ours = names.distinct().mapNotNull { n ->
             if (!n.startsWith(PREFIX) || !n.endsWith(tail) || n.length < PREFIX.length + tail.length) return@mapNotNull null
@@ -249,12 +259,17 @@ object AutoCopy {
 
     /**
      * The backup a copy writes, from the export (SPEC R130, R148): its plain text when the export
-     * gave a whole file; the same text as [CopyText.Lacking] when it named records the store cannot
-     * read, copied all the same and owing RECORDS_UNREADABLE's notice (owner, 2026-11-27); NOT_MADE
-     * when the export gave a code in place of a file or found no Profile.
+     * gave a whole file; the same text as [CopyText.Lacking] when the file lacks records, copied all
+     * the same (owner, 2026-11-27): RECORDS_UNREADABLE when the export named records the store
+     * cannot read, else RECORDS_LEFT_OUT when it left any out; a record repaired is carried, so
+     * it lacks nothing. NOT_MADE when the export gave a code in place of a file or found no Profile.
      */
     fun outcome(export: Export): CopyText = when (export) {
-        is Export.Ok -> if (export.unreadable.isEmpty()) CopyText.Ready(export.text) else CopyText.Lacking(export.text)
+        is Export.Ok -> when {
+            export.unreadable.isNotEmpty() -> CopyText.Lacking(export.text, CopyError.RECORDS_UNREADABLE)
+            export.leftOut > 0 -> CopyText.Lacking(export.text, CopyError.RECORDS_LEFT_OUT)
+            else -> CopyText.Ready(export.text)
+        }
         is Export.Refused, Export.Empty -> CopyText.Failed(CopyError.NOT_MADE)
     }
 
@@ -279,11 +294,11 @@ object AutoCopy {
 
     /**
      * [s] after a copy written on [today]: its day recorded, the failure or pause and its notice
-     * cleared; for a copy [lacking] records the store cannot read, RECORDS_UNREADABLE recorded as a
-     * notice code instead and the run's notice marked given, as for a failure.
+     * cleared; for a copy [lacking] records, its notice code recorded instead (RECORDS_UNREADABLE
+     * or RECORDS_LEFT_OUT) and the run's notice marked given, as for a failure.
      */
-    fun afterSuccess(s: CopySchedule, today: LocalDate, lacking: Boolean = false): CopySchedule =
-        if (lacking) s.copy(lastCopy = today.toString(), lastError = CopyError.RECORDS_UNREADABLE.token, failureNotified = true)
+    fun afterSuccess(s: CopySchedule, today: LocalDate, lacking: CopyText.Lacking? = null): CopySchedule =
+        if (lacking != null) s.copy(lastCopy = today.toString(), lastError = lacking.notice.token, failureNotified = true)
         else s.copy(lastCopy = today.toString(), lastError = null, failureNotified = false)
 
     /** [s] after a failed copy: [error] recorded and the run's notice marked given; the last good copy kept. */
@@ -311,7 +326,7 @@ object AutoCopy {
     /** Which run of notices [e] belongs to: pauses, copies lacking records, or failures (SPEC R148). */
     private fun run(e: CopyError?): Int = when (e) {
         CopyError.PAUSED_NEEDS_PASSWORD -> 1
-        CopyError.RECORDS_UNREADABLE -> 2
+        CopyError.RECORDS_UNREADABLE, CopyError.RECORDS_LEFT_OUT -> 2
         else -> 0
     }
 }
