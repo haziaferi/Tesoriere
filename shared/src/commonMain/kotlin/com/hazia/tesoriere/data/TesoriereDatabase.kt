@@ -114,34 +114,56 @@ internal suspend fun RoomDatabase.Builder<TesoriereDatabase>.openFirstConnection
  * [all], or when one of its rows holds a value that cannot be read (SPEC R141), every row of [ids]
  * that [one] can read, in the same order.
  */
-private suspend fun <T> readable(all: suspend () -> List<T>, ids: suspend () -> List<String>, one: suspend (String) -> T?): List<T> =
+private suspend fun <T> readable(
+    all: suspend () -> List<T>, ids: suspend () -> List<String>, one: suspend (String) -> T?, ok: (T) -> Boolean = { true },
+): List<T> =
     try {
-        all()
+        all().filter(ok)
     } catch (_: UnreadableStoredValue) {
         ids().mapNotNull { id ->
             try {
-                one(id)
+                one(id)?.takeIf(ok)
             } catch (_: UnreadableStoredValue) {
                 null
             }
         }
     }
 
-/** The ids of [ids] whose row [one] cannot read (SPEC R141); none while [all] reads. */
-private suspend fun <T> unreadable(all: suspend () -> List<T>, ids: suspend () -> List<String>, one: suspend (String) -> T?): List<String> =
-    try {
+/**
+ * The ids of [ids] whose row [one] cannot read, or reads holding a figure [ok] refuses (SPEC R141);
+ * none while [all] reads and [ok] takes every row.
+ */
+private suspend fun <T> unreadable(
+    all: suspend () -> List<T>, ids: suspend () -> List<String>, one: suspend (String) -> T?, ok: (T) -> Boolean = { true },
+): List<String> {
+    val whole = try {
         all()
-        emptyList()
     } catch (_: UnreadableStoredValue) {
-        ids().filter { id ->
-            try {
-                one(id)
-                false
-            } catch (_: UnreadableStoredValue) {
-                true
-            }
+        null
+    }
+    if (whole != null && whole.all(ok)) return emptyList()
+    return ids().filter { id ->
+        try {
+            one(id)?.let { !ok(it) } ?: false
+        } catch (_: UnreadableStoredValue) {
+            true
         }
     }
+}
+
+/*
+ * Rates and hours a record holds as infinity cannot be read either (SPEC R141): SQLite keeps an
+ * infinity, which no backup file can carry and no figure can be worked out from, and keeps no number
+ * as nothing. Such a record reads as missing, is named, and is kept as stored, as one that cannot be
+ * read is; a write holding one is refused ([ProfileProblem.NOT_FINITE]).
+ */
+private fun Shift.finite() = hours.isFinite()
+private fun Transaction.finite() = hoursWorked?.isFinite() ?: true
+private fun Account.finite() = (apr?.isFinite() ?: true) && (interestRate?.isFinite() ?: true)
+
+/** Whether every rate and hours figure [d] holds is a finite number, as the store keeps them (SPEC R141). */
+internal fun finiteFigures(d: ProfileData): Boolean =
+    d.shifts.all { it.finite() } && d.transactions.all { it.finite() } && d.accounts.all { it.finite() }
 
 /** [read]'s record, or null when it holds a value that cannot be read (SPEC R141). */
 private suspend fun <T> readableOrNull(read: suspend () -> T?): T? =
@@ -271,9 +293,9 @@ internal interface TesoriereDao {
             goals = readable({ goals(id) }, { goalIds(id) }, { goal(it) }),
             categories = readable({ categories(id) }, { categoryIds(id) }, { category(it) }),
             recurringExpenses = readable({ recurringExpenses(id) }, { recurringExpenseIds(id) }, { recurringExpense(it) }),
-            accounts = readable({ accounts(id) }, { accountIds(id) }, { account(it) }),
-            transactions = readable({ transactions(id) }, { transactionIds(id) }, { transaction(it) }),
-            shifts = readable({ shifts(id) }, { shiftIds(id) }, { shift(it) }),
+            accounts = readable({ accounts(id) }, { accountIds(id) }, { account(it) }, { it.finite() }),
+            transactions = readable({ transactions(id) }, { transactionIds(id) }, { transaction(it) }, { it.finite() }),
+            shifts = readable({ shifts(id) }, { shiftIds(id) }, { shift(it) }, { it.finite() }),
             payments = readable({ payments(id) }, { paymentIds(id) }, { payment(it) }),
             receiptSettings = readableOrNull { receiptSettings(id) },
         )
@@ -287,12 +309,11 @@ internal interface TesoriereDao {
         val out = ArrayList<UnreadableRecord>()
         fun list(kind: StoredKind, ids: List<String>) = ids.forEach { out += UnreadableRecord(id, kind, it) }
         fun row(kind: StoredKind, unreadable: Boolean) { if (unreadable) out += UnreadableRecord(id, kind, null) }
-        list(StoredKind.GOAL, unreadable({ goals(id) }, { goalIds(id) }, { goal(it) }))
-        list(StoredKind.CATEGORY, unreadable({ categories(id) }, { categoryIds(id) }, { category(it) }))
+        // a Goal's and a category's fields that may fail to read hold nothing when they do (SPEC R141), so they are never named
         list(StoredKind.RECURRING_EXPENSE, unreadable({ recurringExpenses(id) }, { recurringExpenseIds(id) }, { recurringExpense(it) }))
-        list(StoredKind.ACCOUNT, unreadable({ accounts(id) }, { accountIds(id) }, { account(it) }))
-        list(StoredKind.TRANSACTION, unreadable({ transactions(id) }, { transactionIds(id) }, { transaction(it) }))
-        list(StoredKind.SHIFT, unreadable({ shifts(id) }, { shiftIds(id) }, { shift(it) }))
+        list(StoredKind.ACCOUNT, unreadable({ accounts(id) }, { accountIds(id) }, { account(it) }, { it.finite() }))
+        list(StoredKind.TRANSACTION, unreadable({ transactions(id) }, { transactionIds(id) }, { transaction(it) }, { it.finite() }))
+        list(StoredKind.SHIFT, unreadable({ shifts(id) }, { shiftIds(id) }, { shift(it) }, { it.finite() }))
         list(StoredKind.PAYMENT, unreadable({ payments(id) }, { paymentIds(id) }, { payment(it) }))
         row(StoredKind.SETTINGS, unreadableRow(settingsRows(id)) { settings(id) })
         row(StoredKind.IMPORT_MEMORY, unreadableRow(importStateRows(id)) { importState(id) })
@@ -317,6 +338,9 @@ internal interface TesoriereDao {
             d.transactions.map { it.id }, d.shifts.map { it.id }, d.payments.map { it.id },
         ).any { it.size != it.toSet().size }
         if (twice) return ProfileProblem.ID_TWICE
+        // SQLite would keep an infinity no file can carry, and no number as nothing, which a column
+        // that must hold one refuses mid-write (SPEC R141)
+        if (!finiteFigures(d)) return ProfileProblem.NOT_FINITE
         val clash = taken(d.goals.map { it.id }) { goalsElsewhere(id, it) } ||
             taken(d.categories.map { it.id }) { categoriesElsewhere(id, it) } ||
             taken(d.recurringExpenses.map { it.id }) { recurringExpensesElsewhere(id, it) } ||
@@ -347,13 +371,13 @@ internal interface TesoriereDao {
         deleteRecurringExpensesExcept(id, unreadable({ recurringExpenses(id) }, { recurringExpenseIds(id) }, { recurringExpense(it) }).filter { it !in inExpenses })
         insertRecurringExpenses(d.recurringExpenses.map { it.copy(profileId = id) })
         val inAccounts = d.accounts.mapTo(HashSet()) { it.id }
-        deleteAccountsExcept(id, unreadable({ accounts(id) }, { accountIds(id) }, { account(it) }).filter { it !in inAccounts })
+        deleteAccountsExcept(id, unreadable({ accounts(id) }, { accountIds(id) }, { account(it) }, { it.finite() }).filter { it !in inAccounts })
         insertAccounts(d.accounts.map { it.copy(profileId = id) })
         val inTransactions = d.transactions.mapTo(HashSet()) { it.id }
-        deleteTransactionsExcept(id, unreadable({ transactions(id) }, { transactionIds(id) }, { transaction(it) }).filter { it !in inTransactions })
+        deleteTransactionsExcept(id, unreadable({ transactions(id) }, { transactionIds(id) }, { transaction(it) }, { it.finite() }).filter { it !in inTransactions })
         insertTransactions(d.transactions.map { it.copy(profileId = id) })
         val inShifts = d.shifts.mapTo(HashSet()) { it.id }
-        deleteShiftsExcept(id, unreadable({ shifts(id) }, { shiftIds(id) }, { shift(it) }).filter { it !in inShifts })
+        deleteShiftsExcept(id, unreadable({ shifts(id) }, { shiftIds(id) }, { shift(it) }, { it.finite() }).filter { it !in inShifts })
         insertShifts(d.shifts.map { it.copy(profileId = id) })
         val inPayments = d.payments.mapTo(HashSet()) { it.id }
         deletePaymentsExcept(id, unreadable({ payments(id) }, { paymentIds(id) }, { payment(it) }).filter { it !in inPayments })

@@ -47,6 +47,26 @@ class HourlyIncomeTest {
 
     // ---- logged hours ----
 
+    // SPEC:R80 SPEC:R141
+    @Test fun `R80 a shift of infinite hours or of no number is refused with HOURS_NOT_FINITE, logged or edited, and a payday of them too`() {
+        val d = hourly().shift(3, 6.0)
+        val six = d.shifts.single()
+        for (hours in listOf(Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)) {
+            val bad = Shift("h-bad", d.profileId, LocalDate(2026, 11, 4), hours, rate)
+            assertEquals(Hourly.ShiftProblem.HOURS_NOT_FINITE, Hourly.shiftProblem(bad), "$hours")
+            assertEquals(d, Hourly.logShift(d, bad), "$hours")
+            assertEquals(d, Hourly.editShift(d, six.copy(hours = hours)), "$hours")
+        }
+        assertNull(Hourly.shiftProblem(six))
+        // shifts that add up past any number make a payday that cannot be confirmed
+        val huge = listOf(six.copy(hours = Double.MAX_VALUE), six.copy(id = "h-2", hours = Double.MAX_VALUE))
+        val payday = com.hazia.tesoriere.engine.Payday(LocalDate(2026, 11, 13), huge)
+        assertEquals(Hourly.PaydayProblem.HOURS_NOT_FINITE, Hourly.confirmPaydayProblem(payday, cents("100.00")))
+        val withHuge = d.copy(shifts = huge)
+        assertEquals(withHuge, Hourly.confirmPayday(withHuge, payday, cents("100.00"), clock, "t-pay"))
+        assertEquals(Hourly.PaydayProblem.NO_AMOUNT, Hourly.confirmPaydayProblem(payday, 0))
+    }
+
     // SPEC:R80
     @Test fun `R80 a 6-hour shift at 20_00 on 3 November 2026 moves nothing`() {
         val d = hourly()

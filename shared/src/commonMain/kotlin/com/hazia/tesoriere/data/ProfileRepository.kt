@@ -67,6 +67,15 @@ enum class ProfileProblem {
 
     /** The Profile written holds one id twice in one kind of record (SPEC R141). */
     ID_TWICE,
+
+    /** A shift's hours, a row's hours worked, or an Account's APR or interest rate is infinity or not a number (SPEC R141). */
+    NOT_FINITE,
+
+    /**
+     * The Profile to delete holds records the store cannot read (SPEC R141), which the delete would
+     * take with it: the user is told first, and the app deletes again once they agree (SPEC R140).
+     */
+    UNREADABLE_RECORDS,
 }
 
 /** What went wrong in the forgotten-PIN erase (SPEC R147); how it reads is the design pass's (SPEC R16). */
@@ -88,6 +97,15 @@ sealed interface Update {
 
     /** Nothing written. */
     data class Refused(val problem: ProfileProblem) : Update
+}
+
+/** What deleting a Profile gives (SPEC R126, R140). */
+sealed interface ProfileDelete {
+    /** The Profile is in the Trash. */
+    data object Deleted : ProfileDelete
+
+    /** Nothing written: why, and for UNREADABLE_RECORDS the records the delete would take for good (SPEC R141). */
+    data class Refused(val problem: ProfileProblem, val unreadable: List<UnreadableRecord> = emptyList()) : ProfileDelete
 }
 
 /** What a restore from the Trash gives (SPEC R122, R126). */
@@ -119,8 +137,11 @@ sealed interface TrashRestore {
  */
 data class StoredLock(val state: LockState, val row: AppLock?)
 
-/** The kinds of record the store keeps for a Profile (SPEC R141). */
-enum class StoredKind { GOAL, CATEGORY, RECURRING_EXPENSE, ACCOUNT, TRANSACTION, SHIFT, PAYMENT, SETTINGS, IMPORT_MEMORY, RECEIPT_SETTINGS }
+/**
+ * The kinds of record the store keeps for a Profile that can fail to read (SPEC R141). A Goal's and a
+ * category's only fields that can fail, a Goal's mode and day, read as nothing, so neither is a kind.
+ */
+enum class StoredKind { RECURRING_EXPENSE, ACCOUNT, TRANSACTION, SHIFT, PAYMENT, SETTINGS, IMPORT_MEMORY, RECEIPT_SETTINGS }
 
 /**
  * A record of Profile [profileId] that the store holds but cannot read (SPEC R141), which no backup
@@ -249,17 +270,26 @@ class ProfileRepository(private val db: TesoriereDatabase, private val clock: Cl
      * Deletes Profile [profileId] whole to the Trash (SPEC R126, R140), in one transaction: its item
      * dated today, its records gone, the receipt folder freed when it held it (SPEC R112), and the
      * first remaining Profile by name opened when it was the open one. Never the last Profile.
+     * While the Profile holds records the store cannot read (SPEC R141), which no Trash item can
+     * hold and the delete would take for good, nothing is written and they are named,
+     * UNREADABLE_RECORDS; once the user has been told and agrees, the app deletes again with
+     * [agreedToDelete], the very list the refusal named. A list that is not the store's at the
+     * delete, read in the same transaction, is refused again with the store's (as Backup.apply, SPEC R143).
      */
-    suspend fun deleteProfile(profileId: String): ProfileProblem? = write { dao ->
-        val d = dao.load(profileId) ?: return@write ProfileProblem.NO_SUCH_PROFILE
+    suspend fun deleteProfile(profileId: String, agreedToDelete: List<UnreadableRecord> = emptyList()): ProfileDelete = write { dao ->
+        val d = dao.load(profileId) ?: return@write ProfileDelete.Refused(ProfileProblem.NO_SUCH_PROFILE)
         val remaining = dao.profiles().filter { it.id != profileId }
-        if (remaining.isEmpty()) return@write ProfileProblem.LAST_PROFILE
+        if (remaining.isEmpty()) return@write ProfileDelete.Refused(ProfileProblem.LAST_PROFILE)
+        val unreadable = dao.unreadableRecords(profileId)
+        if (unreadable.isNotEmpty() && unreadable.toSet() != agreedToDelete.toSet()) {
+            return@write ProfileDelete.Refused(ProfileProblem.UNREADABLE_RECORDS, unreadable)
+        }
         val app = dao.appState() ?: AppState(activeProfileId = remaining.first().id)
         val (freed, payload) = Trash.deleteProfile(app, d)
         dao.insertTrashItem(TrashItem(ids(), profileId, PROFILE_KIND, d.profile.name, clock.today().toString(), Trash.encode(payload)))
         dao.deleteProfileWhole(profileId)
         dao.upsertAppState(freed.copy(activeProfileId = if (freed.activeProfileId == profileId) remaining.first().id else freed.activeProfileId))
-        null
+        ProfileDelete.Deleted
     }
 
     // ---- the Trash ------------------------------------------------------------------------------
@@ -393,7 +423,13 @@ class ProfileRepository(private val db: TesoriereDatabase, private val clock: Cl
         val app = dao.appState() ?: AppState(activeProfileId = all.first().profileId)
         val unreadable = all.flatMap { dao.unreadableRecords(it.profileId) }
         val (file, leftOut, repaired) = Backup.readable(all, dao.trash(), app.activeProfileId, app.receiptProfileId, exportedAt)
-        val text = Backup.encode(file)
+        // a figure no file can hold, such as an infinity, reads as missing in load (SPEC R141); should
+        // one still reach the file, it is a fault of no one record, and the export never throws
+        val text = try {
+            Backup.encode(file)
+        } catch (_: IllegalArgumentException) {
+            return@write Export.Refused(BackupProblem.DAMAGED)
+        }
         when (val r = Backup.validate(text)) {
             is BackupResult.Ok -> Export.Ok(file, text, leftOut, repaired, unreadable)
             is BackupResult.Refused -> Export.Refused(r.problem)

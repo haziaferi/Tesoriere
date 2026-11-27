@@ -1,6 +1,7 @@
 package com.hazia.tesoriere
 
 import com.hazia.tesoriere.data.Export
+import com.hazia.tesoriere.data.ProfileDelete
 import com.hazia.tesoriere.data.ProfileProblem
 import com.hazia.tesoriere.data.TrashRestore
 import com.hazia.tesoriere.data.ProfileRepository
@@ -476,6 +477,127 @@ class StorageSafetyTest {
             assertEquals(Applied.Restored, Backup.apply(db, b, nov26, agreedToDelete = refused.unreadable))
             assertEquals(listOf("C"), repo.profiles().map { it.name })
             assertTrue(db.dao().paymentIds("p-a").isEmpty())
+        }
+    }
+
+    // SPEC:R140 SPEC:R141 SPEC:R126
+    @Test fun `R140 deleting Profile A whose payment pay-2 cannot be read is refused naming it, and goes ahead only with the agreement to what the store holds then`() {
+        val file = TestDb.file()
+        withRepo(file) { repo, _ -> repo.save(profileA(repo.createProfile("A", "p-a"))); repo.createProfile("B", "p-b") }
+        TestDb.damage(file, "UPDATE payments SET parts = '[{oops' WHERE id = 'pay-2'")
+        val pay2 = listOf(UnreadableRecord("p-a", StoredKind.PAYMENT, "pay-2"))
+        withRepo(file) { repo, db ->
+            val before = repo.load("p-a")
+            val app = repo.appState()
+            assertEquals(ProfileDelete.Refused(ProfileProblem.UNREADABLE_RECORDS, pay2), repo.deleteProfile("p-a"))
+            assertEquals(listOf("A", "B"), repo.profiles().map { it.name })
+            assertEquals(before, repo.load("p-a"))
+            assertEquals(app, repo.appState())
+            assertTrue(repo.trash().isEmpty())
+            assertEquals(listOf("pay-1", "pay-2"), db.dao().paymentIds("p-a"))
+        }
+        TestDb.damage(file, "UPDATE payments SET parts = '[{oops' WHERE id = 'pay-1'")
+        withRepo(file) { repo, db ->
+            val both = listOf(UnreadableRecord("p-a", StoredKind.PAYMENT, "pay-1"), UnreadableRecord("p-a", StoredKind.PAYMENT, "pay-2"))
+            assertEquals(ProfileDelete.Refused(ProfileProblem.UNREADABLE_RECORDS, both), repo.deleteProfile("p-a", agreedToDelete = pay2))
+            assertTrue(repo.trash().isEmpty())
+            assertEquals(ProfileDelete.Deleted, repo.deleteProfile("p-a", agreedToDelete = both))
+            assertEquals(listOf("B"), repo.profiles().map { it.name })
+            assertEquals("p-a", repo.trash().single().profileId)
+            assertTrue(db.dao().paymentIds("p-a").isEmpty(), "the records agreed to go with the delete, held by no Trash item")
+        }
+    }
+
+    /** [d] with a 0.20 APR card, a row of 4 hours worked and an 8-hour shift. */
+    private fun withFigures(d: ProfileData) = d.copy(
+        accounts = listOf(com.hazia.tesoriere.model.Account("card", d.profileId, "Card", type = com.hazia.tesoriere.model.AccountType.CREDIT, apr = 0.2)),
+        transactions = listOf(com.hazia.tesoriere.model.Transaction("t-h", d.profileId, nov26, at, amount = cents("48.00"), key = "savings", targetLabel = "Savings", isIncome = true, hoursWorked = 4.0, rate = cents("12.00"))),
+        shifts = listOf(com.hazia.tesoriere.model.Shift("s-1", d.profileId, nov26, 8.0, cents("12.00"))),
+    )
+
+    // SPEC:R141 SPEC:R130
+    @Test fun `R141 an infinity stored in a card's APR, a row's hours worked and a shift's hours is named unreadable, never stops the export, and is kept by the next write`() {
+        val file = TestDb.file()
+        withRepo(file) { repo, _ -> repo.save(withFigures(profileA(repo.createProfile("A", "p-a")))) }
+        TestDb.damage(
+            file,
+            "UPDATE accounts SET apr = 9e999 WHERE id = 'card'",
+            "UPDATE transactions SET hoursWorked = -9e999 WHERE id = 't-h'",
+            "UPDATE shifts SET hours = 9e999 WHERE id = 's-1'",
+        )
+        withRepo(file) { repo, db ->
+            val d = repo.load("p-a")!!
+            assertTrue(d.accounts.isEmpty() && d.transactions.isEmpty() && d.shifts.isEmpty())
+            val ok = assertIs<Export.Ok>(repo.backupFile(nov26))
+            assertEquals(
+                listOf(
+                    UnreadableRecord("p-a", StoredKind.ACCOUNT, "card"), UnreadableRecord("p-a", StoredKind.TRANSACTION, "t-h"),
+                    UnreadableRecord("p-a", StoredKind.SHIFT, "s-1"),
+                ),
+                ok.unreadable,
+            )
+            assertIs<BackupResult.Ok>(Backup.validate(ok.text))
+            assertIs<Update.Saved>(repo.update("p-a") { it.copy(savings = it.savings.copy(amount = cents("999.00"))) })
+            assertEquals(listOf("card"), db.dao().accountIds("p-a"))
+            assertEquals(listOf("t-h"), db.dao().transactionIds("p-a"))
+            assertEquals(listOf("s-1"), db.dao().shiftIds("p-a"))
+        }
+    }
+
+    // SPEC:R141
+    @Test fun `R141 a write holding a shift of no number of hours, or a card of infinite APR, is refused with NOT_FINITE and writes nothing`() {
+        withRepo(TestDb.file()) { repo, db ->
+            repo.save(withFigures(profileA(repo.createProfile("A", "p-a"))))
+            val before = repo.load("p-a")
+            val nan = repo.update("p-a") { it.copy(shifts = it.shifts.map { s -> s.copy(hours = Double.NaN) }) }
+            assertEquals(Update.Refused(ProfileProblem.NOT_FINITE), nan)
+            val inf = repo.update("p-a") { it.copy(accounts = it.accounts.map { a -> a.copy(apr = Double.POSITIVE_INFINITY) }) }
+            assertEquals(Update.Refused(ProfileProblem.NOT_FINITE), inf)
+            assertEquals(before, repo.load("p-a"))
+            assertEquals(8.0, db.dao().shift("s-1")!!.hours)
+        }
+    }
+
+    // SPEC:R141 SPEC:R130
+    @Test fun `R141 a recurring expense, settings and receipt settings that cannot be read are each named by their kind`() {
+        val file = TestDb.file()
+        withRepo(file) { repo, _ ->
+            repo.save(profileA(repo.createProfile("A", "p-a")).let { d ->
+                d.copy(recurringExpenses = listOf(com.hazia.tesoriere.model.RecurringExpense("r-1", "p-a", "Rent", amount = cents("500.00"),
+                    cadence = com.hazia.tesoriere.model.Cadence.MONTHLY, categoryId = "groc", firstDueDate = nov26, dueDate = nov26)))
+            })
+        }
+        TestDb.damage(
+            file,
+            "UPDATE recurring_expenses SET cadence = 'sometimes' WHERE id = 'r-1'",
+            "UPDATE settings SET incomeCadence = 'often' WHERE profileId = 'p-a'",
+            "UPDATE receipt_settings SET pickup = 'by owl' WHERE profileId = 'p-a'",
+        )
+        withRepo(file) { repo, _ ->
+            val ok = assertIs<Export.Ok>(repo.backupFile(nov26))
+            assertEquals(
+                listOf(
+                    UnreadableRecord("p-a", StoredKind.RECURRING_EXPENSE, "r-1"), UnreadableRecord("p-a", StoredKind.SETTINGS, null),
+                    UnreadableRecord("p-a", StoredKind.RECEIPT_SETTINGS, null),
+                ),
+                ok.unreadable,
+            )
+        }
+    }
+
+    // SPEC:R121
+    @Test fun `R121 delete forever takes the item out of the Trash, moves no money and leaves the other items`() {
+        withRepo(TestDb.file()) { repo, _ ->
+            repo.save(profileA(repo.createProfile("A", "p-a")))
+            val car = assertNotNull(repo.deleteToTrash("p-a", "goal", "Car") { d -> Trash.deleteGoal(d, "car", returnSaved = true, clock, Ids("g")::next) })
+            val groc = assertNotNull(repo.deleteToTrash("p-a", "category", "Groceries") { d -> Trash.deleteCategory(d, "groc") })
+            val before = repo.load("p-a")
+            repo.deleteForever(car.id)
+            assertEquals(listOf(groc.id), repo.trash().map { it.id })
+            assertEquals(before, repo.load("p-a"))
+            repo.deleteForever("tr-none")
+            assertEquals(listOf(groc.id), repo.trash().map { it.id })
+            assertEquals(TrashRestore.NotRestorable, repo.restore(car.id))
         }
     }
 

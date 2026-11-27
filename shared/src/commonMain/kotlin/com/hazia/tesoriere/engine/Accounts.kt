@@ -75,7 +75,8 @@ object Accounts {
     fun loanMath(principal: Money, annualRate: Double, termMonths: Int, rateType: RateType): LoanMath {
         val p = maxOf(0L, principal)
         val n = maxOf(1, termMonths)
-        val i = maxOf(0.0, annualRate) / 12.0
+        // a rate of infinity or no number reads as none, so the calculator never throws on what is typed
+        val i = (if (annualRate.isFinite()) maxOf(0.0, annualRate) else 0.0) / 12.0
         if (rateType == RateType.INTEREST_ONLY) {
             val monthly = (p * i).roundToLong()
             return LoanMath(monthly, monthly * n, monthly * n, principal, n)
@@ -102,6 +103,8 @@ object Accounts {
         d: ProfileData, principal: Money, annualRate: Double, termMonths: Int, rateType: RateType,
         accountName: String, expenseName: String, categoryId: String, autoUpdate: Boolean, clock: Clock, ids: () -> String,
     ): ProfileData {
+        // a rate of infinity or no number cannot be kept in the store (SPEC R141)
+        if (!annualRate.isFinite()) return d
         val m = loanMath(principal, annualRate, termMonths, rateType)
         val today = clock.today()
         val anchorDay = today.day

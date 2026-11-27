@@ -92,6 +92,23 @@ class AccountsTest {
         assertTrue(Accounts.finished(ended, a))                                  // a Loan is finished when its payment is
     }
 
+    // SPEC:R86 SPEC:R90 SPEC:R141
+    @Test fun `R86 an APR or interest rate of infinity or no number is RATE_NOT_FINITE, takes no loan and the calculator does not throw`() {
+        val clock = TestClock(today)
+        val d = world()
+        for (rate in listOf(Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)) {
+            val draft = card(apr = rate)
+            assertEquals(AccountEditing.AccountProblem.RATE_NOT_FINITE, AccountEditing.problem(d, draft), "$rate")
+            assertEquals(d, AccountEditing.save(d, draft, clock) { Ids().next() }, "$rate")
+            val loan = Account("ln", Fixture.PROFILE, "Loan", type = AccountType.LOAN, interestRate = rate)
+            assertEquals(AccountEditing.AccountProblem.RATE_NOT_FINITE, AccountEditing.problem(d, loan), "$rate")
+            assertEquals(d, Accounts.getLoan(d, cents("9,800.00"), rate, 48, RateType.FIXED, "", "", "c1", false, clock) { Ids().next() }, "$rate")
+            // read as no rate, as 0 percent
+            assertEquals(cents("250.00"), Accounts.loanMath(cents("12,000.00"), rate, 48, RateType.FIXED).monthly, "$rate")
+        }
+        assertNull(AccountEditing.problem(d, card(apr = 0.2)))
+    }
+
     // SPEC:R91 SPEC:R67
     @Test fun `R91 taking a loan with no category, or one that does not exist, creates nothing`() {
         val clock = TestClock(today)

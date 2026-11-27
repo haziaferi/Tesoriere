@@ -1,5 +1,6 @@
 package com.hazia.tesoriere
 
+import com.hazia.tesoriere.data.ProfileDelete
 import com.hazia.tesoriere.data.ProfileProblem
 import com.hazia.tesoriere.data.Export
 import com.hazia.tesoriere.data.ProfileRepository
@@ -96,7 +97,7 @@ class RepositoryTest {
         assertEquals("Joint", repo.load("p-house")!!.profile.name)
 
         // deleting the open one opens the first remaining, and keeps it whole in the Trash
-        assertNull(repo.deleteProfile("p-ana"))
+        assertEquals(ProfileDelete.Deleted, repo.deleteProfile("p-ana"))
         assertEquals("p-house", repo.appState()!!.activeProfileId)
         assertEquals(listOf("Joint"), repo.profiles().map { it.name })
         assertNull(repo.load("p-ana"))
@@ -106,8 +107,8 @@ class RepositoryTest {
         assertEquals(nov26.toString(), item.deletedOn)
         assertEquals(cents("300.00"), Trash.decode(item.payload)!!.profile!!.savings.amount)
 
-        assertEquals(ProfileProblem.LAST_PROFILE, repo.deleteProfile("p-house"))
-        assertEquals(ProfileProblem.NO_SUCH_PROFILE, repo.deleteProfile("p-ana"))
+        assertEquals(ProfileDelete.Refused(ProfileProblem.LAST_PROFILE), repo.deleteProfile("p-house"))
+        assertEquals(ProfileDelete.Refused(ProfileProblem.NO_SUCH_PROFILE), repo.deleteProfile("p-ana"))
         assertEquals(listOf("Joint"), repo.profiles().map { it.name })
         assertEquals(1, repo.trash().size)
     }
