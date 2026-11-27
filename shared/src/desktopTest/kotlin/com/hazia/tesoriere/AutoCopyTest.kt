@@ -153,7 +153,7 @@ class AutoCopyTest {
         assertEquals(CopyError.NOT_WRITTEN, AutoCopy.lastError(weekly.copy(lastError = "")))
         for (e in CopyError.entries) assertEquals(e, AutoCopy.lastError(AutoCopy.afterFailure(weekly, e)), e.name)
         assertEquals(
-            listOf("folder_unreachable", "not_written", "password_unreadable", "not_made"),
+            listOf("folder_unreachable", "not_written", "password_unreadable", "not_made", "records_unreadable", "password_not_saved", "paused_needs_password"),
             CopyError.entries.map { it.token },
         )
     }
@@ -300,7 +300,51 @@ class AutoCopyTest {
     // SPEC:R148
     @Test fun `R148 a copy with no password and the app lock off is the backup's text`() {
         assertEquals(CopyText.Ready(plain), AutoCopy.contents(weekly, plain, null, lockOn = false, nov27))
-        assertEquals(CopyText.Ready(plain), AutoCopy.contents(weekly, plain, "correct horse", lockOn = false, nov27), "a password the schedule does not hold is not used")
+    }
+
+    // SPEC:R148 SPEC:R132
+    @Test fun `R148 a password handed in for copies whose schedule holds none sealed is PASSWORD_NOT_SAVED, never a plain copy`() {
+        for (lockOn in listOf(true, false)) {
+            assertEquals(CopyText.Failed(CopyError.PASSWORD_NOT_SAVED), AutoCopy.contents(weekly, plain, "correct horse", lockOn, nov27), "lock on: $lockOn")
+        }
+        assertEquals(CopyText.Ready(plain), AutoCopy.contents(weekly, plain, "", lockOn = false, nov27), "the empty text is no password")
+        assertEquals("password_not_saved", AutoCopy.afterFailure(weekly, CopyError.PASSWORD_NOT_SAVED).lastError)
+    }
+
+    // SPEC:R148 SPEC:R01 SPEC:R132
+    @Test fun `R148 a due copy paused by the app lock owes one notice for each run of pauses, cleared by a password or a success`() {
+        val due = weekly.copy(lastCopy = "2026-11-13")
+        assertTrue(AutoCopy.due(due, nov27))
+        assertEquals(CopyText.Paused, AutoCopy.contents(due, plain, null, lockOn = true, nov27))
+        assertTrue(AutoCopy.noticeOwed(due, CopyError.PAUSED_NEEDS_PASSWORD))
+        val paused = AutoCopy.afterPause(due)
+        assertEquals("paused_needs_password", paused.lastError)
+        assertEquals(CopyError.PAUSED_NEEDS_PASSWORD, AutoCopy.lastError(paused))
+        assertTrue(AutoCopy.due(paused, nov27.plusDays(1)), "a pause keeps the last good copy, so the copy stays due")
+        assertFalse(AutoCopy.noticeOwed(paused, CopyError.PAUSED_NEEDS_PASSWORD), "the second pause of a run owes none")
+        // a pause after a run of failures, and a failure after a run of pauses, each owe their own
+        val failing = AutoCopy.afterFailure(due, CopyError.FOLDER_UNREACHABLE)
+        assertTrue(AutoCopy.noticeOwed(failing, CopyError.PAUSED_NEEDS_PASSWORD))
+        assertTrue(AutoCopy.noticeOwed(paused, CopyError.NOT_WRITTEN))
+        assertFalse(AutoCopy.noticeOwed(failing, CopyError.NOT_WRITTEN))
+        // a password set clears the pause and its notice; another failure is kept
+        val sealed = AutoCopy.withPassword(paused, "sealed-by-key-store", "the stable")
+        assertNull(sealed.lastError); assertFalse(sealed.failureNotified)
+        assertEquals("folder_unreachable", AutoCopy.withPassword(failing, "sealed-by-key-store", "the stable").lastError)
+        // the next success clears it too
+        val ok = AutoCopy.afterSuccess(paused, nov27)
+        assertNull(ok.lastError); assertTrue(AutoCopy.noticeOwed(ok, CopyError.PAUSED_NEEDS_PASSWORD))
+    }
+
+    // SPEC:R148 SPEC:R130 SPEC:R141
+    @Test fun `R148 an export naming a record it could not read writes no copy, RECORDS_UNREADABLE, and an export with no file is NOT_MADE`() {
+        val file = com.hazia.tesoriere.engine.BackupFile(exportedAt = "2026-11-27", activeProfileId = "p-1", profiles = emptyList())
+        val whole = com.hazia.tesoriere.data.Export.Ok(file, plain, 0, 0, emptyList())
+        assertEquals(CopyText.Ready(plain), AutoCopy.outcome(whole))
+        val lacking = whole.copy(unreadable = listOf(com.hazia.tesoriere.data.UnreadableRecord("p-1", com.hazia.tesoriere.data.StoredKind.IMPORT_MEMORY, null)))
+        assertEquals(CopyText.Failed(CopyError.RECORDS_UNREADABLE), AutoCopy.outcome(lacking))
+        assertEquals(CopyText.Failed(CopyError.NOT_MADE), AutoCopy.outcome(com.hazia.tesoriere.data.Export.Empty))
+        assertEquals(CopyText.Failed(CopyError.NOT_MADE), AutoCopy.outcome(com.hazia.tesoriere.data.Export.Refused(com.hazia.tesoriere.engine.BackupProblem.DAMAGED)))
     }
 
     // SPEC:R148 SPEC:R132
@@ -314,8 +358,8 @@ class AutoCopyTest {
     }
 
     // SPEC:R148 SPEC:R132 SPEC:R146
-    @Test fun `R148 with the app lock on and no password for the copies, nothing is written, even with a password handed in`() {
+    @Test fun `R148 with the app lock on and no password for the copies, nothing is written, a password handed in included`() {
         assertEquals(CopyText.Paused, AutoCopy.contents(weekly, plain, null, lockOn = true, nov27))
-        assertEquals(CopyText.Paused, AutoCopy.contents(weekly, plain, "correct horse", lockOn = true, nov27))
+        assertEquals(CopyText.Failed(CopyError.PASSWORD_NOT_SAVED), AutoCopy.contents(weekly, plain, "correct horse", lockOn = true, nov27))
     }
 }

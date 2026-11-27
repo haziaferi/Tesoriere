@@ -1,5 +1,6 @@
 package com.hazia.tesoriere.engine
 
+import com.hazia.tesoriere.data.Export
 import com.hazia.tesoriere.model.CopySchedule
 import kotlinx.datetime.LocalDate
 
@@ -25,8 +26,12 @@ import kotlinx.datetime.LocalDate
  *   day alone and deleted every copy of its own beyond 14, another device's included, and kept
  *   copies dated after today as the newest.
  * - [AutoCopy.contents] takes the schedule: a sealed password the key store no longer gives back is
- *   PASSWORD_UNREADABLE, and with the app lock on and no password nothing is written (Paused), so a
- *   plain copy is never written in place of an encrypted one (SPEC R132).
+ *   PASSWORD_UNREADABLE, a password handed in that the schedule does not hold is PASSWORD_NOT_SAVED,
+ *   and with the app lock on and no password nothing is written (Paused), so a plain copy is never
+ *   written in place of an encrypted one (SPEC R132); a pause owes a notice as a failure does
+ *   ([AutoCopy.afterPause]), so the weekly backup never stops unseen.
+ * - [AutoCopy.outcome] reads the export: a file naming records the store cannot read is not
+ *   copied (RECORDS_UNREADABLE), and an export with no file is NOT_MADE.
  * - A refused change gives a code: [AutoCopy.everyProblem] NO_FOLDER, and
  *   [AutoCopy.withoutPasswordProblem] R132's REQUIRED; Sci-Fin's AppStore returned in silence.
  * - An unknown frequency token reads as WEEKLY, since only `off` turns the copy off; Sci-Fin read it
@@ -64,7 +69,22 @@ enum class CopyError(val token: String) {
     PASSWORD_UNREADABLE("password_unreadable"),
 
     /** The backup itself could not be made: the export gave a code in place of a file, or found no Profile (SPEC R130). */
-    NOT_MADE("not_made");
+    NOT_MADE("not_made"),
+
+    /**
+     * The export named records the store cannot read (SPEC R130, R141): no copy is written, so the
+     * newest copies, which still hold them, are not pushed out by copies that lack them.
+     */
+    RECORDS_UNREADABLE("records_unreadable"),
+
+    /** A password was handed in for copies whose schedule holds none sealed: the caller saves it with withPassword first. */
+    PASSWORD_NOT_SAVED("password_not_saved"),
+
+    /**
+     * Not a failure of the copy: it is due, but held back while the app lock is on and the copies
+     * have no password (SPEC R132). Owed a notice like a failure, so the weekly backup never stops unseen.
+     */
+    PAUSED_NEEDS_PASSWORD("paused_needs_password");
 
     companion object {
         /** The failure a stored token names; a token not known still records a failure, [NOT_WRITTEN]. */
@@ -86,7 +106,10 @@ sealed interface CopyText {
     /** A failure to record (AutoCopy.afterFailure). */
     data class Failed(val error: CopyError) : CopyText
 
-    /** The app lock is on and the copies have no password: nothing is written, nothing is a failure (SPEC R132). */
+    /**
+     * The app lock is on and the copies have no password: nothing is written (SPEC R132), and the
+     * pause is recorded (AutoCopy.afterPause), owing a notice at the first of a run of pauses.
+     */
     data object Paused : CopyText
 }
 
@@ -153,9 +176,19 @@ object AutoCopy {
     fun passwordProblem(lockOn: Boolean, password: String?, again: String, hint: String): PasswordProblem? =
         BackupCrypto.exportProblem(lockOn, password, again, hint)
 
-    /** [s] with the password the key store sealed and its hint, kept trimmed. The caller checked [passwordProblem]. */
-    fun withPassword(s: CopySchedule?, sealed: String, hint: String): CopySchedule =
-        (s ?: CopySchedule()).copy(sealedPassword = sealed, hint = hint.trim())
+    /**
+     * [s] with the password the key store sealed and its hint, kept trimmed; a pause for want of a
+     * password and its notice are cleared, since the next copy can be written. The caller checked [passwordProblem].
+     */
+    fun withPassword(s: CopySchedule?, sealed: String, hint: String): CopySchedule {
+        val base = s ?: CopySchedule()
+        val pausedBefore = base.lastError == CopyError.PAUSED_NEEDS_PASSWORD.token
+        return base.copy(
+            sealedPassword = sealed, hint = hint.trim(),
+            lastError = if (pausedBefore) null else base.lastError,
+            failureNotified = if (pausedBefore) false else base.failureNotified,
+        )
+    }
 
     /** Why the copies cannot go back to plain: R132's REQUIRED while the app lock is on; null when they can. */
     fun withoutPasswordProblem(lockOn: Boolean): PasswordProblem? = if (lockOn) PasswordProblem.REQUIRED else null
@@ -203,22 +236,36 @@ object AutoCopy {
     }
 
     /**
+     * The backup a copy writes, from the export (SPEC R130, R148): its plain text when the export
+     * gave a whole file; RECORDS_UNREADABLE when it named records the store cannot read, so a copy
+     * that lacks them never pushes out the copies that hold them; NOT_MADE when the export gave a
+     * code in place of a file or found no Profile.
+     */
+    fun outcome(export: Export): CopyText = when (export) {
+        is Export.Ok -> if (export.unreadable.isEmpty()) CopyText.Ready(export.text) else CopyText.Failed(CopyError.RECORDS_UNREADABLE)
+        is Export.Refused, Export.Empty -> CopyText.Failed(CopyError.NOT_MADE)
+    }
+
+    /**
      * What a copy of [s] writes on [today] (SPEC R148), given the backup's [plain] text (SPEC R130),
      * the password the key store gave back for [s]'s sealed one ([unsealed], null when it gave none)
      * and whether the app lock is on: with a sealed password, the encrypted file of SPEC R133 under
-     * it and [s]'s hint, or PASSWORD_UNREADABLE when none came back; with none, nothing while the
-     * lock is on (Paused, SPEC R132), else the plain text. A copy is never plain while [s] holds a
-     * sealed password, and [unsealed] is not used when it holds none.
+     * it and [s]'s hint, or PASSWORD_UNREADABLE when none came back; with none, PASSWORD_NOT_SAVED
+     * when a password is handed in all the same, else nothing while the lock is on (Paused, SPEC
+     * R132), else the plain text. A copy is never plain while [s] holds a sealed password or a
+     * password is handed in, so a password the caller meant to use never yields a plain file.
      */
     fun contents(s: CopySchedule, plain: String, unsealed: String?, lockOn: Boolean, today: LocalDate): CopyText = when {
         s.sealedPassword != null ->
             if (unsealed.isNullOrEmpty()) CopyText.Failed(CopyError.PASSWORD_UNREADABLE)
             else CopyText.Ready(BackupCrypto.encrypt(plain, unsealed, s.hint.orEmpty(), today))
+        // the empty text is no password (SPEC R132), as it is for a sealed one
+        !unsealed.isNullOrEmpty() -> CopyText.Failed(CopyError.PASSWORD_NOT_SAVED)
         lockOn -> CopyText.Paused
         else -> CopyText.Ready(plain)
     }
 
-    /** [s] after a copy written on [today]: its day recorded, the failure and its notice cleared. */
+    /** [s] after a copy written on [today]: its day recorded, the failure or pause and its notice cleared. */
     fun afterSuccess(s: CopySchedule, today: LocalDate): CopySchedule =
         s.copy(lastCopy = today.toString(), lastError = null, failureNotified = false)
 
@@ -226,6 +273,22 @@ object AutoCopy {
     fun afterFailure(s: CopySchedule, error: CopyError): CopySchedule =
         s.copy(lastError = error.token, failureNotified = true)
 
-    /** Whether a failure now owes a notice: the first of a run of failures (SPEC R148). */
-    fun noticeOwed(s: CopySchedule): Boolean = !s.failureNotified
+    /**
+     * [s] after a due copy was paused ([CopyText.Paused]): PAUSED_NEEDS_PASSWORD recorded and the
+     * run's notice marked given, as a failure is, so the weekly backup never stops unseen; the last
+     * good copy kept, so the copy stays due.
+     */
+    fun afterPause(s: CopySchedule): CopySchedule = afterFailure(s, CopyError.PAUSED_NEEDS_PASSWORD)
+
+    /**
+     * Whether recording [next] now owes a notice (SPEC R148): the first of a run of failures, or of
+     * a run of pauses; a pause after a failure, or a failure after a pause, starts a run of its own.
+     * With [next] unknown, the first of a run only.
+     */
+    fun noticeOwed(s: CopySchedule, next: CopyError? = null): Boolean {
+        if (!s.failureNotified) return true
+        if (next == null) return false
+        val wasPaused = lastError(s) == CopyError.PAUSED_NEEDS_PASSWORD
+        return wasPaused != (next == CopyError.PAUSED_NEEDS_PASSWORD)
+    }
 }
