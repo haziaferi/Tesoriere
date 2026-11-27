@@ -408,3 +408,5 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-27 · R144 · changed · runtime damage reaches the repository's caller as a SQLite exception; phase 2 restarts into the guard · builder
 - 2026-11-27 · R36 · changed · the Granvolta wording confirmed · owner
 - 2026-11-27 · R120 · changed · the Granvolta wording confirmed · owner
+- 2026-11-28 · R148 · changed · records left out count as lacking (RECORDS_LEFT_OUT); stale deletes only after a whole copy; the folder grows while copies lack records · builder
+- 2026-11-28 · R144 · changed · the guard runs once per process; NOT_MOVED after a failed open in the same process is expected · builder
