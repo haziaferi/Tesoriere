@@ -98,6 +98,20 @@ class BackupCryptoTest {
     }
 
     // SPEC:R133
+    @Test fun `R133 a file of 50 iterations or a nonce cut short to 4 bytes is DAMAGED and shows no hint or day`() {
+        val text = seal()
+        val short = Base64.getEncoder().encodeToString(ByteArray(4))
+        val whole = assertNotNull(BackupCrypto.locked(text))
+        assertEquals("the stable", whole.hint)
+        for ((case, t) in mapOf("50 iterations" to with(text, "iterations", JsonPrimitive(50)), "a nonce cut short" to with(text, "iv", JsonPrimitive(short)))) {
+            assertEquals(OpenProblem.DAMAGED, refused(t), case)
+            val l = assertNotNull(BackupCrypto.locked(t), case)
+            assertNull(l.hint, case); assertNull(l.exportedAt, case)
+            assertEquals("tesoriere", l.app, case)
+        }
+    }
+
+    // SPEC:R133
     @Test fun `R133 a day of 2026-11-26 bar the with the hint stable is DAMAGED, though it binds as the file's own`() {
         val text = seal()
         // `tesoriere|1|<n>|2026-11-26|the stable` either way: the day must be a day, so the boundary cannot move

@@ -258,6 +258,8 @@ class SciFinImportTest {
             assertEquals(listOf(Part("c-groc", cents("12.40"))), it.parts); assertEquals(LocalDate(2026, 3, 3), it.date)
         }
         assertEquals(listOf(Part("c-groc", cents("40.00"))), byPayee.getValue("Groceries").parts)
+        assertEquals(cents("40.00"), byPayee.getValue("Groceries").total)
+        assertEquals(LocalDate(2026, 3, 10), byPayee.getValue("Groceries").date)
         assertEquals(LocalDate(2026, 2, 27), byPayee.getValue("BAR LUNAFINTA").date)
         byPayee.getValue("Spent from Trip").let {
             assertEquals(cents("60.00"), it.total); assertEquals(PaymentSource.Goal("g-trip"), it.source)
@@ -528,6 +530,18 @@ class SciFinImportTest {
         val charged = SciFinImport.addTo(emptyList(), ok(cardFile(charged = true, linked = false, handPaid = 5000)), Ids()::next).single()
         assertNull(charged.transactions.single { it.key == "savings" }.categoryId)
         assertEquals(cents("40.00"), Reports.spendingComposition(charged, LocalDate(2026, 3, 31), emptySet()).net)
+    }
+
+    // SPEC:R139
+    @Test fun `R139 a category of another Profile in the file, picked or as the new id, changes nothing for the card`() {
+        val other = """{"id":"q","name":"Other","settings":{},"categories":[{"id":"c-other","profileId":"q","name":"Elsewhere"}]}"""
+        val read = ok(cardFile(charged = false, linked = false, handPaid = 5000).trimEnd().removeSuffix("]}") + ",$other]}")
+        assertEquals(2, read.profiles.size)
+        assertFalse(SciFinImport.canConfirm(read))
+        assertEquals(read, SciFinImport.setCardCategory(read, "a-card", "c-other"))
+        assertEquals(read, SciFinImport.addCategoryForCard(read, "a-card", "Card spending", "c-other"))
+        // its own Profile's category still serves
+        assertTrue(SciFinImport.canConfirm(SciFinImport.setCardCategory(read, "a-card", "c-fun")))
     }
 
     // SPEC:R139 SPEC:R93 SPEC:R67

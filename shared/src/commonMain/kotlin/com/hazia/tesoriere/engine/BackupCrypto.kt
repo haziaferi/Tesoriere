@@ -130,13 +130,31 @@ object BackupCrypto {
 
     /**
      * The prompt's view of [text] when it is an encrypted backup of any app; null for anything else (a
-     * plain file goes to Backup.validate). An envelope that cannot be read shows no app, hint or day.
+     * plain file goes to Backup.validate). An envelope that cannot be read shows no app, hint or day;
+     * one of a known format that [decrypt] would refuse as DAMAGED, its iteration count out of bounds
+     * or its salt, nonce or sealed data unreadable or cut short, shows its app but no hint or day (SPEC R133).
      */
     fun locked(text: String): LockedBackup? {
         val o = BackupJson.parseObject(text) ?: return null
         if (!BackupJson.markedEncrypted(o)) return null
         val f = envelope(o) ?: return LockedBackup(text, null, null, null)
+        if (f.encrypted == VERSION && f.kdf == KDF && sealedParts(f) == null) return LockedBackup(text, f.app, null, null)
         return LockedBackup(text, f.app, f.hint, BackupJson.day(f.exportedAt))
+    }
+
+    /**
+     * [f]'s salt, nonce and sealed data, or null when its iteration count is out of bounds or any of
+     * them cannot be read or is not of its size: the envelope is DAMAGED (SPEC R133).
+     */
+    private fun sealedParts(f: EncryptedBackupFile): Triple<ByteArray, ByteArray, ByteArray>? {
+        if (f.iterations !in ACCEPTED_ITERATIONS) return null
+        val (salt, iv, sealed) = try {
+            Triple(Base64.decode(f.salt), Base64.decode(f.iv), Base64.decode(f.data))
+        } catch (_: Throwable) {
+            return null
+        }
+        if (salt.size != SALT_BYTES || iv.size != IV_BYTES || sealed.size < TAG_BYTES) return null
+        return Triple(salt, iv, sealed)
     }
 
     /**
@@ -167,13 +185,7 @@ object BackupCrypto {
         val f = envelope(o) ?: return Opened.Refused(OpenProblem.DAMAGED)
         if (f.app != appTag) return Opened.Refused(OpenProblem.OTHER_APP)
         if (f.encrypted != VERSION || f.kdf != KDF) return Opened.Refused(OpenProblem.NEWER_FORMAT)
-        if (f.iterations !in ACCEPTED_ITERATIONS) return Opened.Refused(OpenProblem.DAMAGED)
-        val (salt, iv, sealed) = try {
-            Triple(Base64.decode(f.salt), Base64.decode(f.iv), Base64.decode(f.data))
-        } catch (_: Throwable) {
-            return Opened.Refused(OpenProblem.DAMAGED)
-        }
-        if (salt.size != SALT_BYTES || iv.size != IV_BYTES || sealed.size < TAG_BYTES) return Opened.Refused(OpenProblem.DAMAGED)
+        val (salt, iv, sealed) = sealedParts(f) ?: return Opened.Refused(OpenProblem.DAMAGED)
         val key = try {
             pbkdf2Bytes(password, salt, f.iterations)
         } catch (_: Throwable) {
