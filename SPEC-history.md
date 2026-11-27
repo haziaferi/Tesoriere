@@ -391,3 +391,14 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-27 · R130 · changed · notifications wording follows R143: device's value, else not yet answered · builder
 - 2026-11-27 · R130 · changed · an export with no readable app state opens the first Profile by name, no receipt Profile · builder
 - 2026-11-27 · R143 · changed · the agreement names the records agreed to; a list not the store's at the restore is refused again · builder
+- 2026-11-27 · R144 · changed · Android opens the store and the guard through the bundled SQLite; damage met at runtime no longer deletes the store, the next start's guard moves it aside · builder
+- 2026-11-27 · R130 · changed · a Trash item's payments repaired as the Profiles' are, a deleted Profile's included, its day and notice mark kept · builder
+- 2026-11-27 · R143 · changed · a deleted Profile whose payment the export repaired comes back from the Trash after a restore · builder
+- 2026-11-27 · R140 · changed · deleting a Profile that holds records the store cannot read is refused with UNREADABLE_RECORDS until the user agrees to the store's list · builder
+- 2026-11-27 · R141 · changed · delete refused over unreadable records; infinite rates and hours read as missing; NOT_FINITE writes refused; Goal and category never named · builder
+- 2026-11-27 · R80 · changed · a shift or payday of infinite or no hours refused with HOURS_NOT_FINITE · builder
+- 2026-11-27 · R86 · changed · an APR or interest rate of infinity or no number refused with RATE_NOT_FINITE; no loan taken at it · builder
+- 2026-11-27 · R133 · changed · a file DAMAGED by its iterations, salt, nonce or sealed data shows no hint or day · builder
+- 2026-11-27 · R148 · changed · PAUSED_NEEDS_PASSWORD owes a notice; PASSWORD_NOT_SAVED; RECORDS_UNREADABLE writes no copy; NOT_MADE from the export; FOLDER_UNREACHABLE is phase 2's · builder
+- 2026-11-27 · R36 · changed · the example store renamed to the invented Granvolta, the earlier name being a real chain · builder
+- 2026-11-27 · R120 · changed · the example store renamed to the invented Granvolta, the earlier name being a real chain · builder
