@@ -71,18 +71,37 @@ object Accounts {
 
     // ---- the loan calculator (SPEC R90, R91) ---------------------------------------------------
 
-    /** Interest-only pays the interest alone for the term; fixed and variable amortise (SPEC R90). */
-    fun loanMath(principal: Money, annualRate: Double, termMonths: Int, rateType: RateType): LoanMath {
+    /**
+     * Interest-only pays the interest alone for the term; fixed and variable amortise (SPEC R90).
+     * Null for a rate of infinity or no number, of which no figure can be worked out (SPEC R86),
+     * so the calculator never throws on what is typed.
+     */
+    fun loanMath(principal: Money, annualRate: Double, termMonths: Int, rateType: RateType): LoanMath? {
+        if (!annualRate.isFinite()) return null
         val p = maxOf(0L, principal)
         val n = maxOf(1, termMonths)
-        // a rate of infinity or no number reads as none, so the calculator never throws on what is typed
-        val i = (if (annualRate.isFinite()) maxOf(0.0, annualRate) else 0.0) / 12.0
+        val i = maxOf(0.0, annualRate) / 12.0
         if (rateType == RateType.INTEREST_ONLY) {
             val monthly = (p * i).roundToLong()
             return LoanMath(monthly, monthly * n, monthly * n, principal, n)
         }
         val monthly = if (i == 0.0) p.ceilDiv(n.toLong()) else (p * i / (1 - (1 + i).pow(-n))).roundToLong()
         return LoanMath(monthly, monthly * n, monthly * n - principal, 0, n)
+    }
+
+    /** Why a loan cannot be taken, as a code (SPEC R86, R91); how it reads is the design pass's (SPEC R16). */
+    enum class LoanProblem {
+        /** The yearly rate is infinity or not a number: the store cannot keep it, and no payment can be worked out (SPEC R141). */
+        RATE_NOT_FINITE,
+        /** The payment's category is blank or names none that exists (SPEC R67). */
+        CATEGORY_MISSING,
+    }
+
+    /** Why [getLoan] would refuse a loan at [annualRate] filed under [categoryId], or null when it would take it. */
+    fun getLoanProblem(d: ProfileData, annualRate: Double, categoryId: String): LoanProblem? = when {
+        !annualRate.isFinite() -> LoanProblem.RATE_NOT_FINITE
+        categoryId.isBlank() || d.categories.none { it.id == categoryId } -> LoanProblem.CATEGORY_MISSING
+        else -> null
     }
 
     /** Saving for it instead: a Goal planned by date for the principal over the term, nothing else (SPEC R91). */
@@ -96,16 +115,15 @@ object Accounts {
     /**
      * Taking the loan (SPEC R91): a Loan and its payment in one step, linked both ways (SPEC R87),
      * the payment first due one month after today and ending on the term's last payment, so nothing
-     * sweeps this month (SPEC R64); the Loan's opening row (SPEC R86). The payment's category must
-     * exist (SPEC R67): with none that exists, [d] comes back unchanged.
+     * sweeps this month (SPEC R64); the Loan's opening row (SPEC R86). While [getLoanProblem]
+     * finds one, [d] comes back unchanged.
      */
     fun getLoan(
         d: ProfileData, principal: Money, annualRate: Double, termMonths: Int, rateType: RateType,
         accountName: String, expenseName: String, categoryId: String, autoUpdate: Boolean, clock: Clock, ids: () -> String,
     ): ProfileData {
-        // a rate of infinity or no number cannot be kept in the store (SPEC R141)
-        if (!annualRate.isFinite()) return d
-        val m = loanMath(principal, annualRate, termMonths, rateType)
+        if (getLoanProblem(d, annualRate, categoryId) != null) return d
+        val m = loanMath(principal, annualRate, termMonths, rateType) ?: return d
         val today = clock.today()
         val anchorDay = today.day
         val firstDue = today.plusMonthsClamped(1, anchorDay)
