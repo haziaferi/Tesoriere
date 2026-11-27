@@ -215,7 +215,7 @@ class ReceiptFileFormatTest {
         val d = profile(categories = listOf(category("food", "Food")))
             .copy(receiptSettings = Fixture.receiptSettings().copy(recordedReceiptIds = listOf("rc-old")))
         val before = d.copy()
-        val p = ReceiptPickup.scan(d, FileReceiptFolder(dir), ReceiptFileFormat::parse)
+        val p = ReceiptPickup.scan(Fixture.receiptApp, d, FileReceiptFolder(dir), ReceiptFileFormat::parse)
         assertEquals(listOf("rc-new"), p.ready.map { it.receiptId })
         assertEquals(
             listOf<Pair<String, Refusal>>(

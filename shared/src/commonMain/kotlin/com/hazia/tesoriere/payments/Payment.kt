@@ -3,6 +3,9 @@
 
 package com.hazia.tesoriere.payments
 
+import androidx.room.Entity
+import androidx.room.Index
+import androidx.room.PrimaryKey
 import com.hazia.tesoriere.model.InstantMillisSerializer
 import com.hazia.tesoriere.model.Money
 import kotlinx.datetime.LocalDate
@@ -91,10 +94,15 @@ data class ReceiptLine(
     val categoryId: String,
 )
 
-/** A payment (SPEC R21): one date, one total, one source, and parts that add up to the total. A refund's total is negative. */
+/**
+ * A payment (SPEC R21): one date, one total, one source, and parts that add up to the total. A refund's total is negative.
+ * Stored in the `payments` table, its source as text and its parts, receipt lines and bank keys as JSON columns
+ * (data/Converters.kt): the engine reads a Profile whole, so no query needs them apart (SPEC R141).
+ */
 @Serializable
+@Entity(tableName = "payments", indices = [Index("profileId")])
 data class Payment(
-    val id: String,
+    @PrimaryKey val id: String,
     val profileId: String,
     val date: LocalDate,
     val loggedAt: Instant,

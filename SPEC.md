@@ -28,6 +28,12 @@ Kinds: O owner rule · D decided · I inherited · A assumed · Q open.
 | D-R17 | Port source | 4. The port from Sci-Fin |
 | D-R18 | Ported pieces | 4. The port from Sci-Fin |
 | D-R19 | Sci-Fin backup import | 4. The port from Sci-Fin |
+| D-R134 | Reading a Sci-Fin backup | 4. The port from Sci-Fin |
+| D-R135 | What a Sci-Fin ledger row becomes | 4. The port from Sci-Fin |
+| D-R136 | A Sci-Fin Profile's records and settings | 4. The port from Sci-Fin |
+| D-R137 | A category for each Sci-Fin recurring expense | 4. The port from Sci-Fin |
+| D-R138 | Sci-Fin's import memory and payee rules | 4. The port from Sci-Fin |
+| D-R139 | A Sci-Fin card's payoffs | 4. The port from Sci-Fin |
 | D-R20 | Money and time | 5. Money model |
 | D-R49 | Savings | 5. Money model |
 | D-R50 | Goals hold money out of Savings | 5. Money model |
@@ -132,8 +138,21 @@ Kinds: O owner rule · D decided · I inherited · A assumed · Q open.
 | D-R126 | A Profile in the Trash | 16. The Trash |
 | D-R41 | Deleting a receipt payment | 17. Edge cases |
 | D-R42 | Deleting a linked category | 17. Edge cases |
-| D-R43 | Test plan | 18. Test plan |
-| D-R44 | Rollout phases | 19. Rollout |
+| D-R140 | Profiles | 18. Profiles and storage |
+| D-R141 | Storage | 18. Profiles and storage |
+| D-R142 | Schema versions | 18. Profiles and storage |
+| D-R144 | The damaged-file guard | 18. Profiles and storage |
+| D-R145 | Migration snapshots | 18. Profiles and storage |
+| D-R130 | The backup file | 19. Backup |
+| D-R131 | Reading a backup file | 19. Backup |
+| D-R143 | Restoring a backup | 19. Backup |
+| D-R132 | A backup password | 19. Backup |
+| D-R133 | The encrypted file | 19. Backup |
+| D-R148 | Automatic copy | 19. Backup |
+| D-R146 | The app lock | 20. App lock |
+| D-R147 | Erasing the device for a forgotten PIN | 20. App lock |
+| D-R43 | Test plan | 21. Test plan |
+| D-R44 | Rollout phases | 22. Rollout |
 | D-R45 | Price comparison | Out of scope |
 | D-R46 | Households in v1 | Out of scope |
 | D-R47 | Currency conversion in v1 | Out of scope |
@@ -414,6 +433,135 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · owner · agreed rewording
 
+### D-R134 · Reading a Sci-Fin backup
+
+**Rule:** A Sci-Fin backup is read and checked whole before anything is added, and a file that cannot be taken is refused whole with a code, as below; a file with a password is opened first, as R133 opens one for `sci-fin`. A file naming no app is read as Sci-Fin's, and one with no `schemaVersion` as Sci-Fin's schema 1. Only each Profile's own records are read: not Sci-Fin's appearance settings, nothing of the device, and no Trash, which a Sci-Fin file does not hold.
+
+**Why:** Sci-Fin's files before its schema 5 name no app, and the oldest name no version (Sci-Fin's spec, sections 4.7 and 12); Tesoriere's own reader refuses both (R131), so a Sci-Fin file is read by this reader alone, when the user picks a Sci-Fin file.
+
+**Values:**
+
+| The file | Code |
+|---|---|
+| not JSON, or not a JSON object | `NOT_A_BACKUP` |
+| naming an app other than `sci-fin`, outside its encryption or inside it, Tesoriere's own included | `OTHER_APP` |
+| with a password, opened with none | `PASSWORD_NEEDED` |
+| with a password, opened with the wrong one, or with its hint, day or iteration count changed (R133) | `WRONG_PASSWORD` |
+| with a password, of an envelope version or key function the app does not know (R133) | `NEWER_FORMAT` |
+| of a schema above 10, a number too large for a count included | `NEWER_SCHEMA` |
+| a schema version that is not a whole number of 1 or more; no Profile; a Profile with no id, name or settings, or holding a `data` object, as the records of Sci-Fin's web prototype were nested, which is not read; a blank id; a list that is not a list; a figure that is not a whole number a 64-bit count holds; an unknown token; a day that is not one; a ledger key the ledger cannot read (R51) or that names no id; a `spend:` row of zero or above, which Sci-Fin never wrote; an id used twice by one kind of record across the file; an envelope R133 finds damaged; arrays and objects nested deeper than 64 | `DAMAGED` |
+
+**Evidence:** Sci-Fin's spec, sections 4.7 and 12, and `engine/Backup.kt` and `engine/BackupCrypto.kt` at `2892110`, which returned sentences, read a version that was not a number as another app's file, and repaired three appearance fields; the codes: builder, 2026-11-26.
+
+**Acceptance:** The schema-1 fixture, naming no app and no version, reads as Sci-Fin's version 1, and the same text given to Tesoriere's own reader is `OTHER_APP` (R131). `{not json` is `NOT_A_BACKUP`; a file of `tesoriere` or of `conto-facile` is `OTHER_APP`; the schema-11 fixture is `NEWER_SCHEMA`, and so is a version of 99999999999999999999; the encrypted schema-10 fixture opened with no password is `PASSWORD_NEEDED`, with `violet staircase 4` `WRONG_PASSWORD`, and with its envelope version set to 2 `NEWER_FORMAT`; a version of `"ten"`, an empty list of Profiles, a Profile with no id or with no settings, a Profile holding a `data` object, a goal or category id of `""`, goals of `"oops"`, Savings of `"lots"` or 12.5, a ledger key `bank:x` or `cat:`, a `spend:` row of 0.00 or +5.00 and a goal id used twice are each `DAMAGED`; none of them throws.
+
+**Not:** Repairing Sci-Fin's appearance fields, as Sci-Fin did: Tesoriere reads none (R16). Reading a Sci-Fin file with Tesoriere's own reader: its records are not Tesoriere's (R131).
+
+**Since:** 2026-11-26 · builder · own words
+
+### D-R135 · What a Sci-Fin ledger row becomes
+
+**Rule:** Each row of a Sci-Fin Profile's ledger becomes one payment or one ledger row of the new Profile, as below, keeping its date, the instant it was logged and its note, which is a payment's payee. The figures the file holds, Savings, each Goal's saved money and each Account's balance, are taken as they are, since each payment moves its source as the row it stands for did (R54); Sci-Fin's stored spent figure is not read, and each month's spent is worked out from that month's rows (R25).
+
+**Why:** In Sci-Fin a goal spend and a card charge had no category, and a sweep counted in none (owner answers 2 and 3 of 2026-11-24). A `cat:` row noted `Correction` or `Starting balance` was a direct edit of spent, which Tesoriere keeps as an adjustment (R25).
+
+**Values:**
+
+| Sci-Fin row | Becomes |
+|---|---|
+| `cat:<id>` noted `Correction` or `Starting balance` | the same row, an adjustment (R25) |
+| any other `cat:<id>` other than zero | a payment from Savings of its figure, with one part in that category; below zero, a refund (R21) |
+| `spend:<goalId>`, always below zero (R134) | a payment from that Goal of minus its figure, with one part in no category |
+| `acct:<id>` above zero, of a credit Account in the file, noted anything but `Opening balance`, `Correction`, `Restored from the Trash` or `Edit reconciliation` | a payment charged to that card of its figure, with one part in no category: a charge logged |
+| `rec:<id>` of an expense linked to a credit Account in the file, and a card's `savings` payoff row (R139) | as R139 files it |
+| any other `rec:<id>` | the same row, filed under no category |
+| any other row | the same row |
+
+**Evidence:** Sci-Fin's spec, sections 3.6 and 7.2, and `engine/Writes.kt`, `engine/CategoryEditing.kt`, `engine/Accounts.kt` and `engine/Entry.kt` at `2892110`, whose card charge is an `acct:` row noted as the user wrote it or `Charged`, and whose new category's spent is a `cat:` row noted `Starting balance`; the phase 1 plan's Task 20, 2026-11-24; the notes that mark a balance edit: builder, 2026-11-26, and after review of the Sci-Fin import.
+
+**Acceptance:** In the schema-10 fixture, the `cat:` rows of 12.40 on 3 March noted `MERCATO VERDE`, of 40.00 on 10 March and of 7.50 on 27 February become payments from Savings with one part each in Groceries; its 5.00 `cat:` row noted `Correction` stays an adjustment, and so does a 20.00 `cat:` row noted `Starting balance`; its `spend:` row of -60.00 becomes a 60.00 payment from Trip with one part in no category; its `acct:` row of +40.00 noted `Charged` becomes a 40.00 payment charged to Orbita card, and the +300.00 noted `Opening balance` stays a row; its 950.00 `rec:` row stays, filed under no category. Savings reads 1,250.00, Trip 400.00 and Orbita card 340.00, as in the file; Groceries' March spent is 57.40, the sum of its March rows, where Sci-Fin stored 64.90, and its February spent is 7.50; the new Profile's ledger rows and payments number 10, as the file's rows do.
+
+**Not:** Guessing a category for a goal spend, a card charge or a sweep: a wrong guess files spending where the user never put it (R108). Reading Sci-Fin's stored spent: it counted a backdated row in the month it was logged (R25).
+
+**Since:** 2026-11-26 · builder · own words
+
+### D-R136 · A Sci-Fin Profile's records and settings
+
+**Rule:** Every record of a Sci-Fin Profile, the Profile included, takes a new id when it is added, and every key and link naming one follows it, so a file added twice gives two more Profiles and never changes one on the device (R19). When the device then holds more than one Profile, Profiles is switched on (R18), as a restore of a file of more than one switches it on (R130). The settings are read as Sci-Fin kept them, but for four: the month cycle's mark is the oldest month a category was last reset in (R70); Accounts are on when the Profile holds an Account (R18); a catch-up summary not yet read in Sci-Fin is not carried (R74); and whether the platform granted notifications reads as not yet answered, as on a Profile created on the device, since the Profile is new to it (R130).
+
+**Why:** Ids are unique across every Profile in storage (R20), so a Profile keeping Sci-Fin's ids could overwrite one an earlier import added. Sci-Fin started its catch-up from the oldest month a category was reset or an expense swept, and had no switch for Accounts, so with them off a Profile would hide the balances it holds. Sci-Fin's catch-up notices are its own sentences, not the codes R74 keeps. A permission Sci-Fin was granted, on this device or another, is not one Tesoriere was granted, and reading it as refused would keep the app from ever asking.
+
+**Evidence:** Sci-Fin's spec, sections 3.9 and 8.4, and `engine/NewMonth.kt` at `2892110`; builder, 2026-11-26; the notification permission: builder, 2026-11-27, after review of the branch.
+
+**Acceptance:** The schema-10 fixture added beside a Profile `sf-p-1` gives a second Profile whose id, and every Goal, category, expense, Account, row, shift and payment id, differ from the file's, with each `goal:`, `cat:`, `rec:`, `acct:` and `spend:` key, each payment's source and part, and the expense's category naming the new ids; its month mark is `2026-02`, Fun's last reset; Accounts are on; no catch-up summary is pending; notifications read as not yet answered, though the file says granted; its language is `it`, and its income is hourly at 12.50 an hour with one shift. Two Profiles, the device's and the file's, switch Profiles on; the file's one Profile added to a device that holds none does not.
+
+**Not:** Keeping Sci-Fin's ids: adding one file twice would write the second Profile over the first (R19). Leaving the switch off: the Profiles added would be out of sight.
+
+**Since:** 2026-11-27 · builder · own words
+
+### D-R137 · A category for each Sci-Fin recurring expense
+
+**Rule:** A Sci-Fin recurring expense has no category, so before Confirm each is given a category of its own Profile, picked from those the file brings or created there by name, and Confirm stays off until every expense in the file has one (R67) and every card R139 asks a category for has one. It applies to the sweeps written from then on; past sweep rows stay under none (R135).
+
+**Why:** Every recurring expense has a category (R67), and Sci-Fin's never had one.
+
+**Evidence:** The phase 1 plan's owner answer 2 of 2026-11-24 and its provisional follow-on for the Sci-Fin review.
+
+**Acceptance:** The schema-10 fixture's Rent leaves Confirm off; given Fun, Confirm is on; given instead a new category named Housing, Confirm is on and the new Profile holds Housing with Rent under it. A category of another Profile in the file or one that does not exist, a blank name, or a new id already used changes nothing and leaves Confirm off; adding the file while Confirm is off adds nothing.
+
+**Not:** Guessing a category from the expense's name: a wrong guess files spending where the user never put it (R108).
+
+**Since:** 2026-11-26 · builder · own words
+
+### D-R138 · Sci-Fin's import memory and payee rules
+
+**Rule:** Sci-Fin's kept keys of recorded bank rows go into the new Profile's import memory in Sci-Fin's order, each as R26 builds it where the key allows, as below, so a statement row Sci-Fin recorded arrives as recorded already (R26). Sci-Fin's payee rules come under their rule names (R108), mapped to the new ids.
+
+**Why:** Sci-Fin kept a FITID row's synthetic key after its FITID key only when no row before had kept that key, and kept one key for two equal rows of one day, so the file cannot say whose synthetic key follows a FITID key: each is kept plain, which R26 reads as a row recorded with no FITID. A new row with a FITID of its own, of the day, amount and description of a FITID row Sci-Fin recorded, therefore arrives as recorded already, as it did in Sci-Fin. The ledger rows Sci-Fin's Confirm wrote say how many statement rows one key stood for: each is dated the row's day, noted its description and of its amount.
+
+**Values:**
+
+| Sci-Fin kept | Tesoriere keeps |
+|---|---|
+| a FITID key | the same key |
+| a synthetic key whose description is shorter than 40 characters | the key with the description's spacing made one and its ends trimmed |
+| a synthetic key whose description is 40 characters or more | the key with the spacing made one and its start trimmed, when that cuts nothing; else nothing, since the characters past the 40th cannot be known |
+| a synthetic key, as many times as | the Sci-Fin rows it stands for: dated its day, whose note's first 40 characters in lower case are its description, of its amount, a `savings` row for money in, a `cat:`, `spend:` or `acct:` row for money out; once when there is none |
+| any other key | nothing |
+| a payee rule of a category the Profile holds | the rule under its rule name, or under its payee when another rule of that rule name names another category |
+| a payee rule of a category the Profile does not hold | nothing |
+
+**Evidence:** Sci-Fin's spec, section 4.3, and `engine/Import.kt` at `2892110`, whose synthetic key took the description's first 40 characters as written and whose Confirm kept each key once; builder, 2026-11-26. A known limit: a row the user logged by hand with the bank's exact text, day and amount counts as one more row the key stands for.
+
+**Acceptance:** After the schema-10 fixture is added, its import memory holds `fit:F-0302`, `syn:2026-03-03|-12.40|mercato verde` and `syn:2026-03-05|-3.20|pos caffe del molo`, in that order; an OFX row of FITID `F-0302` and a CSV row `POS  CAFFE DEL MOLO` of -3.20 on 5 March arrive `DUPLICATE`, and so does an OFX row of FITID `F-NEW`, `MERCATO VERDE` of -12.40 on 3 March. With a second 12.40 `cat:` row noted `MERCATO VERDE` on 3 March in the file, the key is kept twice and two such CSV rows both arrive `DUPLICATE`; with the one row, the second arrives `READY`. A Sci-Fin key whose 40 characters hold two spaces in a row is left out, and `bank:x` is left out. Its rule `mercato verde` files `MERCATO VERDE` under Groceries, and its rule `pos 0412 bar lunafinta` comes as `bar lunafinta` and files `POS 0999 BAR LUNAFINTA` under Fun; Sci-Fin rules `pos mercato verde` under Groceries and `mercato verde 12` under Fun keep their payees.
+
+**Not:** Marking a synthetic key after a FITID key as that row's, `fsyn:`: when it was a later row's with no FITID, an export of that row with a FITID would no longer arrive as recorded (R26). Keeping a key once for twins: on a later import one of two equal rows Sci-Fin recorded would arrive as new.
+
+**Since:** 2026-11-27 · builder · own words
+
+### D-R139 · A Sci-Fin card's payoffs
+
+**Rule:** A card's payoff rows in a Sci-Fin file are the rows of a recurring expense linked to it, its fixed payment (R93), and the `savings` row Sci-Fin wrote beside each payment off it by hand. Those dated from the day of the card's first logged charge, an `acct:` row R135 makes a payment, are transfers counted in no spent (R67, R93); those dated before it, or all of them when the card has no charge logged, need a payoff category of its Profile, picked or created there by name, before Confirm, and are each filed under it as R109 writes such a card's payoff, so what the card paid counts once. A card with no charge logged arrives with its charges not logged and that payoff category, a card with a charge keeps its charges logged and holds the category for its earlier payoffs, and a card with no payoff row before its first charge, or none at all, needs no category.
+
+**Why:** With the charges arriving as payments (R135), counting the payoffs of the same months as well would count the same money twice; before the first charge logged, or with none, what the card paid would otherwise count in no month (R109), and the owner wants nothing lost.
+
+**Values:**
+
+| The card in the file | Its payoff rows | The card |
+|---|---|---|
+| with a charge logged | before the first charge's day: filed under the category the review gives; from it on: transfers, in no spent | charges logged, that category its payoff category when one was asked for |
+| with no charge logged, and payoff rows | filed under the category the review gives | charges not logged, that category its payoff category |
+| with no payoff row to file | none filed | as in the file; Confirm does not wait for it |
+| a payment off it by hand | the `savings` row of the payment's figure below zero, dated its day, logged no later than a minute after it and noted as the payment is, or `Payment to` and the card's name as the payment names it; an `acct:` row noted `Correction`, `Account closed` or `Loan finished` is no payment | the `acct:` row stays as it is |
+
+**Evidence:** Owner, 2026-11-26, after review of the Sci-Fin import, and the first charge's day: builder, 2026-11-26, after its second review; Sci-Fin's spec, section 7.2, and `engine/Accounts.kt` at `2892110`, whose fixed payment is a recurring expense linked to the card and whose payment by hand writes an `acct:` row and, paired, a `savings` row noted as the payment or `Payment to` the card. A known limit: an expense's rows count as its card's whenever they were written, so a fixed payment linked to the card after its rows were swept, or to another card before, is read as linked to this card for all of them.
+
+**Acceptance:** Orbita card linked to a 40.00 monthly expense, Orbita card payment, swept on 1 March 2026, with a 40.00 charge noted `Charged` on 1 March: Confirm needs no category for the card, and March's Spending is 40.00, not 80.00. With no charge in the file, Confirm stays off until the card has a category; given Fun, or a new category named Card spending, the card's charges are not logged with it as the payoff category, and the 40.00 sweep adds 40.00 to its March spent and March's Spending is 40.00. Swept on 1 January, 1 February, 1 March and 1 April with charges logged from 1 March, Confirm waits for a category; given Fun, Fun's January and February spent are 40.00 each, the March and April sweeps count in no spent, and the card keeps its charges logged with Fun as its payoff category. Swept on 1 March with its first 40.00 charge on 18 March, Confirm waits for a category; given Fun, March's Spending is 80.00: the 1 March payoff paid what the card owed from before the first charge logged, under Fun, and the 18 March charge counts as its own payment. An unlinked card with no charge, paid by hand 50.00 on 20 March, adds 50.00 to its category's March spent once; the linked card with its sweep and a hand payment of 25.00 on 20 March adds 65.00. A `savings` row noted otherwise than the payment, logged 61 seconds after it or one second before it, or beside an `acct:` row noted `Correction`, is filed under nothing, and alone it asks for no category. A card with no charge and no payoff row leaves Confirm on. A category of another Profile, one that does not exist, a blank name or a new id already used changes nothing.
+
+**Not:** A payoff category for the payoffs of the months whose charges arrive as payments: they would count the same money again (R109). Filing the `acct:` row of a payment by hand as well: the money would count twice.
+
+**Since:** 2026-11-26 · owner · agreed rewording
+
 ## 5. Money model
 
 ### D-R20 · Money and time
@@ -461,15 +609,15 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 | `cat:<id>` | the category's spent figure, as an adjustment (R25) | `-amount` |
 | `rec:<id>` | the money swept for the recurring expense, positive when swept out | `-amount` |
 | `acct:<id>` | the Account's balance | 0 |
-| `spend:<goalId>` | the Goal's saved money, negative: a payment off an Account from the Goal (R89), or a row read from a Sci-Fin backup (R19) | 0 |
+| `spend:<goalId>` | the Goal's saved money, negative: a payment off an Account from the Goal (R89); a Sci-Fin backup's become payments (R135) | 0 |
 
-**Evidence:** Sci-Fin's spec, section 3.6, and `engine/Ledger.kt` at `2892110`; `spend:` for a payoff from a Goal: owner, 2026-11-25.
+**Evidence:** Sci-Fin's spec, section 3.6, and `engine/Ledger.kt` at `2892110`; `spend:` for a payoff from a Goal: owner, 2026-11-25; a Sci-Fin backup's `spend:` rows as payments: builder, 2026-11-26.
 
 **Acceptance:** A 20.00 adjustment on a category is stored as `cat:<id>` with amount 2000 and lowers Savings by 20.00; a 100.00 sweep is `rec:<id>` with amount 10000 and lowers Savings by 100.00; an `acct:` row leaves Savings as it was; a 60.00 payoff of a card from a Goal is `spend:<goalId>` with amount -6000 and leaves Savings as it was.
 
 **Not:** Storing the Savings effect instead of the change to the target: every goal and adjustment row would read inverted. A key of its own for a payoff from a Goal: `spend:` already moves a Goal and not Savings, and the reports read it so (R95, R99).
 
-**Since:** 2026-11-25 · builder · own words
+**Since:** 2026-11-26 · builder · own words
 
 ### D-R52 · Direct edits log the change
 
@@ -774,15 +922,15 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R80 · Logged hours
 
-**Rule:** Hourly income logs hours as shifts: a day, the hours worked and a rate per hour, which starts from the income's rate and can be changed per shift. A shift moves no money and adds nothing to the income received (R77); it can be edited or removed until a payday pays it. A shift's pay before deductions is its hours times its rate, rounded to the cent with a half cent rounded up, and a set of shifts' is the sum of each shift's.
+**Rule:** Hourly income logs hours as shifts: a day, the hours worked and a rate per hour, which starts from the income's rate and can be changed per shift. A shift moves no money and adds nothing to the income received (R77); it can be edited or removed until a payday pays it. A shift's pay before deductions is its hours times its rate, rounded to the cent with a half cent rounded up, and a set of shifts' is the sum of each shift's; a shift whose hours are infinity or no number is neither logged nor edited in, `HOURS_NOT_FINITE`, and a payday whose shifts' hours add up past any number is not confirmed, with the same code (R141).
 
-**Evidence:** Sci-Fin's spec, section 3.10, and `engine/Hourly.kt` at `2892110`.
+**Evidence:** Sci-Fin's spec, section 3.10, and `engine/Hourly.kt` at `2892110`; the code for hours of no number: builder, 2026-11-27, after the gap hunt before merge.
 
-**Acceptance:** A 6-hour shift at 20.00 logged on 3 November 2026 leaves Savings, the ledger and the income received as they were. Shifts of 6 and 8.5 hours at 20.00 come to 290.00 before deductions. A shift of 1.5 hours at 13.33 comes to 20.00.
+**Acceptance:** A 6-hour shift at 20.00 logged on 3 November 2026 leaves Savings, the ledger and the income received as they were. Shifts of 6 and 8.5 hours at 20.00 come to 290.00 before deductions. A shift of 1.5 hours at 13.33 comes to 20.00. A shift of no number of hours, or of infinite hours either way, logged or edited in, gives `HOURS_NOT_FINITE` and leaves the shifts as they were; two shifts of the largest hours a Double holds make a payday that gives `HOURS_NOT_FINITE` and is not confirmed.
 
 **Not:** Hours worked times the rate stored as money with fractions of a cent (R20).
 
-**Since:** 2026-11-25 · builder · own words
+**Since:** 2026-11-27 · builder · own words
 
 ### D-R81 · Hourly payday
 
@@ -1090,13 +1238,13 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R86 · Creating and editing an Account
 
-**Rule:** An Account needs a name, and a new one starts as a card. Created with a balance other than zero, it logs an opening `acct:` row of that balance with the note `Opening balance`; a later change of the balance in the editor logs the change with the note `Correction` (R52), and on a card a rise is, as the user chooses for the edit, interest or fees, filed under a category, or a correction, a card whose charges are not logged asking no choice (R110). A Loan's start day is the day it is saved unless the user gives one, it follows its payment (R73) only with its yearly rate filled in, saved without one the setting being saved off, and it is saved with or without a category of its own (R89), but not with one that does not exist.
+**Rule:** An Account needs a name, and a new one starts as a card. Created with a balance other than zero, it logs an opening `acct:` row of that balance with the note `Opening balance`; a later change of the balance in the editor logs the change with the note `Correction` (R52), and on a card a rise is, as the user chooses for the edit, interest or fees, filed under a category, or a correction, a card whose charges are not logged asking no choice (R110). A Loan's start day is the day it is saved unless the user gives one, it follows its payment (R73) only with its yearly rate filled in, saved without one the setting being saved off, and it is saved with or without a category of its own (R89), but not with one that does not exist; a card's APR or a Loan's yearly rate of infinity or no number is not saved, `RATE_NOT_FINITE`, and no loan is taken at such a rate, with the same code, nor one whose payment has no category that exists, `CATEGORY_MISSING`, the loan calculator giving no figure for such a rate (R90, R141).
 
-**Evidence:** Sci-Fin's spec, section 7.2, and `engine/AccountEditing.kt` at `2892110`.
+**Evidence:** Sci-Fin's spec, section 7.2, and `engine/AccountEditing.kt` at `2892110`; the code for a rate of no number: builder, 2026-11-27, after the gap hunt before merge.
 
-**Acceptance:** A card created at 640.00 on 14 September 2026 logs one `acct:` row of +640.00 noted `Opening balance` and leaves Savings at 1,000.00; edited to 600.00, it logs a -40.00 row noted `Correction`. A Loan saved to follow its payment with no rate is saved not following, with 14 September 2026 as its start day. A Loan with no category of its own is saved; one naming a category that does not exist is not. An Account with a blank name is not saved.
+**Acceptance:** A card created at 640.00 on 14 September 2026 logs one `acct:` row of +640.00 noted `Opening balance` and leaves Savings at 1,000.00; edited to 600.00, it logs a -40.00 row noted `Correction`. A Loan saved to follow its payment with no rate is saved not following, with 14 September 2026 as its start day. A Loan with no category of its own is saved; one naming a category that does not exist is not. An Account with a blank name is not saved. A card of APR no number, or infinity either way, and a Loan of such a rate give `RATE_NOT_FINITE` and are not saved; a loan of 9,800.00 at such a rate is refused with `RATE_NOT_FINITE` and not taken, and 12,000.00 over 48 months at it gives no figure; at 5.9 percent a loan filed under no category, or one that does not exist, is refused with `CATEGORY_MISSING`.
 
-**Since:** 2026-11-25 · builder · own words
+**Since:** 2026-11-27 · builder · own words
 
 ### D-R87 · An Account and its linked payment
 
@@ -1647,13 +1795,15 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R112 · The receipt Profile
 
-**Rule:** The app keeps which Profile holds the receipt folder, and that Profile alone keeps the receipt settings: the folder, how new files are found (R29), the recorded receipt ids, the category links (R32) and each store's last source (R35), except that a Profile restored from the Trash while another holds the folder keeps its own with no folder (R126). A folder can be chosen in a Profile only while no other Profile holds one, and only the Profile that holds a folder scans it and confirms receipts (R115).
+**Rule:** The app keeps which Profile holds the receipt folder, and that Profile alone keeps the receipt settings: the folder, how new files are found (R29), the recorded receipt ids, beside which the receipt id of each payment in the Profile counts as recorded too, the category links (R32) and each store's last source (R35), except that a Profile restored from the Trash while another holds the folder keeps its own with no folder (R126). A folder can be chosen in a Profile only while no other Profile holds one, and only the receipt Profile the app keeps scans the folder and confirms receipts (R115), whatever another Profile's receipt settings hold. A receipt payment restored from the Trash as a pair (R127) records no new receipt, so it comes back in its own Profile, the receipt Profile or not.
 
-**Acceptance:** With the folder chosen in Profile A, Profile B is offered no folder and choosing one there is refused; a receipt opened for review in B cannot be confirmed, and the same receipt in A records one payment in A and none in B.
+**Evidence:** Builder, 2026-11-25; the receipt Profile read from what the app keeps, never from a Profile's own settings, and the restore as a pair outside it: builder, 2026-11-26.
+
+**Acceptance:** With the folder chosen in Profile A, Profile B is offered no folder and choosing one there is refused; a receipt opened for review in B cannot be confirmed, and the same receipt in A records one payment in A and none in B. Profile B, its receipt settings naming a folder while the app keeps A as the receipt Profile, scans nothing and confirms nothing.
 
 **Not:** Receipt settings in every Profile: a second Profile's links and recorded ids would wait for receipts that never reach it.
 
-**Since:** 2026-11-25 · builder · own words
+**Since:** 2026-11-26 · builder · own words
 
 ### D-R29 · Picking up receipts
 
@@ -1693,7 +1843,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R116 · Scanning the receipt folder
 
-**Rule:** A scan reads, in name order, the receipt folder's files whose names end in `.json`, passes over every other name, such as the temporary name Chatelaine writes under (Chatelaine's spec, rule 123), and writes nothing, to the folder or to the Profile (R27, R29). Each file read takes the first row below that fits: a receipt is new while its id is not among the receipt Profile's recorded ids (R112, R115), and one id met in two files of a scan is offered once, from the first. The count of receipts waiting is the number ready to review, and a Profile that does not hold the receipt folder scans nothing.
+**Rule:** A scan reads, in name order, the receipt folder's files whose names end in `.json`, passes over every other name, such as the temporary name Chatelaine writes under (Chatelaine's spec, rule 123), and writes nothing, to the folder or to the Profile (R27, R29). Each file read takes the first row below that fits: a receipt is new while its id is neither among the receipt Profile's recorded ids nor a payment's receipt id in it (R112, R115), and one id met in two files of a scan is offered once, from the first. The count of receipts waiting is the number ready to review, and a Profile other than the receipt Profile the app keeps scans nothing (R112).
 
 **Values:**
 
@@ -1708,11 +1858,11 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Evidence:** Only names ending in `.json` are read: builder, 2026-11-25, after Chatelaine's spec, rule 123, which writes a file under a temporary name and renames it once whole.
 
-**Acceptance:** Three new files give three receipts ready, a count of 3, and the Profile unchanged; a file whose receipt id is recorded is not listed; a format-2 file is refused naming 2; a USD file in a EUR Profile is refused naming USD and EUR; a file that is not JSON is refused as unreadable; two files holding one receipt id give one receipt; a file named `chatelaine-receipt-rc-9.part` is not read. Each leaves the Profile unchanged.
+**Acceptance:** Three new files give three receipts ready, a count of 3, and the Profile unchanged; a file whose receipt id is recorded is not listed, nor is one whose id a payment holds while the recorded ids lack it; a format-2 file is refused naming 2; a USD file in a EUR Profile is refused naming USD and EUR; a file that is not JSON is refused as unreadable; two files holding one receipt id give one receipt; a file named `chatelaine-receipt-rc-9.part` is not read. Each leaves the Profile unchanged.
 
 **Not:** Recording on a scan: nothing is recorded before Confirm (R29, R31). Moving or deleting a file once it is recorded: the folder is read only (R27).
 
-**Since:** 2026-11-25 · builder · own words
+**Since:** 2026-11-26 · builder · own words
 
 ### D-R117 · Reading a receipt file
 
@@ -1879,9 +2029,9 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Why:** A bank row's text rarely equals the store's name, so the store is linked once rather than compared.
 
-**Acceptance:** After pairing an Esselunga receipt with POS ESSELUNGA MI 0423, the next Esselunga receipt is suggested first with the bank rows whose payee matches that link, such as POS ESSELUNGA MI 0611, and then with any other row that meets R37.
+**Acceptance:** After pairing a Granvolta receipt with POS GRANVOLTA MI 0423, the next Granvolta receipt is suggested first with the bank rows whose payee matches that link, such as POS GRANVOLTA MI 0611, and then with any other row that meets R37.
 
-**Since:** 2026-11-26 · owner · agreed rewording
+**Since:** 2026-11-27 · owner · agreed rewording
 
 ### D-R120 · The text a store link keeps
 
@@ -1889,11 +2039,11 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Why:** The rule name drops the terminal ids, dates and card words that differ on every row of one store (R108).
 
-**Acceptance:** Pairing an Esselunga receipt with `POS ESSELUNGA MI 0423` keeps `esselunga mi`; `POS ESSELUNGA MI 0611` matches it and is suggested before `POS ESSELUNGA TO 0611`, which does not match and is still suggested; a later Esselunga pair with `ESSELUNGA SPA` by hand keeps `esselunga mi`.
+**Acceptance:** Pairing a Granvolta receipt with `POS GRANVOLTA MI 0423` keeps `granvolta mi`; `POS GRANVOLTA MI 0611` matches it and is suggested before `POS GRANVOLTA TO 0611`, which does not match and is still suggested; a later Granvolta pair with `GRANVOLTA SPA` by hand keeps `granvolta mi`.
 
 **Not:** Moving the link to each new pair's row: one unusual row would rank first over every usual one. Hiding the rows that do not match: a store paid at a second branch would never be suggested.
 
-**Since:** 2026-11-25 · owner · agreed rewording
+**Since:** 2026-11-27 · owner · agreed rewording
 
 ### D-R37 · Pairing rule
 
@@ -2047,7 +2197,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 ### D-R121 · The Trash
 
-**Rule:** A delete happens at once and settles its money then, as its own rule says, and what it removed is kept in the Trash for 30 days with what a restore needs, as below; on the 30th day after the delete it goes for good, and Delete forever takes it sooner, neither moving any money. While in the Trash an item is out of the Profile: it sweeps nothing, reminds of nothing, counts towards no figure and is the source of no new payment. One notice is due for an item on the 20th day after its delete, and once given it is not due again; the engine names the items due a notice and the items to go, and how the notice reads is the design pass's (R16).
+**Rule:** A delete happens at once and settles its money then, as its own rule says, and what it removed is kept in the Trash for 30 days with what a restore needs, as below; on the 30th day after the delete it goes for good, and Delete forever or the forgotten-PIN erase (R147) takes it sooner, none of them moving any money. While in the Trash an item is out of the Profile: it sweeps nothing, reminds of nothing, counts towards no figure and is the source of no new payment. One notice is due for an item on the 20th day after its delete, and once given it is not due again; the engine names the items due a notice, the items to go, and apart the items whose day or payload cannot be read, which block nothing and can be deleted for good, and how the notice reads is the design pass's (R16).
 
 **Values:**
 
@@ -2064,11 +2214,11 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Evidence:** Sci-Fin's spec, section 3.6, and `engine/Trash.kt` at `2892110`; the quick-add, the payment, and the payments kept with a Goal or an Account: builder, 2026-11-25.
 
-**Acceptance:** An item deleted on 1 October 2026 is due its notice on 21 October and not on 20 October, and once given is not due again; it is kept on 30 October and goes on 31 October. A monthly expense in the Trash over two month crossings writes no sweep row.
+**Acceptance:** An item deleted on 1 October 2026 is due its notice on 21 October and not on 20 October, and once given is not due again; it is kept on 30 October and goes on 31 October. A monthly expense in the Trash over two month crossings writes no sweep row. An item whose day is stored as `someday`, and one whose payload is `{oops`, are named apart as unreadable, neither going nor due a notice.
 
 **Not:** Asking the money question again when an item goes for good: it was answered at the delete, so Delete forever and the 30th day have nothing left to settle.
 
-**Since:** 2026-11-25 · builder · own words
+**Since:** 2026-11-27 · builder · own words
 
 ### D-R122 · Restoring from the Trash
 
@@ -2193,7 +2343,364 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-25 · builder · own words
 
-## 18. Test plan
+## 18. Profiles and storage
+
+### D-R140 · Profiles
+
+**Rule:** A Profile is a pool of money kept apart from every other: its Savings, settings, import memory, Goals, categories, recurring expenses, Accounts, ledger, shifts and payments are its own, nothing in one reads or moves another's, and one is open at a time. Profiles start off (R18): the first Profile is made with the switch off, and the switch is on once the device holds more than one, whether a Profile was created, added from Sci-Fin (R136) or restored from a backup (R130). Creating, switching, renaming and deleting go as below, and a step refused gives a code and changes nothing.
+
+**Why:** A second pool is someone else's money, or money bound by rules that keep it from being spent as one's own, so its figures never mix with the first's. A switch left off beside two Profiles would hide the second.
+
+**Values:**
+
+| Step | What it does | Refused with |
+|---|---|---|
+| create | a fresh Profile (R49, R70) with its name trimmed, opened at once | never |
+| switch | opens another Profile | `NO_SUCH_PROFILE` |
+| rename | the name trimmed | `NO_SUCH_PROFILE`, or `BLANK_NAME` for a name of spaces only |
+| delete | the Profile whole to the Trash (R126), freeing the receipt folder it holds (R112); deleting the open one opens the first remaining by name | `NO_SUCH_PROFILE`, `LAST_PROFILE` for the only one, or `UNREADABLE_RECORDS`, naming them, while it holds records the store cannot read (R141), until the user agrees to the very records the store holds then |
+
+**Evidence:** Sci-Fin's spec, sections 8.1, 8.3 and 8.4, and `app/AppStore.kt` and `app/AppSession.kt` at `2892110`; the switch turned on by a second Profile: builder, 2026-11-26, as R136 does for Sci-Fin's; the delete refused over records the store cannot read: builder, 2026-11-27, after the gap hunt before merge, as R143 refuses a restore.
+
+**Acceptance:** On a fresh device, creating Ana gives one Profile, open, with Profiles off; creating Household gives two, Household open, with Profiles on. With 300.00 put into Ana's Savings, Household's Savings stays unset. Switching to Ana opens Ana; renaming Household to `  Joint  ` names it `Joint`, and renaming it to three spaces is refused with `BLANK_NAME`. Deleting Ana while open opens Joint and leaves one Profile and one Trash item holding Ana with Savings at 300.00; deleting Joint then is refused with `LAST_PROFILE`, and Joint stays. Deleting a Profile A whose payment `pay-2` cannot be read is refused with `UNREADABLE_RECORDS` naming `pay-2`, A and the Trash as they were; an agreement naming `pay-2` alone, once `pay-1` too cannot be read, is refused naming both; agreeing to both, A goes to the Trash and both records go with it.
+
+**Not:** Deleting the last Profile: the app would hold no pool to open. Deleting a record the store cannot read without the user knowing (R141).
+
+**Since:** 2026-11-27 · builder · own words
+
+### D-R141 · Storage
+
+**Rule:** The Profiles, the Trash and the app's own state are kept in one SQLite database on the device, every record carrying the Profile it belongs to, and a Profile is read whole and written whole, its payments with their parts, receipt lines and bank keys and its receipt settings included. Each write is one transaction that starts from the Profile as stored, read in it, and lands whole or leaves the store as it was; a step that changes a Profile and the Trash, a delete into it or a restore out of it (R121, R122), writes both in it, as do the adding of Sci-Fin Profiles (R136) and a restore from a backup (R143), and a write refused, as below, changes nothing. A stored value that cannot be read reads as missing, never as a failure, and is left as stored: a write removes only the records the engine removed, never one it could not read, except that a Profile deleted to the Trash (R140) and a restore from a backup (R143) delete them once the user has been told and agrees, as below; an export names each of them, since no file can carry it (R130); a rate or a count of hours stored as infinity is such a value, and a write holding infinity or no number there is refused.
+
+**Why:** A Profile restored from the Trash with its item left behind, or an item kept while its payment is back in the Profile, would hold one id twice, and a backup of the device would be refused on restore (R131). A write from a copy read before a delete or a restore would bring back what the delete took, or take for good what the restore put back.
+
+**Values:**
+
+| Stored or written | What happens |
+|---|---|
+| a field that may hold nothing, such as a Goal's mode, an expense's end day or a payment's bank keys, holding a token, a day or keys that cannot be read | it reads as nothing; a row's kept keys in the import memory still hold it (R26) |
+| any other field holding a token, a day, a source or a list that cannot be read | its record is left out of the read, the Profile's other records read, and the next write keeps it as stored |
+| a shift's hours, a ledger row's hours worked, or an Account's APR or interest rate stored as infinity, which no backup file can hold | as the row above, the record named by its kind: `SHIFT`, `TRANSACTION` or `ACCOUNT` |
+| a write holding infinity or no number in one of those figures, which SQLite would keep as infinity or as nothing | refused with `NOT_FINITE`, nothing written |
+| a Profile's settings, import memory or receipt settings that cannot be read | they read as their defaults, or as none, and a write holding only those keeps them as stored |
+| a write of a Profile no longer on the device | refused with `NO_SUCH_PROFILE` |
+| a write of a record whose id another Profile holds, a restore from the Trash included | refused with `ID_IN_USE`, the item kept in the Trash |
+| a write holding one id twice in one kind of record, a restore from the Trash included | refused with `ID_TWICE`, the item kept in the Trash |
+| a Profile deleted to the Trash (R126) holding records that cannot be read | refused with `UNREADABLE_RECORDS`, naming them, until the user agrees; then they go with it, held by no Trash item (R140) |
+| an export | each record that cannot be read named apart: a recurring expense, Account, ledger row, shift or payment by its id, and settings, import memory or receipt settings by their Profile (R130); a Goal's or a category's fields that may fail to read hold nothing when they do, so neither is ever named |
+| a restore from a backup | refused with `UNREADABLE_ON_DEVICE` while the store holds a record that cannot be read, until the user agrees (R143) |
+
+**Evidence:** Sci-Fin's spec, sections 8.4 and 12, and `data/SciFinDatabase.kt` and `data/Converters.kt` at `2892110`; the Trash change in the same transaction, and values read as missing: builder, 2026-11-26; the export naming what it cannot carry, the restore's refusal and the Trash restore's code: builder, 2026-11-27, after review of the branch; the delete's refusal, figures stored as infinity and the write refused for them: builder, 2026-11-27, after the gap hunt before merge.
+
+**Acceptance:** A Profile holding a Goal, a category, a recurring expense, a card, a ledger row, a shift, a 42.30 receipt payment split 30.00 Groceries and 12.30 Household with its two lines and its bank keys, import memory with kept keys and a payee rule, and receipt settings with a folder, written to a database file and read back, equals the Profile as written. A Goal deleted and saved with its Trash item, then restored and saved with the item's removal, leaves the Goal in the Profile, the Trash empty, and a backup of the device that reads back whole (R131). A Goal whose mode is stored as `sideways` reads with no mode; a recurring expense whose cadence is stored as `sometimes` is left out while the Profile's other expenses read; and neither throws. A payment whose parts are stored as `[{oops`, and import memory that cannot be read, are left out of the read, and once the Profile is written again and the stored text mended, both read back as they were. A step for Profile B, deleted to the Trash since a screen read it, is refused with `NO_SUCH_PROFILE`, and B stays in the Trash alone; a Goal restored from the Trash after a screen read its Profile, then that screen's 10.00 taken from Savings, leaves the Goal in the Profile and Savings 10.00 lower; a step giving Profile B a Goal whose id Profile A holds is refused with `ID_IN_USE`, and A keeps its Goal; one giving B two Goals of one id is refused with `ID_TWICE`. A Goal `car` deleted from A to the Trash, then a Goal `car` given to B, refuses the Goal's restore with `ID_IN_USE`, the item staying in the Trash and B keeping its Goal. A card of APR 0.2, a row of 4 hours worked and an 8-hour shift whose figures are then stored as infinity read as missing, are named `ACCOUNT`, `TRANSACTION` and `SHIFT` by an export that reads back, and are still stored after the next write; a write giving the shift no number of hours, or the card an infinite APR, is refused with `NOT_FINITE` and changes nothing. A recurring expense whose cadence reads `sometimes`, settings whose income cadence reads `often` and receipt settings whose pickup reads `by owl` are named `RECURRING_EXPENSE`, `SETTINGS` and `RECEIPT_SETTINGS`.
+
+**Not:** One database per Profile: one file, one schema version and one backup hold them all, and ids are unique across Profiles (R20). Failing on a value that cannot be read: one damaged record would keep a whole Profile from opening. Deleting a record that cannot be read without the user knowing: its money would be gone for good, and an emptied import memory or receipt settings would let old bank rows and receipts arrive as new.
+
+**Since:** 2026-11-27 · builder · own words
+
+### D-R142 · Schema versions
+
+**Rule:** The database and the backup file carry one schema version (R130). Every version the app has written has its tables exported to a file kept in the repository, and a migration from the version before it, so a database of any earlier version opens with its data. Version 1 is changed in place until the first install on the owner's device, in phase 2 (R44); from then on every change raises the version and adds its migration.
+
+**Why:** A migration can only be written against a version whose tables are on record, and a change shipped without one would leave the owner's data behind.
+
+**Evidence:** Sci-Fin's spec, section 12, and `data/Migrations.kt` and its migration test at `2892110`; version 1 changed in place: the phase 1 plan's provisional choice, 2026-11-24.
+
+**Acceptance:** The exported schema of version 1 exists; for each version v from 2 to the app's, the exported schema of v and a migration from v-1 to v exist, and no migration names a version with no exported schema. At version 1 there is no migration.
+
+**Not:** Sci-Fin's fallback that empties a database whose version has no migration: a store is never emptied or deleted to open it, and one that cannot be migrated stays as it was, beside its snapshot (R145).
+
+**Since:** 2026-11-26 · builder · own words
+
+### D-R144 · The damaged-file guard
+
+**Rule:** Before anything else opens the store, the app reads it read-only, through an open that cannot delete it, for SQLite's quick check and its schema version (R145); only a store SQLite reports as damaged or as not a database, or whose check gives anything but ok, is moved aside, and any other failure leaves it in place, not opened, with a code. A move keeps its notice before any file moves, then moves the store whole, with its write-ahead log and shared-memory files, into the `snapshots` folder under a name of its day and device that no copy holds, or puts back what moved; a move left unfinished, and log files with no store beside them, are moved aside before anything opens the store, or it is not opened. Each notice gives the copy's name, its size, its day and a reason code, and stays owed until the user answers it, every copy with its own notice, a notice file that cannot be read owed as well, and each copy staying once answered, until the forgotten-PIN erase deletes the copies and the notices (R147).
+
+**Why:** Android's own SQLite open deletes a database that reports damage, and the bundled one fails before any window exists: one loses the money, the other keeps the app from starting. A copy moved whole can still be opened by SQLite or a recovery tool, and a restore from a backup (R143) can follow. A file that could not be read for another reason, such as a lock held by an antivirus or a disk error, is most likely healthy, and moving it would set a healthy store aside; a log left without its store holds rows a fresh store would drop.
+
+**Values:**
+
+| The store | What happens | Code |
+|---|---|---|
+| absent | a fresh store is made | none |
+| its quick check gives ok | it is opened as R145 says | none |
+| SQLite reports it as not a database or as damaged | moved aside, a fresh store opened, the notice kept | `UNREADABLE`, on the notice |
+| its quick check reports a problem | moved aside, a fresh store opened, the notice kept | `CHECK_FAILED`, on the notice |
+| a write-ahead log or shared-memory file with no store beside it | moved aside, a fresh store opened, the notice kept, of 0 bytes | `LEFTOVER`, on the notice |
+| a move left unfinished | finished, then as the rows above | none |
+| held locked by another connection | not checked, not opened | `BUSY` |
+| unreadable for any other reason: it cannot be opened, the disk fails, SQLite does not load | not moved, not opened | `NOT_CHECKED` |
+| damaged, and it cannot be moved aside whole | not opened; nothing is deleted | `NOT_MOVED` |
+| the copy's name | `tesoriere-damaged-<day>-<device>.db`, then `-2`, `-3` for the next ones of that day; the device's letters, digits and hyphens, at most 24 | |
+| the notices | a list beside the store, written whole to a new file and then renamed over the last; a notice file that cannot be read is kept aside and counted as owed | |
+
+**Evidence:** Sci-Fin's spec, section 12, and `data/Integrity.kt` and the Android and desktop database builders at `2892110`, whose notice held the copy's name only, whose copy took the time of day, and which moved a store on any failure but a lock; the day, the size and the code on the notice, and a name no later copy takes: builder, 2026-11-26; the move kept safe across a crash, a list of notices, and only damage moving a store: builder, 2026-11-27, after review of the guard; the bundled SQLite on Android as well: owner, 2026-11-27, after the gap hunt before merge.
+
+**Acceptance:** An 8,192-byte file of noise in the store's place on 26 November 2026, on device `TEST`, is moved to `snapshots/tesoriere-damaged-2026-11-26-TEST.db`, still 8,192 bytes, and the app opens an empty store with a notice naming that copy, 8,192 bytes, 26 November and `UNREADABLE`; opened again before the notice is answered, the same notice; answered, no notice, and the copy stays. A store of one Profile with 2,048 bytes overwritten past its first page is moved with `CHECK_FAILED`. A second damaged store that day goes to `tesoriere-damaged-2026-11-26-TEST-2.db`, the first copy unchanged, and both notices are owed until each is answered. The notice is kept before the first file moves; a move whose log cannot move puts the store and its log back byte for byte with no notice; one cut short with the store moved and its 4,096-byte log left is finished at the next start, the log beside the copy; a 4,096-byte log with no store is moved aside with `LEFTOVER` and 0 bytes. A notice file reading `{oops` is owed as 1 unreadable, still owed beside the next notice, until answered. A move onto a file already there fails and leaves both as they were. SQLite's codes 11 and 26 move a store; 5 and 6 give `BUSY`; 14, 10, a disk error or a missing library give `NOT_CHECKED`, with the store in place and nothing opened. A damaged store whose `snapshots` folder cannot be made gives `NOT_MOVED` and stays where it was. A healthy store stays where it is, with no notice. Neither app's sources build the database except through the guarded opener, and Android's open names neither Android's own SQLite driver nor its error handler, only the bundled driver and the guard's bundled read-only open. A store of one Profile whose every page after the first is overwritten, opened by Room past the guard, throws a SQLite exception from the repository's read and stays byte for byte as it was, with no `snapshots` folder. None of the guard's cases throws.
+
+**Not:** Deleting the store over damage that first shows while the app runs: both apps open Room, and the guard, through the bundled SQLite, which deletes nothing, never Android's own, whose default handler deletes a database it finds damaged; Room's query throws instead, its SQLite exception reaching the repository's caller with nothing deleted, and phase 2's app catches it and restarts, not merely reopens, into the guard (R44), which moves the store aside as above. The guard runs once per process, before Room's first open: run in the same process after a failed open, it gives `NOT_MOVED`, as expected, and nothing is lost; the app restarts. Repairing or emptying a damaged store: the copy is kept as it was.
+
+**Since:** 2026-11-28 · builder · own words
+
+### D-R145 · Migration snapshots
+
+**Rule:** A store that passes the guard (R144) has its schema version read in the guard's read-only open, write-ahead log included, before Room opens it: a store of a version above the app's (R142), written by a newer app, is neither opened, moved nor changed, its log included, and gives a code with its version. A store of a version below is first copied, through the same read-only open, by SQLite's `VACUUM INTO` into a part file in the `snapshots` folder, forced to disk and only then renamed to its name of version and device, so a file of that name is whole, written once and never rewritten, kept until the forgotten-PIN erase deletes it (R147), and only then do its migrations run, in one transaction. A snapshot that cannot be written stops the migration, a migration or an open that fails leaves the store and the snapshot as they were, each gives a code as below, and no store is deleted or emptied to open it.
+
+**Why:** The snapshot is the one undo for a migration that runs but writes the wrong thing. A newer app's store reached by an older app would otherwise be migrated backwards or refused only after Room had changed it; left alone, the newer app or a backup (R130) still opens it. Sci-Fin emptied a store it could not migrate, trusting the snapshot beneath; Tesoriere keeps the data in place instead.
+
+**Values:**
+
+| The store's version | What happens | Code |
+|---|---|---|
+| the app's | opened, no snapshot | none |
+| above the app's | not opened, not moved, not changed | `NEWER_SCHEMA`, with the version |
+| below the app's | snapshot `tesoriere-v<version>-<device>.db`, written as `.part` first, a stale part deleted, and kept as it is when one of the final name exists, then the migrations | none |
+| below, and the snapshot cannot be written | not migrated, not opened | `SNAPSHOT_FAILED` |
+| below, and a migration fails | the store as it was, the snapshot kept, not opened | `MIGRATION_FAILED` |
+| the app's, and Room cannot open it | the store as it was, not opened | `OPEN_FAILED` |
+
+**Evidence:** Sci-Fin's spec, section 12, and `data/Snapshot.kt`, `data/Migrations.kt` and the database builders at `2892110`, which opened the store whatever the snapshot gave, opened it to write for the version and the snapshot, and kept the destructive fallback beneath the migrations; a migration only after its snapshot, a newer store left alone, and no fallback: builder, 2026-11-26; the read-only open and the part file renamed once whole: builder, 2026-11-27, after review of the guard.
+
+**Acceptance:** A store of version 1 holding 5 rows only in its write-ahead log, opened by an app of version 2 on device `TEST`, leaves `snapshots/tesoriere-v1-TEST.db`, one file with no log beside it and no part file, of version 1 and holding the 5 rows, then migrates; opened that way again, the snapshot is not rewritten and stays the only one. A store left with 5 rows in its log and no connection open is snapshotted with the 5 rows, its file and its log byte for byte as they were. A 100-byte part file left from before is replaced by a whole snapshot of 3 rows. A migration from 1 to 2 that fails after adding a column leaves the store of version 1 with its rows and without the column, the snapshot unchanged, and gives `MIGRATION_FAILED`. A store of version 2 reached by an app of version 1 gives `NEWER_SCHEMA` with 2, its file byte for byte as it was, and no `snapshots` folder; left with 5 rows in its log, its file and its log byte for byte as they were. A store of version 1 whose `snapshots` folder cannot be made gives `SNAPSHOT_FAILED` to an app of version 2, and its migration does not run. A store of the app's version, and a first run, write no snapshot. None of them throws.
+
+**Not:** Sci-Fin's destructive fallback (R142). Carrying the snapshots to another device: they are an undo on this one, and the backup file is what travels (R130).
+
+**Since:** 2026-11-27 · builder · own words
+
+## 19. Backup
+
+### D-R130 · The backup file
+
+**Rule:** A backup is one JSON file that holds every Profile whole, the Trash as it was at the export, each item with its delete day, so its 30 days run on (R121), and which Profile holds the receipt folder (R112); beside them it names the app, the schema version, the export day and the open Profile, and nothing else of the device. Restoring a file replaces the device's Profiles and Trash with the file's, never merging them, and switches Profiles on when the file holds more than one, else leaves the switch as the device had it (R18); an item past its 30 days at the restore goes for good then, and whether the platform granted notifications stays the device's own, though each Profile's settings in the file and in its Trash hold it: a Profile the device held keeps the device's value, and one new to it reads as not yet answered, as a Sci-Fin Profile does (R136, R143). An export leaves out each ledger row and Trash item that would not read back (R131), each Trash item of a Profile neither among the Profiles nor in the Trash, and each 0.00 payment whose parts do not add up, its receipt id kept among its Profile's recorded receipts so the receipt is not offered again (R30), naming how many; it repairs, naming how many, a payment whose parts do not add up to its total, which it writes with one part of its whole total in no category, so it counts as Uncategorised (R99), whether a Profile holds it or a Trash item does, a deleted Profile's included, the item keeping its delete day and its notice mark, and a receipt folder held by a Profile other than the receipt Profile, which it clears (R112); it names apart each record the store holds but cannot read (R141), which no file can carry, with its kind, its Profile and, for a record of a list, its id, so the user knows what the file lacks; and it gives a code in place of a file only for a fault of no one record.
+
+**Why:** A restore on a new phone or PC gives back the same money, with no recorded receipt offered again and no recorded bank row arriving as new (R26, R30); the device's Trash belonged to the data the restore replaces. The receipt folder travels with its Profile as the platform's handle on it, so a restore onto the same device goes on reading it; whether another device can open it is the platform's to check at the restore, in phase 2 (R44). The app lock and the automatic copy hold a hash, a folder and a sealed password kept for one device alone. A file that lacks a payment or an import memory the store could not read, given as whole, would on restore take the place of what the store kept, and old bank rows would arrive as new. A permission granted on one phone says nothing of another.
+
+**Values:**
+
+| Key | What it holds |
+|---|---|
+| `app` | `tesoriere` |
+| `schemaVersion` | the schema version the app writes (R18) |
+| `exportedAt` | the day of the export |
+| `activeProfileId` | the Profile open at the export; the first by name when the app's state is absent or cannot be read (R141), which then names no receipt Profile |
+| `profiles` | each Profile's id, name, Savings, settings, import memory with its kept keys and payee rules (R26, R108), Goals, categories, recurring expenses, Accounts, ledger, shifts, payments with their parts, difference marks, receipt id and lines, bank keys and the share Savings paid (R21, R39, R54), and receipt settings (R112) |
+| `trash` | each item's id, Profile, kind, name, delete day, payload and whether its notice was given (R121) |
+| `receiptProfileId` | the Profile that holds the receipt folder, or none (R112) |
+| never in the file | the app lock, the automatic copy's schedule, folder and password, whether Profiles are switched on, and the days of the last backup and restore |
+
+**Evidence:** Sci-Fin's spec, section 4.7, and `engine/Backup.kt` at `2892110`; the Trash in the file and replaced on restore: owner, 2026-11-26, where Sci-Fin emptied it; the payments and receipt settings: builder, 2026-11-26; the receipt Profile in the file, the folder kept in it, and the Profiles switch on restore: builder, 2026-11-26, after review of the backup task; the records the store cannot read named, and the notification permission taken from the device: builder, 2026-11-27, after review of the branch; an export with no app state: builder, 2026-11-27, after the second review of the branch; the Trash's payments repaired as the Profiles' are, and a dropped payment's receipt kept recorded: builder, 2026-11-27, after the gap hunt before merge and its re-review.
+
+**Acceptance:** A Profile holding a 42.30 receipt payment split 30.00 Groceries and 12.30 Household, with its two lines and its bank keys, written to a file and read back equals the Profile as written, its receipt settings with the folder and its import memory's kept keys included, and the file names it as the receipt Profile. A Trash item deleted on 10 November 2026 reads back deleted on 10 November, due its notice on 30 November and going on 10 December. The file's top-level keys are the seven above and no others, and no field of the app lock, of the copy schedule or of the Profiles switch appears in it. A file of two Profiles reads as one that switches Profiles on, and a file of one does not. A device holding a ledger row whose key no longer reads, a payment whose parts no longer add up, a Trash item whose payload and one whose day cannot be read, and Profile B both in the Trash and among its Profiles exports the rest, naming 4 left out and the payment repaired, its 30.00 in one part in no category; restored, Savings and every payment's total are as on the device. A Profile that is not the receipt Profile but whose settings name a folder exports with no folder, named repaired, and a Trash item of a Profile gone for good is left out and counted. Profile B deleted on 20 November 2026, its item marked warned and holding a 30.00 payment whose one part is 1.00, exports with 1 repaired and 0 left out, its item still of 20 November and warned; restored, B comes back from the Trash with that payment as one 30.00 part in no category. A 0.00 payment of receipt `rc-b` whose part is 1.00, held by deleted Profile B, is left out, counted, and B comes back from the Trash with `rc-b` among its recorded receipts; one of receipt `rc-1` held by Profile A, whose recorded receipts are empty, is left out and the file records `rc-1` for A. A store whose Profile A holds a payment `pay-2` whose parts read `[{oops` and import memory that cannot be read exports the rest, naming 2 records it could not read, the payment `pay-2` and A's import memory, with 0 left out and 0 repaired. A store of Profiles B and A whose app state row is gone exports both, naming A open and no receipt Profile, and writes no app state.
+
+**Not:** Merging a file into the device's data: two Profiles with one id from two devices have no right merge. Emptying the Trash on restore, as Sci-Fin did: an item deleted before the export could no longer be restored. Sync: nothing watches a folder or knows a second device. Carrying the Profiles switch: a file of two Profiles restored with the switch off would hide the second. Passing over a record the store cannot read in silence: the file would look whole while it lacks money or the memory of bank rows recorded.
+
+**Since:** 2026-11-27 · builder · own words
+
+### D-R131 · Reading a backup file
+
+**Rule:** A backup file is read and checked whole before anything changes; a file that cannot be taken is refused whole with a code, as below, and nothing is read from it. A field absent from the file takes its default, since it held nothing, and so does null where the field may hold nothing (Savings unset, no receipt settings, no receipt Profile); a field present in the wrong shape, null anywhere else included, is damage. Each Profile's records take its id as theirs, an open Profile that is not in the file gives way to the file's first, and a Trash item whose Profile is neither in the file nor itself in the file's Trash is left out, since it could never be restored (R126).
+
+**Values:**
+
+| The file | Code |
+|---|---|
+| not JSON, or not a JSON object | `NOT_A_BACKUP` |
+| of another app, or naming no app; a Sci-Fin file is read as R19 says | `OTHER_APP` |
+| marked encrypted, by an `encrypted` mark other than false: it is opened with its password first (R133) | `ENCRYPTED` |
+| of a schema above the one the app writes | `NEWER_SCHEMA` |
+| with no schema version or no Profile; a Profile with no id or name; a list that is not a list; a figure that is not a whole number a 64-bit count holds; an unknown token; a day that is not one; a ledger key the ledger cannot read (R51); a payment whose total and parts break R23; an id used twice by one kind of record across the file, a deleted Profile's records and the payments and removed rows held in the Trash included, but not the rows a delete wrote, which stay in the ledger, nor a deleted Goal, category, recurring expense or Account, which a restore skips when its id is back (R122); a Trash item whose day or payload cannot be read; a deleted Profile whose id is a Profile in the file or whose item names another Profile; a receipt Profile that is not in the file, or a receipt folder held by a Profile other than the receipt Profile, or by two (R112); arrays and objects nested deeper than 64 | `DAMAGED` |
+
+The checks of a Profile in the file apply as well to a Profile, the payments and the rows held in its Trash, which a restore from the Trash puts back (R122, R126).
+
+**Evidence:** Sci-Fin's spec, section 4.7, and `engine/Backup.kt` at `2892110`, which read a file with no app or no version as its own of version 1 and repaired three appearance fields; builder, 2026-11-26, and after review of the backup task.
+
+**Acceptance:** A file of the app's schema version plus one is refused with `NEWER_SCHEMA`, and so is one of 99999999999999999999; `{not json` is `NOT_A_BACKUP`; a file of `sci-fin` or naming no app is `OTHER_APP`; an encrypted file is `ENCRYPTED`, and one marked `"encrypted": false` reads as a plain file. A Profile whose goals are `"oops"` or null, whose settings are null, or whose Savings is `"lots"`, 12.5 or 99999999999999999999, a 42.30 payment with parts of 30.00 and 12.00, a 0.00 payment with parts of 5.00 and -5.00, a 10.00 payment with parts of 12.00 and -2.00 neither a difference part, one with two difference parts, a deleted payment whose parts do not add up, a goal id used in two Profiles, a payment in the Trash whose id is a payment in the file, a deleted Profile whose id is a Profile in the file, a folder held by a Profile the file does not name as the receipt Profile, and 100,000 nested arrays are each `DAMAGED`, and none of them throws. A Profile with no goals key reads with no Goals. A Goal deleted from Profile B, and B deleted after it, read back as two items; with B's own item gone for good before the export, the Goal's item is left out and the rest of the file reads.
+
+**Not:** Repairing appearance fields, as Sci-Fin did: Tesoriere's file has none (R16). Reading a file with no app as Tesoriere's: a Sci-Fin file of schema 1 names neither app nor version, and Sci-Fin's records are not Tesoriere's (R19).
+
+**Since:** 2026-11-26 · builder · own words
+
+### D-R143 · Restoring a backup
+
+**Rule:** A file read whole (R131) is restored in one transaction (R141): the file's Profiles take the place of every Profile on the device, the device's Trash is replaced by the file's less each item already past its 30 days on the day of the restore (R121), the open Profile and the receipt Profile become the file's (R112), Profiles is switched on for a file of more than one (R130), and the day is kept as the last restore. The app lock, the automatic copy, the day of the last export, for a file of one Profile the Profiles switch, and whether the platform granted notifications stay as the device had them: a Profile of the file keeps the value of the device's Profile of the same id, and one new to the device reads as not yet answered, as a Profile created on it does, a deleted Profile held in the file's Trash taking the same as its item is written, so a later restore from the Trash never brings the file's value. A restore that fails before its end leaves the device as it was, and a store holding records it cannot read (R141), which the restore would delete, refuses it with a code, naming them as an export does (R130), changing nothing, until the user has been told and agrees and the app restores again naming the records agreed to, which go only while they are the very records the store cannot read at that restore, compared in its own transaction, any other list being refused again with the store's.
+
+**Why:** Half a restore would mix two devices' data with no way to tell them apart. A record the store cannot read may still be mended and read back (R141); deleting it unannounced would lose its money for good.
+
+**Values:**
+
+| The device | What happens | Code |
+|---|---|---|
+| its store reads whole | restored | none |
+| its store holds a record it cannot read, the user not yet told | nothing changes; the records named | `UNREADABLE_ON_DEVICE` |
+| the same, the user told and agreeing to the records named, which are still the store's | restored; the records it could not read go | none |
+| the same, the records agreed to not the store's at the restore, such as one more gone unreadable since | nothing changes; the store's records named | `UNREADABLE_ON_DEVICE` |
+| a Profile of the file whose id the device holds | restored with the device's value for notifications granted | none |
+| a Profile of the file new to the device | restored with notifications not yet answered | none |
+| a deleted Profile in the file's Trash | its item written with the device's value for that id, or not yet answered for one new to it | none |
+
+**Evidence:** Sci-Fin's spec, section 4.7, and `engine/Backup.kt`'s `apply` at `2892110`, which emptied the Trash and wrote the app's state afresh; the Trash: owner, 2026-11-26; the switch and the receipt Profile: R130; the refusal over records the store cannot read, and the notification permission kept from the device: builder, 2026-11-27, after review of the branch; not yet answered for a Profile new to the device, the file's Trash included, and the agreement tied to the records named: builder, 2026-11-27, after the second review of the branch; a deleted Profile whose payment the export repaired coming back from the Trash: builder, 2026-11-27, after the gap hunt before merge.
+
+**Acceptance:** A device holding Profiles A and B, an app lock, an automatic copy and a Trash item of A, restoring on 26 November 2026 a file of Profile C whose Trash holds a Goal deleted on 20 October and a category deleted on 10 November, and which names C as the receipt Profile, holds C alone, open and the receipt Profile, with the category's item alone in its Trash and its last restore on 26 November, the lock, the copy and the Profiles switch as they were. A file of C and D on a device with Profiles off switches them on. A restore that fails after writing the file's Profiles leaves A, B, the Trash item and the open Profile as they were. On a device whose Profile A holds a payment `pay-2` whose parts read `[{oops`, a restore is refused with `UNREADABLE_ON_DEVICE` naming `pay-2`, and A, B and the Trash stay as they were; with the user's agreement to `pay-2` it restores C. An agreement naming `pay-2` alone, given once `pay-1` too cannot be read, is refused with `UNREADABLE_ON_DEVICE` naming both, and nothing changes; agreeing to both, it restores C. A file whose Profile A says notifications were not granted and whose Profile C says they were, restored onto a device whose A and D say granted and which holds no C and no E, gives A granted and C not yet answered; deleted Profiles D and E in the file's Trash, saying not granted and granted, restored from the Trash afterwards give D granted and E not yet answered. After the forgotten-PIN erase (R147), a file of C restores C, open, with the lock `OFF`, no copy schedule and no damage notice owed. A file whose deleted Profile B held a payment the export repaired (R130) restores B's item, and B then comes back from the Trash with the payment as one part in no category.
+
+**Not:** Emptying the Trash on restore, as Sci-Fin did (R130). Deleting a record the store cannot read without the user knowing (R141).
+
+**Since:** 2026-11-27 · builder · own words
+
+### D-R132 · A backup password
+
+**Rule:** A backup may be written with a password, and while the app lock is on it may not be written without one, so a file is never easier to read than the app (R18). A password has at least 8 characters, is typed twice the same, and comes with a hint that is not the password itself, compared without the spaces around them and ignoring case. The engine names the first problem as a code, as below, and none once the password can be used.
+
+**Why:** A lost password cannot be recovered, so the hint is required: it is the one thing that can bring the password back to mind.
+
+**Values:**
+
+| Case | Code |
+|---|---|
+| no password while the app lock is on | `REQUIRED` |
+| fewer than 8 characters | `TOO_SHORT` |
+| not typed a second time | `NOT_REPEATED` |
+| typed a second time differently | `NO_MATCH` |
+| no hint, or only spaces | `NO_HINT` |
+| the hint is the password | `HINT_IS_PASSWORD` |
+
+**Evidence:** Sci-Fin's spec, section 4.7, and `engine/BackupCrypto.kt` at `2892110`, which returned sentences.
+
+**Acceptance:** `short` is `TOO_SHORT`; `longenough` with nothing typed again is `NOT_REPEATED`, typed again as `longenougH` is `NO_MATCH`, with a hint of two spaces is `NO_HINT`, with the hint `LongEnough`, with spaces around it or without, is `HINT_IS_PASSWORD`, and with the hint `the usual, twice` has no problem. The export's check, `BackupCrypto.exportProblem`, gives `REQUIRED` for a file with no password while the app lock is on, none for one with no password while it is off, and with a password the codes above, whatever the lock.
+
+**Since:** 2026-11-26 · builder · own words
+
+### D-R133 · The encrypted file
+
+**Rule:** A file with a password wraps the whole backup in AES-256-GCM, under a key drawn from the password by PBKDF2-HMAC-SHA256 at 600,000 iterations, with a fresh 16-byte salt and 12-byte nonce for each file. Outside the encryption stand the app's name, the export day as `YYYY-MM-DD` and the hint, bound to the sealed data with the iteration count, so none of them can be changed without the file refusing to open. Opening a file gives the backup's text, or a code, as below, and changes nothing; the app's name is the one asked for, `tesoriere` for Tesoriere's own files and `sci-fin` for Sci-Fin's (R19).
+
+**Values:**
+
+| The file | Code |
+|---|---|
+| the password is wrong, or the hint, the day or the iteration count was changed | `WRONG_PASSWORD` |
+| not an encrypted backup; its salt, nonce or sealed data cannot be read or is cut short; its export day is not a `YYYY-MM-DD` day, so the day and the hint cannot be told apart in what binds them; or it asks for fewer than 100,000 or more than 5,000,000 iterations; such a file shows no hint or day before it is opened | `DAMAGED` |
+| of another app than the one asked for | `OTHER_APP` |
+| of an envelope version or key function the app does not know | `NEWER_FORMAT` |
+
+**Evidence:** Sci-Fin's spec, section 4.7, and `engine/BackupCrypto.kt` and `BackupCrypto.jvm.kt` at `2892110`; the app's name asked for, so Sci-Fin's files open with the same code: the phase 1 plan, 2026-11-24; the export day held to a day: builder, 2026-11-26, after review of the backup task, as Sci-Fin wrote it; no hint or day shown for a damaged file: builder, 2026-11-27, after the gap hunt before merge.
+
+**Acceptance:** A file written with the password `correct horse` and the hint `the stable` on 26 November 2026 shows its hint and day before it is opened, does not hold the backup's text in the clear, opens with `correct horse`, and gives `WRONG_PASSWORD` with `correct hors`. With its hint changed it gives `WRONG_PASSWORD`; with 50 iterations, a nonce cut short, or the day `2026-11-26|the` with the hint `stable`, `DAMAGED`, and shows no hint or day; opened as `sci-fin`, `OTHER_APP`; and none of them throws.
+
+**Not:** Telling a wrong password from a changed file: the cipher cannot, both fail the same check.
+
+**Since:** 2026-11-27 · builder · own words
+
+### D-R148 · Automatic copy
+
+**Rule:** The automatic copy writes a backup file (R130) into a folder the user chose, daily or weekly; it is off on a fresh install (R18), app-wide and kept on the device alone, never in a backup (R130), and turning it on chooses a folder and weekly, which is how R01's weekly backup is met, while choosing another folder later keeps the frequency, off included. A copy is due as the table says; while the copies hold a sealed password it is the encrypted file of R133 under that password and its hint, or no file and `PASSWORD_UNREADABLE` when the key store gives none back, the password passing R132's checks with R132's codes, and with no password nothing is written while the app lock is on (R146, R132), nor with a password handed in that the copies do not hold, so a plain copy never stands in for an encrypted one, and an export that lacks records, ones the store cannot read (R141) or ones it left out (R130), is copied all the same, of everything it carries. Each copy's name holds its day and the device's cleaned name, so no copy replaces one of another day, and the app deletes only the copies of this device's name beyond the newest 14, those dated after today first, never the day's own, and only after a whole copy: while copies lack records none is deleted, so the folder grows by one copy a run until the store is whole again, by a restore (R143) or a delete the user agrees to (R140), which the owner chose over a cap; a refused change gives a code, a success records its day and clears the last failure, and a failure, a due copy paused for want of a password, or a copy lacking records records its code and owes one notice for each run of failures, of pauses or of copies lacking records, so R01's weekly backup never stops or thins unseen.
+
+**Why:** A copy in a folder a sync app already carries off the device is a backup no one has to remember. A damaged or unknown stored value must neither stop the copies unseen nor throw, so only `off` turns them off and a last copy that cannot be trusted makes one due. A device that deletes only its own copies leaves a folder shared by the phone and the PC holding both. A clock that ran ahead leaves copies dated later than any copy since; counted as the newest, they would be kept for good while each new copy pushed out the day before's. A copy that lacks a record the store could not read still holds every other one, which no copy at all would; written day after day while old copies went, it would within 14 copies push out every copy that still holds the record, and one lacking the import memory, restored on another device, would let old bank rows arrive as new (R26), so the old copies are kept and the notice says what the new ones lack. A pause with no notice would stop the weekly backup unseen the day the app lock is turned on.
+
+**Values:**
+
+| Case | Figure |
+|---|---|
+| no row, or `every` stored as `off` | off, never due |
+| `every` stored as `daily` or `weekly` | due 1 or 7 days after the last copy |
+| `every` stored as any other text | weekly, since only `off` turns the copy off |
+| on, with no folder | never due; setting a frequency other than off with no folder is refused with `NO_FOLDER`, the schedule unchanged |
+| no last copy, or one stored as anything but a `YYYY-MM-DD` day | due |
+| a last copy after today, the clock moved back | due |
+| a last copy today | not due, daily or weekly |
+| turning the copy on | the folder chosen, weekly, the last failure cleared |
+| choosing a folder | the frequency as it was, off staying off, as in Sci-Fin; the last failure cleared |
+| a sealed password the key store gives back | the encrypted file under it, with its hint |
+| a sealed password the key store gives nothing back for, or an empty one | no file, `PASSWORD_UNREADABLE`, whether the app lock is on or off |
+| no password for the copies, the app lock on | paused: no file; `PAUSED_NEEDS_PASSWORD` recorded, the last copy kept, so the copy stays due; cleared by the next success or by a password set |
+| no password for the copies, a password handed in all the same, the app lock on or off | no file, `PASSWORD_NOT_SAVED` |
+| no password for the copies, the app lock off | the backup's plain text |
+| removing the copies' password while the app lock is on | refused with R132's `REQUIRED`, the schedule unchanged |
+| a copy's name | `tesoriere-copy-YYYY-MM-DD-<device>.json` |
+| the device in the name | its ASCII letters lowercased, its digits, `-` and `_`, every other character `_`, at most 32 of them; `device` when the name is empty |
+| a second copy on the same day from the same device | replaces that day's copy, as in Sci-Fin |
+| the copies to delete | this device's copies beyond the newest 14, those dated after today counted as the oldest, so they go first; never the day's own; only after a whole copy, none after a copy lacking records or when nothing was written, with no default that deletes |
+| the folder cannot be reached or read | `FOLDER_UNREACHABLE`, given by the platform's folder code in phase 2 (R44); nothing in the engine gives it |
+| the copy could not be written: the folder is read-only or full | `NOT_WRITTEN` |
+| the copies' password cannot be read back from the device's key store | `PASSWORD_UNREADABLE` |
+| the backup itself could not be made: the export gave a code in place of a file, or found no Profile (R130) | `NOT_MADE`, read from the export as the next row is |
+| the export named records the store cannot read (R141) | the copy written of everything it reads, its day recorded; `RECORDS_UNREADABLE` kept as a notice code, not a failure; cleared by the next copy that lacks none |
+| the export left records out (R130), such as a ledger row whose key no longer reads, a 0.00 payment or a Trash item, and named none unreadable | as the row above, `RECORDS_LEFT_OUT`; a record repaired is carried, so it lacks nothing |
+| a stored failure that is not one of the codes above | `NOT_WRITTEN` |
+| a failure, a pause or a copy lacking records after a success, or the first | a notice owed |
+| a failure after a failure, a pause after a pause, or a copy lacking records after another | no notice |
+| one of the three after another of them, such as a copy lacking records after `FOLDER_UNREACHABLE`, or the reverse | a notice owed |
+
+Two devices whose names clean to the same text, `Phone` and `phone` among them, share copy names: each would replace the other's copy of a day and count it among its own. A name distinct for each device, such as a short id kept for the install, is the platform's to give in phase 2 (R44), with choosing the folder, sealing the password in the key store, writing and listing the files and the daily run.
+
+**Evidence:** Sci-Fin's spec, section 4.7, with `app/CopyPlace.kt`, `app/AppSession.kt`'s `runCopy` and `app/AppStore.kt`'s copy settings at `2892110`, which named a copy by its day alone, deleted every copy of its own beyond 14 and kept those dated after today as the newest, read an unknown frequency as off, held a copy back while the last copy was after today, refused changes in silence and stored each failure as a sentence; choosing a folder keeps the frequency there as here, and its turning on with a folder is `turnOn`; its `app/LocalCopies.kt` is the erase, which R147 covers. The device in the name, lowercased, the unknown frequency read as weekly, the moved clock either way, the copy refused when a sealed password cannot be read, and the codes: builder, 2026-11-27, the last four after review of the copy task; `NOT_MADE`: builder, 2026-11-27, after review of the branch; the pause's notice, a password not saved, and `FOLDER_UNREACHABLE` left to phase 2: builder, 2026-11-27, after the gap hunt before merge; a copy lacking records written with its notice, and no copy deleted while it lacks them: owner, 2026-11-27; records left out counted as lacking, and no deletion without a whole copy: builder, 2026-11-28, after the re-review.
+
+**Acceptance:** A fresh install holds no copy row and no copy is due. Turning the copy on with the folder `Sync` makes it weekly and due at once; choosing `Sync` for a copy that is off leaves it off, and a daily copy keeps daily. Setting a copy with no folder to daily gives `NO_FOLDER` and leaves it off. A weekly copy last written on 27 November 2026 is not due on 27 November or 3 December and is due on 4 December; one last written on 28 December 2026 is not due on 3 January 2027 and is due on 4 January; a daily copy last written on 27 November is due on 28 November. A copy with no last copy, with one stored as `2026-13-01` or `yesterday`, or with one on 28 November 2026 when today is 27 November, is due; a copy that is on with no folder is not. `fortnightly` and the empty text read as weekly; a stored failure `disk_full`, or a sentence, reads as `NOT_WRITTEN`, and a copy whose backup could not be made is stored as `not_made` and reads back as `NOT_MADE`, owing a notice as any first failure does. The copy of 27 November 2026 from `Pixel 9` is `tesoriere-copy-2026-11-27-pixel_9.json`, and `Phone` and `phone` give one name; a device named `a/b\c:d*e?f"g<h>i|j` gives `a_b_c_d_e_f_g_h_i_j`, one of 40 letters keeps 32, and an empty one gives `device`; the copies of 26 and 27 November differ, and so do those of `phone` and `pc` on one day. Beside 17 daily copies of `phone`, 3 of `pc`, `notes.txt`, a `phone` copy dated `2026-02-30` and one of `my-phone`, the 3 oldest of `phone` are the ones to delete. Beside 14 copies dated from 1 January 2027, the copy of 27 November 2026 and that of 26 November, on 27 November the two earliest of 2027 go and both of November stay; beside 15 copies dated after 27 November and that day's own, the two earliest after it go and the day's own stays. A failure with no notice before owes one and the next owes none; a success on 27 November then records `2026-11-27`, clears the failure and the next failure owes a notice again. With the app lock on, a copy with no password is paused and one with a password is not; removing the password then gives `REQUIRED`; with the lock on, a password `short` gives `TOO_SHORT` and no password `REQUIRED`. A copy with the password `correct horse` and the hint `the stable` shows its hint and opens with that password to the backup's text. A copy holding a sealed password for which the key store gives nothing back, or the empty text, gives `PASSWORD_UNREADABLE` and no file, with the lock on or off. With no password, the lock on gives no file and the lock off the backup's text; with the password `correct horse` handed in all the same, `PASSWORD_NOT_SAVED` and no file, lock on or off, and with the empty text handed in, the lock off gives the backup's text. A weekly copy last written on 13 November, paused on 27 November with the lock on, records `paused_needs_password`, owes a notice, stays due on 28 November and owes none at its next pause; a pause after a failure, and a failure after a pause, each owe one; a password set, or the next success, clears the pause and its notice, and a password set leaves a failure `folder_unreachable` as it was. An export that names the import memory as unreadable is copied as its text, records `records_unreadable` and that day, and owes a notice, and the next such copy owes none; one after `FOLDER_UNREACHABLE` owes one, and so does `FOLDER_UNREACHABLE` after it; a whole copy clears it. Beside 20 daily copies of `phone`, none is deleted after a copy lacking records, a pause or a failure, and the 6 oldest go after a whole one. An export that left 1 record out and names none unreadable is copied, records `records_left_out`, and of 20 copies none goes; a copy lacking unreadable records after it owes no notice, being of the same run, and `FOLDER_UNREACHABLE` after it owes one; one with 2 records repaired and none left out is whole. An export refused or with no Profile gives `NOT_MADE`; a whole one gives its text. None of them throws.
+
+**Not:** Sync: nothing watches the folder or knows a second device (R130). Deleting another device's copies, or any file in the folder that is not this device's copy. Reading an unknown frequency as off, as Sci-Fin did: a damaged row would stop the copies unseen. Holding the copies back while the last copy is after today, as Sci-Fin did: a clock set back a year would stop them for a year. Writing a plain copy when the sealed password cannot be read: with the app lock on it would be easier to read than the app (R132). Cleaning the device's name as the snapshots and damaged copies do (R144, R145), which keep its letters of any script and its case, drop the rest and stop at 24: those files stay in the store's own folder on one device, so neither a sync app nor a second device ever meets them, and changing their names would rename the files their rules and notices already name. Holding back the copy while records cannot be read: the weekly backup would stop for as long as the damage stays. Capping the copies kept while they lack records: the owner keeps them all.
+
+**Since:** 2026-11-28 · owner · agreed rewording
+
+## 20. App lock
+
+### D-R146 · The app lock
+
+**Rule:** The app lock is an optional PIN of the app's own, off on a fresh install (R18) and on while its one row is kept on the device, never in a backup file (R130); a PIN is 4 to 6 of the digits 0 to 9, kept only as a PBKDF2-HMAC-SHA256 hash under a fresh 16-byte salt with its cost and its digit count beside it, and its optional hint is not the PIN itself, compared without the spaces around them and ignoring case, which gives R132's code `HINT_IS_PASSWORD`. The engine gives the figures below: whether a PIN matches the row, the wait owed after a count of wrong PINs in a row, the count after one more, and the lock's state, where a row that cannot be read is damage, `DAMAGED`, which matches no PIN, so the app opens, reports it and asks for a new PIN; nothing in the engine throws on a PIN or a row. The gate, leaving and returning, and keeping the count are the app's, built in phase 2 (R44): it locks at each open and on return after the chosen time away, the app's own file pickers not counting as leaving, saves the count in the row before it shows a wait, so a restart owes the wait again, checks no PIN while a wait runs, tries the PIN typed at any length of 4 to 6, the stored digit count only shaping the field, and clears the count on a right PIN.
+
+**Why:** The PIN guards the screen, not the data: the store is not encrypted with it. A PIN has at most a million values, so the hash's cost is a brake and the wait is what holds back guessing; a count lost at a restart would let a restart skip the wait. Digits 0 to 9 alone can be typed the same on the phone's number pad and on a desktop keyboard.
+
+**Values:**
+
+| Case | Figure |
+|---|---|
+| a PIN | 4 to 6 characters, each one of 0 to 9 |
+| what a PIN field keeps of what is typed | the digits 0 to 9, the first 6 |
+| a new PIN's hash | PBKDF2-HMAC-SHA256, 32 bytes, 120,000 iterations, 16-byte salt, both kept as Base64 |
+| no row | `OFF` |
+| a row that can be read | `ON` |
+| a row whose salt or hash is not Base64, whose salt is empty, whose hash is not 32 bytes, whose cost is not 1 to 5,000,000 iterations, or whose digit count is not 4 to 6 | `DAMAGED`, matching no PIN |
+| the count after one more wrong PIN | the stored count plus one, a stored count below 0 read as 0, and 2,147,483,647 kept as it is, never wrapping |
+| wrong PINs 1 to 4 in a row, or a stored count below 0 | no wait |
+| the 5th wrong PIN | 30 seconds |
+| each further wrong PIN | the wait doubles, to at most 1 hour |
+| lock after leaving, `immediately` | at once |
+| lock after leaving, `one_minute`, the default, and any token not known | after 1 minute |
+| lock after leaving, `five_minutes` | after 5 minutes |
+
+Leaving is the app going out of sight or its window losing focus; the app's own file pickers are not leaving.
+
+**Evidence:** Sci-Fin's spec, section 4.7, and `engine/Lock.kt` and `Lock.jvm.kt` at `2892110`, which took any script's digits, read a stored row with no bound on its cost, and gave the hint's problem as a sentence; digits 0 to 9 alone, the bound, the shared code and the count that never wraps: builder, 2026-11-27, the last after review of the lock task; a row that cannot be read as damage, with a new PIN asked for: owner, 2026-11-27.
+
+**Acceptance:** `1234` and `123456` are PINs; `123`, `1234567`, `12a4` and `1234` in full-width digits are not; a field typed `1 2-3a4567` keeps `123456`. Wrong PINs 1 to 4 owe no wait, 5 to 8 owe 30 seconds, 1, 2 and 4 minutes, and 20 and 2,147,483,647 owe 1 hour. A lock for `482100` with the hint `the first flat` holds the PIN in neither its hash nor its salt, is of 120,000 iterations and 6 digits, matches `482100` and not `482101` or `4821`, and a second lock for the same PIN has another salt and hash; a hint of spaces is kept as none. The hint ` 4821 ` for the PIN `4821` gives `HINT_IS_PASSWORD`, and an empty hint, one of spaces or `grandad's door` none; no lock is made for `123`, for `4821` with the hint `4821`, or at 5,000,001 iterations, and one made at 1 iteration matches its PIN. A row whose salt reads `not base64!`, whose salt is empty, whose hash is 31 or 33 bytes, whose cost is 0, -5 or 5,000,001, or whose digit count is 3 or 7 is `DAMAGED` and matches no PIN, and none of them throws; costs of 1 and 5,000,000 and digit counts of 4 and 6 read as `ON`, and a lock for `482100` whose digit count reads 4 still matches `482100`. After a stored count of 4 the count is 5, after -3 it is 1, and after 2,147,483,647 it stays 2,147,483,647. A fresh install holds no lock row and is `OFF`, and the token `fortnightly` reads as `one_minute`.
+
+**Not:** Any script's digits, as Sci-Fin took: a PIN set in another script's digits on a desktop could not be typed on the phone's number pad. A sentence for the hint: the code is R132's, and its words are the design pass's (R16). Keeping a damaged row's gate shut: no PIN could ever open it, and the user would be left with the erase alone (R147). Trying a PIN only at the stored digit count: a row whose count no longer fits its PIN would never open.
+
+**Since:** 2026-11-27 · owner · agreed rewording
+
+### D-R147 · Erasing the device for a forgotten PIN
+
+**Rule:** For a forgotten PIN the app offers to erase everything it keeps on the device: every Profile with its records, the app's state, the lock, the automatic copy's schedule and the Trash go in one transaction (R141), the store file is then rewritten and its write-ahead log emptied so their old pages go too, and then every file in the store's `snapshots` folder (R144, R145) and the damage notices kept beside the store are deleted, after which the app opens as on a fresh install (R18) and only a backup brings the data back (R143). Files in a folder the user chose, exported backups and automatic copies, and any other file beside the store are kept, and the erase never reaches past the store's folder: a folder in `snapshots` that is a link or a junction, or whose real place lies outside `snapshots`, and `snapshots` itself when it is one, is removed as the link alone, its contents untouched, and a file whose real folder lies outside is not deleted. The erase gives each problem below as a code and never throws, and once begun it runs to its end even when the app cancels it: when the store's transaction fails nothing is erased and no file is touched, and when the store is erased but a file cannot be deleted, the store stays erased, every other file goes and the files left are named; it can be run again, which deletes what a failed or cut-short run left.
+
+**Why:** A forgotten PIN cannot be recovered, and the lock guards the screen, not the data (R146), so erasing reveals nothing the lock hides; a snapshot or damaged copy left behind would keep everything readable on the device. The backups in the user's own folder are the way back. Deleting the files only once the store is erased means a failure never leaves the data in the store with its copies gone, and a file left is named, never silent.
+
+**Values:**
+
+| Case | Code |
+|---|---|
+| the store's transaction fails: nothing is erased and no file is touched | `STORE_NOT_ERASED` |
+| the rows are gone but the store file could not be rewritten, or another connection kept its write-ahead log from being emptied | `STORE_NOT_COMPACTED` |
+| a file in the `snapshots` folder or a notice file could not be deleted, or lies outside the store's folder; each is named | `FILE_NOT_DELETED` |
+
+The words the user types to confirm the erase are the design pass's (R13, R16); the engine gives the erase itself.
+
+**Evidence:** Sci-Fin's spec, section 4.7, with `app/AppStore.kt`'s `eraseEverything`, `data/SciFinDatabase.kt`'s `eraseAll`, `data/Integrity.kt`'s `copies` and `app/LocalCopies.kt` at `2892110`, which deleted the folder's top-level files and the notice marker and gave a count; what goes and what stays, and that the engine gives the erase: owner, 2026-11-27; the codes and the order: builder, 2026-11-27.
+
+**Acceptance:** A device holding Profiles A and B, an app lock, a weekly automatic copy, a Trash item, the snapshot `snapshots/tesoriere-v1-TEST.db`, a damaged copy with its notice, a notice file kept aside as unreadable, a file `my-backup.json` beside the store and a backup in a folder of the user's, erased and opened again, opens an empty store: no Profile, no app state, the lock `OFF`, no copy schedule, an empty Trash and no notice owed; the `snapshots` folder and every notice file are gone, and both backup files are there byte for byte. With the damaged copy not deletable, the erase gives `FILE_NOT_DELETED` naming it, with the store erased and the snapshot and the notices gone; run again once the copy can go, it gives no problem. With the store already closed, it gives `STORE_NOT_ERASED`, and the snapshot and the notice are still there. With a read held open on the store by another connection, the rows go and it gives `STORE_NOT_COMPACTED`. Begun by a caller already cancelled, it erases the store and the files all the same. On Windows, a junction `snapshots/j` to a folder outside holding `precious.json`, and a junction standing as `snapshots` itself, are removed, and the folder and its file stay; where the system lets a symbolic link be made, the same holds for one. None of them throws.
+
+**Not:** Deleting the folder the user chose for backups or copies: it is the way back. Asking for the typed word in the engine: it is wording (R16). Following a link or a junction out of `snapshots`: what lies at its end is not the app's.
+
+**Since:** 2026-11-27 · owner · agreed rewording
+
+## 21. Test plan
 
 ### D-R43 · Test plan
 
@@ -2214,7 +2721,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 
 **Since:** 2026-11-24 · builder · own words
 
-## 19. Rollout
+## 22. Rollout
 
 ### D-R44 · Rollout phases
 
@@ -2250,6 +2757,12 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R17 · Port source: Each ported piece has its own rules in this spec before its code is merged, and its tests cite them as `SPEC:Rnn`.
 - R18 · Ported pieces: On a fresh install the pieces marked off show no screen, row or notification until switched on; Profiles off means one Profile and no switcher.
 - R19 · Sci-Fin backup import: Importing a Sci-Fin schema-10 backup yields one new Tesoriere Profile per Sci-Fin Profile, with the same Savings, Goals, Categories, Recurring expenses, Accounts and ledger counts the review showed; a schema-11 file is refused and nothing is written.
+- R134 · Reading a Sci-Fin backup: The schema-1 fixture, naming no app and no version, reads as Sci-Fin's version 1, and the same text given to Tesoriere's own reader is `OTHER_APP` (R131). `{not json` is `NOT_A_BACKUP`; a file of `tesoriere` or of `conto-facile` is `OTHER_APP`; the schema-11 fixture is `NEWER_SCHEMA`, and so is a version of 99999999999999999999; the encrypted schema-10 fixture opened with no password is `PASSWORD_NEEDED`, with `violet staircase 4` `WRONG_PASSWORD`, and with its envelope version set to 2 `NEWER_FORMAT`; a version of `"ten"`, an empty list of Profiles, a Profile with no id or with no settings, a Profile holding a `data` object, a goal or category id of `""`, goals of `"oops"`, Savings of `"lots"` or 12.5, a ledger key `bank:x` or `cat:`, a `spend:` row of 0.00 or +5.00 and a goal id used twice are each `DAMAGED`; none of them throws.
+- R135 · What a Sci-Fin ledger row becomes: In the schema-10 fixture, the `cat:` rows of 12.40 on 3 March noted `MERCATO VERDE`, of 40.00 on 10 March and of 7.50 on 27 February become payments from Savings with one part each in Groceries; its 5.00 `cat:` row noted `Correction` stays an adjustment, and so does a 20.00 `cat:` row noted `Starting balance`; its `spend:` row of -60.00 becomes a 60.00 payment from Trip with one part in no category; its `acct:` row of +40.00 noted `Charged` becomes a 40.00 payment charged to Orbita card, and the +300.00 noted `Opening balance` stays a row; its 950.00 `rec:` row stays, filed under no category. Savings reads 1,250.00, Trip 400.00 and Orbita card 340.00, as in the file; Groceries' March spent is 57.40, the sum of its March rows, where Sci-Fin stored 64.90, and its February spent is 7.50; the new Profile's ledger rows and payments number 10, as the file's rows do.
+- R136 · A Sci-Fin Profile's records and settings: The schema-10 fixture added beside a Profile `sf-p-1` gives a second Profile whose id, and every Goal, category, expense, Account, row, shift and payment id, differ from the file's, with each `goal:`, `cat:`, `rec:`, `acct:` and `spend:` key, each payment's source and part, and the expense's category naming the new ids; its month mark is `2026-02`, Fun's last reset; Accounts are on; no catch-up summary is pending; notifications read as not yet answered, though the file says granted; its language is `it`, and its income is hourly at 12.50 an hour with one shift. Two Profiles, the device's and the file's, switch Profiles on; the file's one Profile added to a device that holds none does not.
+- R137 · A category for each Sci-Fin recurring expense: The schema-10 fixture's Rent leaves Confirm off; given Fun, Confirm is on; given instead a new category named Housing, Confirm is on and the new Profile holds Housing with Rent under it. A category of another Profile in the file or one that does not exist, a blank name, or a new id already used changes nothing and leaves Confirm off; adding the file while Confirm is off adds nothing.
+- R138 · Sci-Fin's import memory and payee rules: After the schema-10 fixture is added, its import memory holds `fit:F-0302`, `syn:2026-03-03|-12.40|mercato verde` and `syn:2026-03-05|-3.20|pos caffe del molo`, in that order; an OFX row of FITID `F-0302` and a CSV row `POS  CAFFE DEL MOLO` of -3.20 on 5 March arrive `DUPLICATE`, and so does an OFX row of FITID `F-NEW`, `MERCATO VERDE` of -12.40 on 3 March. With a second 12.40 `cat:` row noted `MERCATO VERDE` on 3 March in the file, the key is kept twice and two such CSV rows both arrive `DUPLICATE`; with the one row, the second arrives `READY`. A Sci-Fin key whose 40 characters hold two spaces in a row is left out, and `bank:x` is left out. Its rule `mercato verde` files `MERCATO VERDE` under Groceries, and its rule `pos 0412 bar lunafinta` comes as `bar lunafinta` and files `POS 0999 BAR LUNAFINTA` under Fun; Sci-Fin rules `pos mercato verde` under Groceries and `mercato verde 12` under Fun keep their payees.
+- R139 · A Sci-Fin card's payoffs: Orbita card linked to a 40.00 monthly expense, Orbita card payment, swept on 1 March 2026, with a 40.00 charge noted `Charged` on 1 March: Confirm needs no category for the card, and March's Spending is 40.00, not 80.00. With no charge in the file, Confirm stays off until the card has a category; given Fun, or a new category named Card spending, the card's charges are not logged with it as the payoff category, and the 40.00 sweep adds 40.00 to its March spent and March's Spending is 40.00. Swept on 1 January, 1 February, 1 March and 1 April with charges logged from 1 March, Confirm waits for a category; given Fun, Fun's January and February spent are 40.00 each, the March and April sweeps count in no spent, and the card keeps its charges logged with Fun as its payoff category. Swept on 1 March with its first 40.00 charge on 18 March, Confirm waits for a category; given Fun, March's Spending is 80.00: the 1 March payoff paid what the card owed from before the first charge logged, under Fun, and the 18 March charge counts as its own payment. An unlinked card with no charge, paid by hand 50.00 on 20 March, adds 50.00 to its category's March spent once; the linked card with its sweep and a hand payment of 25.00 on 20 March adds 65.00. A `savings` row noted otherwise than the payment, logged 61 seconds after it or one second before it, or beside an `acct:` row noted `Correction`, is filed under nothing, and alone it asks for no category. A card with no charge and no payoff row leaves Confirm on. A category of another Profile, one that does not exist, a blank name or a new id already used changes nothing.
 - R20 · Money and time: No floating-point type holds money in `shared/`; every date field is a calendar day and every logged time an instant.
 - R49 · Savings: A fresh Profile's Savings is unset; a 60.00 movement out of an unset Savings leaves it at -60.00; a direct edit to 0.00 leaves it at 0.00, no longer unset; with Income off and Savings unset, R56's comparison and R57's amounts are skipped.
 - R50 · Goals hold money out of Savings: Adding 150.00 to a Goal raises its saved money by 150.00 and lowers Savings by 150.00.
@@ -2272,7 +2785,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R77 · Income received this month: With Income switched on on 5 September 2026 and read on 14 September: 1,450.00 of income dated 11 September counts; 1,450.00 of income dated 28 August, 300.00 of income dated 2 September and 50.00 into Savings not logged as income do not; the figure is 1,450.00.
 - R78 · No income logged: A biweekly income last logged 20 August 2026 gives 25 on 14 September, none on 3 September and 15 on 4 September. A weekly income switched on on 10 September 2026 with nothing logged gives none on 14 September and 8 on 18 September. A monthly income on the 10th last logged 10 August 2026 gives none on 9 September and 31 on 10 September. A semimonthly income on the 15th and the 30th last logged 1 September 2026 gives none on 14 September and 15 on 16 September. With automatic deposit on, or hourly, it gives none.
 - R79 · Salaried or hourly: A salaried income with automatic deposit on, changed to hourly on 2 November 2026, has automatic deposit off and asks about no payday on or before 2 November. Changed to hourly on its payday of 13 November 2026, it does not ask about 13 November and asks about 27 November. An hourly income with automatic deposit set and 1,000.00 per paycheck deposits nothing by 31 December 2026 and gives no count.
-- R80 · Logged hours: A 6-hour shift at 20.00 logged on 3 November 2026 leaves Savings, the ledger and the income received as they were. Shifts of 6 and 8.5 hours at 20.00 come to 290.00 before deductions. A shift of 1.5 hours at 13.33 comes to 20.00.
+- R80 · Logged hours: A 6-hour shift at 20.00 logged on 3 November 2026 leaves Savings, the ledger and the income received as they were. Shifts of 6 and 8.5 hours at 20.00 come to 290.00 before deductions. A shift of 1.5 hours at 13.33 comes to 20.00. A shift of no number of hours, or of infinite hours either way, logged or edited in, gives `HOURS_NOT_FINITE` and leaves the shifts as they were; two shifts of the largest hours a Double holds make a payday that gives `HOURS_NOT_FINITE` and is not confirmed.
 - R81 · Hourly payday: A biweekly hourly income at 20.00, switched on on 1 November 2026 and paid from 13 November, with shifts of 6, 8.5 and 4 hours dated 3, 10 and 14 November, asks nothing on 12 November and on 13 November asks about 13 November with 14.5 hours and 290.00. Confirmed with 232.00, Savings goes from 1,000.00 to 1,232.00 by one income row dated 13 November with 14.5 hours at 20.00, the 4-hour shift stays, nothing is asked on 20 November and 27 November is asked on that day. Answered with nothing this time, a 6-hour shift waits for 27 November; with no hours logged, 13 November is still asked.
 - R82 · Hourly estimate: 10 hours at 20.00 are estimated at 200.00 before deductions. After four paydays of 10 hours at 20.00 at which 160.00, 160.00, 100.00 and 200.00 arrived, 10 more hours at 20.00 are estimated at 153.33, from the last three.
 - R83 · Leaving hourly: Shifts of 6 and 4 hours settled on 2 November 2026 with 170.00 leave no shift and one income row of 170.00 dated 2 November with 10 hours; discarded, they leave no shift and no row, and the income can then be made salaried. Changing the type with a shift still logged is refused.
@@ -2293,7 +2806,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R73 · A Loan that follows its payment: A Loan of 6,000.00 at 6 % with a 260.00 payment due the 15th, opened on 1 September 2026, falls to 5,770.00 after 30.00 of interest, with a -230.00 row dated 15 September; Savings falls by the 260.00 sweep only. A Loan of 200.00 at 0 % falls to 0.00 and its payment finishes though it ends in 2030, with a notice holding its id, its name and `loanPaidOff`. A variable-rate Loan of 100.00 cleared by its final 260.00 payment ends with `loanPaidOff`.
 - R74 · Catch-up summary: A 950.00 rent swept for August, opened on 14 November 2026, keeps a summary of 3 months and 2,850.00 swept; opened again that day it still reads 3 months; dismissed, there is none. Opened on 14 October 2026 it reads 2 months; opened again on 3 November, still 2; then on 3 January 2027, 4. Opened on 1 September 2026 alone, it keeps none. A finished Car loan payment deleted before the summary is read is still named Car loan payment on it; a notice kept with no name, as summaries kept before names were, or with an empty name, reads with its id and code and no name.
 - R85 · Accounts: A fresh Profile has Accounts off. A card at 100.00 with a 40.00 payment charged to it reads 140.00, and Savings is unchanged.
-- R86 · Creating and editing an Account: A card created at 640.00 on 14 September 2026 logs one `acct:` row of +640.00 noted `Opening balance` and leaves Savings at 1,000.00; edited to 600.00, it logs a -40.00 row noted `Correction`. A Loan saved to follow its payment with no rate is saved not following, with 14 September 2026 as its start day. A Loan with no category of its own is saved; one naming a category that does not exist is not. An Account with a blank name is not saved.
+- R86 · Creating and editing an Account: A card created at 640.00 on 14 September 2026 logs one `acct:` row of +640.00 noted `Opening balance` and leaves Savings at 1,000.00; edited to 600.00, it logs a -40.00 row noted `Correction`. A Loan saved to follow its payment with no rate is saved not following, with 14 September 2026 as its start day. A Loan with no category of its own is saved; one naming a category that does not exist is not. An Account with a blank name is not saved. A card of APR no number, or infinity either way, and a Loan of such a rate give `RATE_NOT_FINITE` and are not saved; a loan of 9,800.00 at such a rate is refused with `RATE_NOT_FINITE` and not taken, and 12,000.00 over 48 months at it gives no figure; at 5.9 percent a loan filed under no category, or one that does not exist, is refused with `CATEGORY_MISSING`.
 - R87 · An Account and its linked payment: A Loan linked to a 200.00 payment and linked again to a 250.00 one leaves the 200.00 payment linked to nothing, and deleting it keeps the Loan. A Loan of 4,000.00 whose 260.00 payment, due the 20th, swept on creation on 10 September 2026 from Savings of 5,000.00, deleted with the return accepted, leaves no Account, no expense and Savings at 5,000.00. A Loan of 9,800.00 deleted removes its payment too and logs a -9,800.00 row noted `Account closed`. With 40.00 charged to a card under Food in September 2026 and the card's 40.00 payment, filed under Food, sweeping that month, Food's spent is 40.00; a Loan's 260.00 payment under Car adds 260.00 to Car in September 2026, and after a 9,800.00 car is charged to that Loan in October, Car's October spent is 9,800.00 with the payment's October sweep a transfer, and its September stays 260.00.
 - R88 · Deleting an Account with payments charged to it: A card opened at 100.00 with a 40.00 payment charged to it under Groceries in September 2026, deleted, logs a -140.00 closing row; the payment stays, Groceries' spent for September is 40.00, and Savings is unchanged; the payment removed afterwards logs a +40.00 `acct:` row, and the card's rows add up to zero.
 - R89 · Quick-add on an Account: A card at 100.00 paid 60.00 from Savings of 1,000.00 reads 40.00 with Savings at 940.00 and a `savings` row of -60.00 noted `Payment to Card`; from nowhere, Savings stays 1,000.00. Paid 60.00 from a Goal holding 80.00 it reads 40.00, the Goal 20.00 and Savings 1,000.00, with a `spend:` row of -60.00 noted `Payment to Card`; 90.00 from that Goal is refused. A Loan of 4,000.00 increased by 500.00 reads 4,500.00 with Savings unchanged. An increase on a card with no fees category and none picked is refused. A Loan linked to its 260.00 payment under Car, with nothing charged to it, paid 200.00 by hand from Savings adds 200.00 to Car; after a 9,800.00 car is charged to it, 100.00 paid from a Goal adds nothing; with the car removed again, Car keeps the 200.00 and the 100.00 still counts nowhere. A Loan linked to nothing, paid from Savings with no category picked and none of its own, is refused; with Car as its own category, 200.00 counts in Car, and with Groceries picked for the payment, in Groceries; with a picked category that does not exist it is refused, not counted in Car. A Loan with Car as its own category and a linked payment under Bills counts a payment by hand in Car, and the payment's sweeps in Bills. Savings is the default for an Account linked to nothing and nowhere for a linked one.
@@ -2322,10 +2835,10 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R108 · Payee rules: `POS MERCATO VERDE 0412` filed under Groceries in March arrives in April's review with one part of 18.75 in Groceries, from Savings; `FARMACIA SAN LORENZO` split into Pharmacy and Household teaches no rule; the payee of `POS*MERCATO-VERDE  0412` is `pos mercato verde 0412`. `POS 03/03 MERCATO VERDE 0412` and `PAGAMENTO POS 12/03/2026 ORE 10:22 MERCATO VERDE CARTA ****1234` both have the rule name `mercato verde`, and the first filed under Groceries pre-fills the second; `POS 0412` keeps the rule name `pos 0412`. A rule kept under the payee `pos mercato verde 0412` still pre-fills `POS MERCATO VERDE 0412`.
 - R27 · The receipt contract: The receipt parser's tests cite Chatelaine's rule 123 field by field; no Tesoriere code opens the receipt folder for writing.
 - R28 · Receipt folder: With the folder set in Profile A, receipts are reviewed and recorded only in Profile A; Profile B offers no receipt folder while A has one.
-- R112 · The receipt Profile: With the folder chosen in Profile A, Profile B is offered no folder and choosing one there is refused; a receipt opened for review in B cannot be confirmed, and the same receipt in A records one payment in A and none in B.
+- R112 · The receipt Profile: With the folder chosen in Profile A, Profile B is offered no folder and choosing one there is refused; a receipt opened for review in B cannot be confirmed, and the same receipt in A records one payment in A and none in B. Profile B, its receipt settings naming a folder while the app keeps A as the receipt Profile, scans nothing and confirms nothing.
 - R29 · Picking up receipts: With the default, opening the app with three new files offers three receipts and runs no background work; with the daily check on, three new files give one notification that day; no receipt is recorded before its Confirm.
 - R30 · Receipt files Tesoriere cannot take: One file per row, put in the receipt folder, is listed with its reason (or, for a recorded id, not at all) and changes no figure.
-- R116 · Scanning the receipt folder: Three new files give three receipts ready, a count of 3, and the Profile unchanged; a file whose receipt id is recorded is not listed; a format-2 file is refused naming 2; a USD file in a EUR Profile is refused naming USD and EUR; a file that is not JSON is refused as unreadable; two files holding one receipt id give one receipt; a file named `chatelaine-receipt-rc-9.part` is not read. Each leaves the Profile unchanged.
+- R116 · Scanning the receipt folder: Three new files give three receipts ready, a count of 3, and the Profile unchanged; a file whose receipt id is recorded is not listed, nor is one whose id a payment holds while the recorded ids lack it; a format-2 file is refused naming 2; a USD file in a EUR Profile is refused naming USD and EUR; a file that is not JSON is refused as unreadable; two files holding one receipt id give one receipt; a file named `chatelaine-receipt-rc-9.part` is not read. Each leaves the Profile unchanged.
 - R117 · Reading a receipt file: The example file of Chatelaine's spec, rule 123, reads as a receipt of 10.99 at Supermarket A on 2026-11-24 in EUR with three lines, the batteries with no pack. The same file with `format` 2 and a key of its own gives newer format 2, and so it does with no `lines`; with `format` 99999999999 it gives newer format 2,147,483,647. With any one key of rule 123 other than `pack` taken out, with `totalPaid` 11.00, 0.00 or `"1099"`, a `quantity` of 1.5 or 0, a line of -1.00 among lines that add up to the total, or a blank `store`, it is unreadable; so is a file of 3,000 nested arrays, and one over 1 MiB. With a key `note` added it reads as before. A `pack` of `""` reads as no pack, and `currency` `eur` reads as `EUR`. A format-2 file over 1 MiB is unreadable, not a newer format. With `totalPaid` 1,000,000,000.00 and lines adding up to it, it reads; with 1,000,000,000.01, it is unreadable.
 - R31 · Receipt review: A receipt of five lines in two categories records one payment of the receipt's total with two parts; moving one line to a third category gives three parts and changes no category link; closing the review leaves no payment.
 - R32 · Category links: A receipt with category Pulizia links to Tesoriere's pulizia; a later receipt with the same id named Pulizie stays linked and shows the names-differ note; a new category with no equal name keeps Confirm off until it is added or linked, or until each of its lines is moved by hand to a Tesoriere category, after which the next receipt with it asks again.
@@ -2335,8 +2848,8 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R113 · Opening a receipt review: With Tesoriere categories Groceries and pulizia, a first receipt with lines under Chatelaine's Groceries and Pulizia opens them in Groceries and pulizia, from Savings, and a line under Garden in no category. A store last confirmed with a card opens with the card, and with Savings once the card is deleted.
 - R114 · Answering a receipt review: A line under Garden, with no Garden in Tesoriere, is noted unlinked; linked to Household it is filed under Household with a rename-in-Chatelaine note; added instead, it is filed under a new category named Garden with 0.00 planned, and the review holds changes. A Garden line moved to Fun before the answer stays under Fun. Snack, opened under Eating out by its link and linked in the review to Groceries, files its lines under Groceries. A review whose categories all link by name holds no changes until a line is moved or the source changed, and moving a line changes no link; a line moved to Fun and back to Groceries, where it opened, leaves no change, and a later link of its Chatelaine category files it again.
 - R115 · Confirming a receipt: A 16.50 receipt with Groceries lines of 1.89, 2.40 and 3.15 and Household lines of 6.90 and 2.16, from Savings at 1,000.00, records one payment of 16.50 with parts Groceries 7.44 and Household 9.06 and all five lines, records its receipt id, and leaves Savings at 983.50; a 0.00 line under Gifts adds no part and is kept among the lines. The same receipt from a Goal holding 10.00 carries R54's warning, and confirmed leaves the Goal at 0.00 and Savings at 993.50. A receipt id recorded once cannot be confirmed again.
-- R36 · Store links: After pairing an Esselunga receipt with POS ESSELUNGA MI 0423, the next Esselunga receipt is suggested first with the bank rows whose payee matches that link, such as POS ESSELUNGA MI 0611, and then with any other row that meets R37.
-- R120 · The text a store link keeps: Pairing an Esselunga receipt with `POS ESSELUNGA MI 0423` keeps `esselunga mi`; `POS ESSELUNGA MI 0611` matches it and is suggested before `POS ESSELUNGA TO 0611`, which does not match and is still suggested; a later Esselunga pair with `ESSELUNGA SPA` by hand keeps `esselunga mi`.
+- R36 · Store links: After pairing a Granvolta receipt with POS GRANVOLTA MI 0423, the next Granvolta receipt is suggested first with the bank rows whose payee matches that link, such as POS GRANVOLTA MI 0611, and then with any other row that meets R37.
+- R120 · The text a store link keeps: Pairing a Granvolta receipt with `POS GRANVOLTA MI 0423` keeps `granvolta mi`; `POS GRANVOLTA MI 0611` matches it and is suggested before `POS GRANVOLTA TO 0611`, which does not match and is still suggested; a later Granvolta pair with `GRANVOLTA SPA` by hand keeps `granvolta mi`.
 - R37 · Pairing rule: Each row of the table, as a receipt and a bank row, gives the suggestion its row says; no pair is recorded without the user's confirm.
 - R38 · Whichever arrives first: Recording a EUR 42.30 receipt and then importing its bank row leaves one payment of EUR 42.30; importing the bank row first under Groceries and then its receipt with Groceries 30.00 and Household 12.30 leaves one payment with those two parts.
 - R39 · Difference part: A EUR 42.10 receipt paired with a EUR 42.30 bank row records a EUR 42.30 payment with a EUR 0.20 difference part in the category the user chose, and the pair's confirm is off until it is chosen. A EUR 42.30 receipt paired with a EUR 42.10 bank row records a EUR 42.10 payment with a EUR -0.20 difference part.
@@ -2345,7 +2858,7 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R119 · Recording a pair: A 42.30 receipt from Savings at 1,000.00, then its -42.30 row: one payment of 42.30 from Savings, dated the receipt's day, with the row's keys, Savings at 957.70, and the row `DUPLICATE` on the next import. A -42.30 row filed under Groceries from Savings, then a receipt of Groceries 30.00 and Household 12.30 confirmed with a card: one payment of 42.30 from the card with those two parts, the receipt's day and the row's keys, Savings back at 1,000.00 and the card 42.30 higher. A 42.10 receipt from a Goal holding 42.10, paired with a -42.30 row, warns as R54 says and takes 0.20 from Savings. A -42.30 row dated 14 March, 4 days after its receipt, ticked in the import review and paired by hand before Confirm, leaves one payment and Savings 42.30 lower once. A receipt of 30 March paired with its row of 2 April counts in March's spent. Two rows of -4.50 `BAR CENTRALE` on 11 March with no FITID and one 4.50 receipt under Food: the first pairs, and the second, ticked under Food, is recorded at Confirm, leaving two payments, Savings at 991.00 and Food's March spent at 9.00. Two 4.50 receipts from Bar Centrale on 10 March under Food and those two rows: both arrive `PAIR`, each pairs with one receipt, leaving two payments, Savings at 991.00 and Food at 9.00; so they do with FITIDs F1 and F2, the F1 row then recorded and the F2 row not. A -42.30 row charged to a card at 0.00 recorded first, then a receipt from a store with no source kept, paired as it opened: the payment stays on the card, the card at 42.30 and Savings unchanged; with Savings picked in the review it moves to Savings; for a store whose kept source is a Goal, to the Goal. A 42.30 receipt of Groceries 30.00 and Household 12.30, Household deleted since: its -42.30 row still arrives `PAIR`, the pair is refused with `CATEGORY_MISSING`, and with Fun given it pairs with Groceries 30.00 and Fun 12.30, the line still filed under Household.
 - R128 · Unpairing: A 42.10 receipt from Savings at 1,000.00, paired by hand with a -42.30 row and its 0.20 filed under Fun, unpaired: one payment of 42.10 with the receipt's parts and no keys, Savings at 957.90 and Fun's spent back; the row then arrives `PAIR` again, and turned down and ticked it is recorded on its own, Savings at 915.60. Paired with row F1 while its twin F2 is recorded, then unpaired, F1 arrives as new and F2 as recorded. Unpairing a receipt payment with no bank keys changes nothing. A pair whose Fun part's category was deleted is refused with `CATEGORY_MISSING`, and with Household given it unpairs with that part under Household, its line still filed under Fun. A 4.50 receipt under Food, its payment moved by hand to Groceries, paired and unpaired: Groceries 4.50 and Food 0.00.
 - R129 · Merging two payments into a pair: Savings at 1,000.00; a 4.50 receipt under Food recorded (995.50) and its -4.50 bank row recorded on its own under Food (991.00, Food 9.00); merged: one payment of 4.50 with the receipt's id and lines and the row's keys, Savings at 995.50, Food 4.50, and the row `DUPLICATE` on the next import. A 42.10 receipt and a -42.30 bank payment merged with 0.20 under Fun: one 42.30 payment, the bank payment's source given back once. A bank payment charged to a card merged into a receipt from Savings: the card goes back down and Savings pays. Unpaired after a merge, the receipt payment stands alone and the row arrives as new. A 4.50 bank payment from a Goal deleted to the Trash since, merged: Savings 4.50 higher with one `savings` row, and the Goal's restore refused with `WRITTEN_SINCE`, also after Unpair. Each code above refuses its merge and changes nothing.
-- R121 · The Trash: An item deleted on 1 October 2026 is due its notice on 21 October and not on 20 October, and once given is not due again; it is kept on 30 October and goes on 31 October. A monthly expense in the Trash over two month crossings writes no sweep row.
+- R121 · The Trash: An item deleted on 1 October 2026 is due its notice on 21 October and not on 20 October, and once given is not due again; it is kept on 30 October and goes on 31 October. A monthly expense in the Trash over two month crossings writes no sweep row. An item whose day is stored as `someday`, and one whose payload is `{oops`, are named apart as unreadable, neither going nor due a notice.
 - R122 · Restoring from the Trash: With Savings at 1,000.00 and a Goal holding 300.00, deleting the Goal with its money returned on 14 September 2026 leaves 1,300.00; restored on 2 October it holds 300.00, Savings is 1,000.00, and a `goal:` row of +300.00 dated 14 September is noted `Restored from the Trash` beside the delete's -300.00. A semimonthly 300.00 expense under Rent created on 1 September from Savings of 2,000.00, deleted on 20 September with its 300.00 returned and restored on 2 October, leaves Savings at 1,400.00 and Rent's September spent at 600.00, and is marked swept for October. A card at 140.00 deleted and restored reads 140.00. A 30.00 payment from a deleted Goal, removed after the delete, refuses the Goal's restore with `WRITTEN_SINCE`; one whose parts were only filed again does not.
 - R123 · Deleting a category: Deleting Phone while a 60.00 monthly expense files under it is refused with `REPLACEMENT_NEEDED`; with Internet given, the expense files under Internet, and Phone's August spent stays 60.00 with its sweep row under Phone; restoring Phone leaves the expense under Internet. A card whose payoff or fees category is Phone, and a Loan whose own category is Phone, move to Internet in the same step. Deleting a category nothing files under needs no other category.
 - R124 · Spending under a deleted category: With Fun at 40.00 and Groceries at 30.00 in September 2026, Fun deleted to the Trash gives a slice of Fun marked deleted at 40.00 and a total of 70.00; Fun gone for good gives Uncategorised at 40.00 and 70.00; Fun restored gives its own slice of 40.00 again.
@@ -2354,6 +2867,19 @@ Sci-Fin is a budgeting app built against the failure modes of typical budgeting 
 - R126 · A Profile in the Trash: A Profile holding the receipt folder and a 42.30 receipt payment, deleted, frees the folder; restored while no other Profile holds one, it holds the folder again and equals the Profile as deleted. Restored after Profile B chose a folder, B keeps it, and the restored Profile holds no folder and keeps its recorded receipt id.
 - R41 · Deleting a receipt payment: Deleting a receipt payment leaves its file out of the next scan (R116). A 42.30 receipt split 30.00 Groceries and 12.30 Household and paired with its bank row, deleted and restored, has its two parts, its two lines and its bank keys again, and the row arrives `DUPLICATE` on an import before and after the restore.
 - R42 · Deleting a linked category: After deleting Pulizia, the next receipt with Chatelaine's Pulizia keeps Confirm off until its line is linked or added. A Chatelaine category Pulizie linked to Pulizia, after Pulizia is deleted and restored, opens in Pulizia again with Confirm on.
+- R140 · Profiles: On a fresh device, creating Ana gives one Profile, open, with Profiles off; creating Household gives two, Household open, with Profiles on. With 300.00 put into Ana's Savings, Household's Savings stays unset. Switching to Ana opens Ana; renaming Household to `  Joint  ` names it `Joint`, and renaming it to three spaces is refused with `BLANK_NAME`. Deleting Ana while open opens Joint and leaves one Profile and one Trash item holding Ana with Savings at 300.00; deleting Joint then is refused with `LAST_PROFILE`, and Joint stays. Deleting a Profile A whose payment `pay-2` cannot be read is refused with `UNREADABLE_RECORDS` naming `pay-2`, A and the Trash as they were; an agreement naming `pay-2` alone, once `pay-1` too cannot be read, is refused naming both; agreeing to both, A goes to the Trash and both records go with it.
+- R141 · Storage: A Profile holding a Goal, a category, a recurring expense, a card, a ledger row, a shift, a 42.30 receipt payment split 30.00 Groceries and 12.30 Household with its two lines and its bank keys, import memory with kept keys and a payee rule, and receipt settings with a folder, written to a database file and read back, equals the Profile as written. A Goal deleted and saved with its Trash item, then restored and saved with the item's removal, leaves the Goal in the Profile, the Trash empty, and a backup of the device that reads back whole (R131). A Goal whose mode is stored as `sideways` reads with no mode; a recurring expense whose cadence is stored as `sometimes` is left out while the Profile's other expenses read; and neither throws. A payment whose parts are stored as `[{oops`, and import memory that cannot be read, are left out of the read, and once the Profile is written again and the stored text mended, both read back as they were. A step for Profile B, deleted to the Trash since a screen read it, is refused with `NO_SUCH_PROFILE`, and B stays in the Trash alone; a Goal restored from the Trash after a screen read its Profile, then that screen's 10.00 taken from Savings, leaves the Goal in the Profile and Savings 10.00 lower; a step giving Profile B a Goal whose id Profile A holds is refused with `ID_IN_USE`, and A keeps its Goal; one giving B two Goals of one id is refused with `ID_TWICE`. A Goal `car` deleted from A to the Trash, then a Goal `car` given to B, refuses the Goal's restore with `ID_IN_USE`, the item staying in the Trash and B keeping its Goal. A card of APR 0.2, a row of 4 hours worked and an 8-hour shift whose figures are then stored as infinity read as missing, are named `ACCOUNT`, `TRANSACTION` and `SHIFT` by an export that reads back, and are still stored after the next write; a write giving the shift no number of hours, or the card an infinite APR, is refused with `NOT_FINITE` and changes nothing. A recurring expense whose cadence reads `sometimes`, settings whose income cadence reads `often` and receipt settings whose pickup reads `by owl` are named `RECURRING_EXPENSE`, `SETTINGS` and `RECEIPT_SETTINGS`.
+- R142 · Schema versions: The exported schema of version 1 exists; for each version v from 2 to the app's, the exported schema of v and a migration from v-1 to v exist, and no migration names a version with no exported schema. At version 1 there is no migration.
+- R144 · The damaged-file guard: An 8,192-byte file of noise in the store's place on 26 November 2026, on device `TEST`, is moved to `snapshots/tesoriere-damaged-2026-11-26-TEST.db`, still 8,192 bytes, and the app opens an empty store with a notice naming that copy, 8,192 bytes, 26 November and `UNREADABLE`; opened again before the notice is answered, the same notice; answered, no notice, and the copy stays. A store of one Profile with 2,048 bytes overwritten past its first page is moved with `CHECK_FAILED`. A second damaged store that day goes to `tesoriere-damaged-2026-11-26-TEST-2.db`, the first copy unchanged, and both notices are owed until each is answered. The notice is kept before the first file moves; a move whose log cannot move puts the store and its log back byte for byte with no notice; one cut short with the store moved and its 4,096-byte log left is finished at the next start, the log beside the copy; a 4,096-byte log with no store is moved aside with `LEFTOVER` and 0 bytes. A notice file reading `{oops` is owed as 1 unreadable, still owed beside the next notice, until answered. A move onto a file already there fails and leaves both as they were. SQLite's codes 11 and 26 move a store; 5 and 6 give `BUSY`; 14, 10, a disk error or a missing library give `NOT_CHECKED`, with the store in place and nothing opened. A damaged store whose `snapshots` folder cannot be made gives `NOT_MOVED` and stays where it was. A healthy store stays where it is, with no notice. Neither app's sources build the database except through the guarded opener, and Android's open names neither Android's own SQLite driver nor its error handler, only the bundled driver and the guard's bundled read-only open. A store of one Profile whose every page after the first is overwritten, opened by Room past the guard, throws a SQLite exception from the repository's read and stays byte for byte as it was, with no `snapshots` folder. None of the guard's cases throws.
+- R145 · Migration snapshots: A store of version 1 holding 5 rows only in its write-ahead log, opened by an app of version 2 on device `TEST`, leaves `snapshots/tesoriere-v1-TEST.db`, one file with no log beside it and no part file, of version 1 and holding the 5 rows, then migrates; opened that way again, the snapshot is not rewritten and stays the only one. A store left with 5 rows in its log and no connection open is snapshotted with the 5 rows, its file and its log byte for byte as they were. A 100-byte part file left from before is replaced by a whole snapshot of 3 rows. A migration from 1 to 2 that fails after adding a column leaves the store of version 1 with its rows and without the column, the snapshot unchanged, and gives `MIGRATION_FAILED`. A store of version 2 reached by an app of version 1 gives `NEWER_SCHEMA` with 2, its file byte for byte as it was, and no `snapshots` folder; left with 5 rows in its log, its file and its log byte for byte as they were. A store of version 1 whose `snapshots` folder cannot be made gives `SNAPSHOT_FAILED` to an app of version 2, and its migration does not run. A store of the app's version, and a first run, write no snapshot. None of them throws.
+- R130 · The backup file: A Profile holding a 42.30 receipt payment split 30.00 Groceries and 12.30 Household, with its two lines and its bank keys, written to a file and read back equals the Profile as written, its receipt settings with the folder and its import memory's kept keys included, and the file names it as the receipt Profile. A Trash item deleted on 10 November 2026 reads back deleted on 10 November, due its notice on 30 November and going on 10 December. The file's top-level keys are the seven above and no others, and no field of the app lock, of the copy schedule or of the Profiles switch appears in it. A file of two Profiles reads as one that switches Profiles on, and a file of one does not. A device holding a ledger row whose key no longer reads, a payment whose parts no longer add up, a Trash item whose payload and one whose day cannot be read, and Profile B both in the Trash and among its Profiles exports the rest, naming 4 left out and the payment repaired, its 30.00 in one part in no category; restored, Savings and every payment's total are as on the device. A Profile that is not the receipt Profile but whose settings name a folder exports with no folder, named repaired, and a Trash item of a Profile gone for good is left out and counted. Profile B deleted on 20 November 2026, its item marked warned and holding a 30.00 payment whose one part is 1.00, exports with 1 repaired and 0 left out, its item still of 20 November and warned; restored, B comes back from the Trash with that payment as one 30.00 part in no category. A 0.00 payment of receipt `rc-b` whose part is 1.00, held by deleted Profile B, is left out, counted, and B comes back from the Trash with `rc-b` among its recorded receipts; one of receipt `rc-1` held by Profile A, whose recorded receipts are empty, is left out and the file records `rc-1` for A. A store whose Profile A holds a payment `pay-2` whose parts read `[{oops` and import memory that cannot be read exports the rest, naming 2 records it could not read, the payment `pay-2` and A's import memory, with 0 left out and 0 repaired. A store of Profiles B and A whose app state row is gone exports both, naming A open and no receipt Profile, and writes no app state.
+- R131 · Reading a backup file: A file of the app's schema version plus one is refused with `NEWER_SCHEMA`, and so is one of 99999999999999999999; `{not json` is `NOT_A_BACKUP`; a file of `sci-fin` or naming no app is `OTHER_APP`; an encrypted file is `ENCRYPTED`, and one marked `"encrypted": false` reads as a plain file. A Profile whose goals are `"oops"` or null, whose settings are null, or whose Savings is `"lots"`, 12.5 or 99999999999999999999, a 42.30 payment with parts of 30.00 and 12.00, a 0.00 payment with parts of 5.00 and -5.00, a 10.00 payment with parts of 12.00 and -2.00 neither a difference part, one with two difference parts, a deleted payment whose parts do not add up, a goal id used in two Profiles, a payment in the Trash whose id is a payment in the file, a deleted Profile whose id is a Profile in the file, a folder held by a Profile the file does not name as the receipt Profile, and 100,000 nested arrays are each `DAMAGED`, and none of them throws. A Profile with no goals key reads with no Goals. A Goal deleted from Profile B, and B deleted after it, read back as two items; with B's own item gone for good before the export, the Goal's item is left out and the rest of the file reads.
+- R143 · Restoring a backup: A device holding Profiles A and B, an app lock, an automatic copy and a Trash item of A, restoring on 26 November 2026 a file of Profile C whose Trash holds a Goal deleted on 20 October and a category deleted on 10 November, and which names C as the receipt Profile, holds C alone, open and the receipt Profile, with the category's item alone in its Trash and its last restore on 26 November, the lock, the copy and the Profiles switch as they were. A file of C and D on a device with Profiles off switches them on. A restore that fails after writing the file's Profiles leaves A, B, the Trash item and the open Profile as they were. On a device whose Profile A holds a payment `pay-2` whose parts read `[{oops`, a restore is refused with `UNREADABLE_ON_DEVICE` naming `pay-2`, and A, B and the Trash stay as they were; with the user's agreement to `pay-2` it restores C. An agreement naming `pay-2` alone, given once `pay-1` too cannot be read, is refused with `UNREADABLE_ON_DEVICE` naming both, and nothing changes; agreeing to both, it restores C. A file whose Profile A says notifications were not granted and whose Profile C says they were, restored onto a device whose A and D say granted and which holds no C and no E, gives A granted and C not yet answered; deleted Profiles D and E in the file's Trash, saying not granted and granted, restored from the Trash afterwards give D granted and E not yet answered. After the forgotten-PIN erase (R147), a file of C restores C, open, with the lock `OFF`, no copy schedule and no damage notice owed. A file whose deleted Profile B held a payment the export repaired (R130) restores B's item, and B then comes back from the Trash with the payment as one part in no category.
+- R132 · A backup password: `short` is `TOO_SHORT`; `longenough` with nothing typed again is `NOT_REPEATED`, typed again as `longenougH` is `NO_MATCH`, with a hint of two spaces is `NO_HINT`, with the hint `LongEnough`, with spaces around it or without, is `HINT_IS_PASSWORD`, and with the hint `the usual, twice` has no problem. The export's check, `BackupCrypto.exportProblem`, gives `REQUIRED` for a file with no password while the app lock is on, none for one with no password while it is off, and with a password the codes above, whatever the lock.
+- R133 · The encrypted file: A file written with the password `correct horse` and the hint `the stable` on 26 November 2026 shows its hint and day before it is opened, does not hold the backup's text in the clear, opens with `correct horse`, and gives `WRONG_PASSWORD` with `correct hors`. With its hint changed it gives `WRONG_PASSWORD`; with 50 iterations, a nonce cut short, or the day `2026-11-26|the` with the hint `stable`, `DAMAGED`, and shows no hint or day; opened as `sci-fin`, `OTHER_APP`; and none of them throws.
+- R148 · Automatic copy: A fresh install holds no copy row and no copy is due. Turning the copy on with the folder `Sync` makes it weekly and due at once; choosing `Sync` for a copy that is off leaves it off, and a daily copy keeps daily. Setting a copy with no folder to daily gives `NO_FOLDER` and leaves it off. A weekly copy last written on 27 November 2026 is not due on 27 November or 3 December and is due on 4 December; one last written on 28 December 2026 is not due on 3 January 2027 and is due on 4 January; a daily copy last written on 27 November is due on 28 November. A copy with no last copy, with one stored as `2026-13-01` or `yesterday`, or with one on 28 November 2026 when today is 27 November, is due; a copy that is on with no folder is not. `fortnightly` and the empty text read as weekly; a stored failure `disk_full`, or a sentence, reads as `NOT_WRITTEN`, and a copy whose backup could not be made is stored as `not_made` and reads back as `NOT_MADE`, owing a notice as any first failure does. The copy of 27 November 2026 from `Pixel 9` is `tesoriere-copy-2026-11-27-pixel_9.json`, and `Phone` and `phone` give one name; a device named `a/b\c:d*e?f"g<h>i|j` gives `a_b_c_d_e_f_g_h_i_j`, one of 40 letters keeps 32, and an empty one gives `device`; the copies of 26 and 27 November differ, and so do those of `phone` and `pc` on one day. Beside 17 daily copies of `phone`, 3 of `pc`, `notes.txt`, a `phone` copy dated `2026-02-30` and one of `my-phone`, the 3 oldest of `phone` are the ones to delete. Beside 14 copies dated from 1 January 2027, the copy of 27 November 2026 and that of 26 November, on 27 November the two earliest of 2027 go and both of November stay; beside 15 copies dated after 27 November and that day's own, the two earliest after it go and the day's own stays. A failure with no notice before owes one and the next owes none; a success on 27 November then records `2026-11-27`, clears the failure and the next failure owes a notice again. With the app lock on, a copy with no password is paused and one with a password is not; removing the password then gives `REQUIRED`; with the lock on, a password `short` gives `TOO_SHORT` and no password `REQUIRED`. A copy with the password `correct horse` and the hint `the stable` shows its hint and opens with that password to the backup's text. A copy holding a sealed password for which the key store gives nothing back, or the empty text, gives `PASSWORD_UNREADABLE` and no file, with the lock on or off. With no password, the lock on gives no file and the lock off the backup's text; with the password `correct horse` handed in all the same, `PASSWORD_NOT_SAVED` and no file, lock on or off, and with the empty text handed in, the lock off gives the backup's text. A weekly copy last written on 13 November, paused on 27 November with the lock on, records `paused_needs_password`, owes a notice, stays due on 28 November and owes none at its next pause; a pause after a failure, and a failure after a pause, each owe one; a password set, or the next success, clears the pause and its notice, and a password set leaves a failure `folder_unreachable` as it was. An export that names the import memory as unreadable is copied as its text, records `records_unreadable` and that day, and owes a notice, and the next such copy owes none; one after `FOLDER_UNREACHABLE` owes one, and so does `FOLDER_UNREACHABLE` after it; a whole copy clears it. Beside 20 daily copies of `phone`, none is deleted after a copy lacking records, a pause or a failure, and the 6 oldest go after a whole one. An export that left 1 record out and names none unreadable is copied, records `records_left_out`, and of 20 copies none goes; a copy lacking unreadable records after it owes no notice, being of the same run, and `FOLDER_UNREACHABLE` after it owes one; one with 2 records repaired and none left out is whole. An export refused or with no Profile gives `NOT_MADE`; a whole one gives its text. None of them throws.
+- R146 · The app lock: `1234` and `123456` are PINs; `123`, `1234567`, `12a4` and `1234` in full-width digits are not; a field typed `1 2-3a4567` keeps `123456`. Wrong PINs 1 to 4 owe no wait, 5 to 8 owe 30 seconds, 1, 2 and 4 minutes, and 20 and 2,147,483,647 owe 1 hour. A lock for `482100` with the hint `the first flat` holds the PIN in neither its hash nor its salt, is of 120,000 iterations and 6 digits, matches `482100` and not `482101` or `4821`, and a second lock for the same PIN has another salt and hash; a hint of spaces is kept as none. The hint ` 4821 ` for the PIN `4821` gives `HINT_IS_PASSWORD`, and an empty hint, one of spaces or `grandad's door` none; no lock is made for `123`, for `4821` with the hint `4821`, or at 5,000,001 iterations, and one made at 1 iteration matches its PIN. A row whose salt reads `not base64!`, whose salt is empty, whose hash is 31 or 33 bytes, whose cost is 0, -5 or 5,000,001, or whose digit count is 3 or 7 is `DAMAGED` and matches no PIN, and none of them throws; costs of 1 and 5,000,000 and digit counts of 4 and 6 read as `ON`, and a lock for `482100` whose digit count reads 4 still matches `482100`. After a stored count of 4 the count is 5, after -3 it is 1, and after 2,147,483,647 it stays 2,147,483,647. A fresh install holds no lock row and is `OFF`, and the token `fortnightly` reads as `one_minute`.
+- R147 · Erasing the device for a forgotten PIN: A device holding Profiles A and B, an app lock, a weekly automatic copy, a Trash item, the snapshot `snapshots/tesoriere-v1-TEST.db`, a damaged copy with its notice, a notice file kept aside as unreadable, a file `my-backup.json` beside the store and a backup in a folder of the user's, erased and opened again, opens an empty store: no Profile, no app state, the lock `OFF`, no copy schedule, an empty Trash and no notice owed; the `snapshots` folder and every notice file are gone, and both backup files are there byte for byte. With the damaged copy not deletable, the erase gives `FILE_NOT_DELETED` naming it, with the store erased and the snapshot and the notices gone; run again once the copy can go, it gives no problem. With the store already closed, it gives `STORE_NOT_ERASED`, and the snapshot and the notice are still there. With a read held open on the store by another connection, the rows go and it gives `STORE_NOT_COMPACTED`. Begun by a caller already cancelled, it erases the store and the files all the same. On Windows, a junction `snapshots/j` to a folder outside holding `precious.json`, and a junction standing as `snapshots` itself, are removed, and the folder and its file stay; where the system lets a symbolic link be made, the same holds for one. None of them throws.
 - R43 · Test plan: CI runs the first five levels on every pull request; a release records its device walk.
 - R44 · Rollout phases: Phase 2's gate is recorded in `SPEC-history.md` or the release notes before Sci-Fin is retired.
 

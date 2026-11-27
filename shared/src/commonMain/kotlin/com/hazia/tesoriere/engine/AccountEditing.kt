@@ -45,6 +45,8 @@ object AccountEditing {
         RISE_CATEGORY_MISSING,
         /** The category picked for interest or fees does not exist; it is never passed over for the fees category (SPEC R110). */
         RISE_CATEGORY_UNKNOWN,
+        /** A card's APR or a Loan's interest rate is infinity or not a number: the store cannot keep it, and no interest can be worked out from it (SPEC R141). */
+        RATE_NOT_FINITE,
     }
 
     /**
@@ -56,6 +58,7 @@ object AccountEditing {
      */
     fun problem(d: ProfileData, draft: Account, rise: BalanceRise? = null, riseCategoryId: String? = null): AccountProblem? {
         if (draft.name.isBlank()) return AccountProblem.NAME_BLANK
+        if (draft.apr?.isFinite() == false || draft.interestRate?.isFinite() == false) return AccountProblem.RATE_NOT_FINITE
         if (draft.chargesNotLogged &&
             (draft.type != AccountType.CREDIT || draft.payoffCategoryId == null || d.categories.none { it.id == draft.payoffCategoryId })
         ) return AccountProblem.PAYOFF_CATEGORY_MISSING

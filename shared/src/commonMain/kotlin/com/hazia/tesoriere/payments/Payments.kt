@@ -30,6 +30,27 @@ object Payments {
     fun remainder(draft: PaymentDraft): Money = draft.total - draft.parts.sumOf { it.amount }
 
     /**
+     * Whether [total] and [parts] hold to SPEC R23 as stored: a total other than zero, one part or
+     * more, none of zero, each of the total's sign but at most one difference part (SPEC R39), and
+     * adding up to the total, summed with no overflow. Categories and who may write a difference
+     * part are not looked at: a recorded payment's category may be deleted since (SPEC R124), and a
+     * stored difference part was written by pairing. The editor's [canSave] and a backup's reading
+     * (SPEC R131) both start from it.
+     */
+    fun partsAddUp(total: Money, parts: List<Part>): Boolean {
+        if (total == 0L || parts.isEmpty() || parts.count { it.difference } > 1) return false
+        val refund = total < 0
+        var sum = 0L
+        for (p in parts) {
+            val a = p.amount
+            if (a == 0L || (!p.difference && (a < 0) != refund)) return false
+            if ((a > 0 && sum > Long.MAX_VALUE - a) || (a < 0 && sum < Long.MIN_VALUE - a)) return false
+            sum += a
+        }
+        return sum == total
+    }
+
+    /**
      * Whether the editor's save is on: a total other than zero, negative for a refund (SPEC R21),
      * parts in categories that exist, each of the total's sign but a pair's one difference part
      * (SPEC R39), adding up to the total (SPEC R23),
@@ -42,15 +63,13 @@ object Payments {
 
     /** [canSave] for pairing (SPEC R39, R119), the one caller that may write a difference part. */
     internal fun canSave(d: ProfileData, draft: PaymentDraft, editing: String?, pairing: Boolean): Boolean {
-        if (draft.total == 0L || draft.parts.isEmpty() || remainder(draft) != 0L) return false
+        if (!partsAddUp(draft.total, draft.parts)) return false
         val categories = d.categories.mapTo(HashSet()) { it.id }
-        val refund = draft.total < 0
         val old = editing?.let { id -> d.payments.firstOrNull { it.id == id } }
         // a pair's difference part, at most one, may have the other sign (SPEC R23, R39); only pairing
         // writes one, and an edit keeps one the payment already holds
-        if (draft.parts.count { it.difference } > 1) return false
         if (draft.parts.any { it.difference } && !pairing && old?.parts?.any { it.difference } != true) return false
-        if (draft.parts.any { it.amount == 0L || (!it.difference && (it.amount < 0) != refund) || it.categoryId == null || it.categoryId !in categories }) return false
+        if (draft.parts.any { it.categoryId == null || it.categoryId !in categories }) return false
         val base = old?.let { undo(d, it) } ?: d
         return when (val s = draft.source) {
             PaymentSource.Savings -> true

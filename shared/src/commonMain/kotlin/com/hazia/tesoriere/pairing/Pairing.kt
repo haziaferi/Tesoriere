@@ -5,6 +5,7 @@ package com.hazia.tesoriere.pairing
 import com.hazia.tesoriere.engine.Clock
 import com.hazia.tesoriere.engine.Trash
 import com.hazia.tesoriere.engine.daysTo
+import com.hazia.tesoriere.model.AppState
 import com.hazia.tesoriere.model.Money
 import com.hazia.tesoriere.model.ProfileData
 import com.hazia.tesoriere.model.TrashItem
@@ -464,14 +465,27 @@ object Pairing {
     /** The receipt side's total: its own parts' when given (SPEC R127), else the receipt's. */
     private fun receiptTotal(review: ReceiptReview, receiptParts: List<Part>?): Money = receiptParts?.sumOf { it.amount } ?: review.file.totalPaid
 
-    /** Why bank payment [paymentId] and the receipt under [review] cannot be paired, or null (SPEC R119). */
+    /**
+     * Why bank payment [paymentId] and the receipt under [review] cannot be paired, or null (SPEC
+     * R119); outside the receipt Profile [app] keeps, the receipt cannot be recorded (SPEC R112).
+     */
     fun receiptPairProblem(
+        app: AppState, d: ProfileData, paymentId: String, review: ReceiptReview, differenceCategoryId: String?, receiptParts: List<Part>? = null,
+    ): PairProblem? =
+        if (app.receiptProfileId != d.profileId) PairProblem.RECEIPT_PROBLEM
+        else receiptPairProblemIn(d, paymentId, review, differenceCategoryId, receiptParts)
+
+    /**
+     * [receiptPairProblem] in [d] whether or not it is the receipt Profile: a receipt payment
+     * restored from the Trash as a pair records no new receipt (SPEC R112, R127).
+     */
+    internal fun receiptPairProblemIn(
         d: ProfileData, paymentId: String, review: ReceiptReview, differenceCategoryId: String?, receiptParts: List<Part>? = null,
     ): PairProblem? {
         val p = d.payments.firstOrNull { it.id == paymentId }
         if (p == null || !bankSide(p)) return PairProblem.PAYMENT_NOT_PAIRABLE
         // the receipt's own checks, but its own total: the pair's total is the bank row's
-        val rp = Receipts.problem(d, review)
+        val rp = Receipts.recordProblem(d, review)
         if (rp != null && rp != ReceiptProblem.CANNOT_SAVE) return PairProblem.RECEIPT_PROBLEM
         if (!canConfirmPair(differencePart(receiptTotal(review, receiptParts), p.total), differenceCategoryId)) return PairProblem.DIFFERENCE_UNFILED
         val base = Receipts.withAdded(d, review)
@@ -495,15 +509,26 @@ object Pairing {
      * finds a problem, [d] comes back unchanged.
      */
     fun pairReceiptWithPayment(
-        d: ProfileData, paymentId: String, review: ReceiptReview, differenceCategoryId: String?, clock: Clock, txId: String,
+        app: AppState, d: ProfileData, paymentId: String, review: ReceiptReview, differenceCategoryId: String?, clock: Clock, txId: String,
         receiptParts: List<Part>? = null,
+    ): ProfileData =
+        if (app.receiptProfileId != d.profileId) d
+        else pairReceiptIn(d, paymentId, review, differenceCategoryId, clock, txId, receiptParts, inReceiptProfile = true)
+
+    /**
+     * [pairReceiptWithPayment] in [d] whether or not it is the receipt Profile, for a restore from the
+     * Trash (SPEC R127); with [inReceiptProfile] false, a Profile with no receipt settings is given none (SPEC R112).
+     */
+    internal fun pairReceiptIn(
+        d: ProfileData, paymentId: String, review: ReceiptReview, differenceCategoryId: String?, clock: Clock, txId: String,
+        receiptParts: List<Part>? = null, inReceiptProfile: Boolean = false,
     ): ProfileData {
-        if (receiptPairProblem(d, paymentId, review, differenceCategoryId, receiptParts) != null) return d
+        if (receiptPairProblemIn(d, paymentId, review, differenceCategoryId, receiptParts) != null) return d
         val bankText = d.payments.first { it.id == paymentId }.payee
         val base = Receipts.withAdded(d, review)
         val draft = receiptPairDraft(d, paymentId, review, differenceCategoryId, receiptParts)!!
         val edited = Payments.edit(base, paymentId, draft, clock, txId, pairing = true)
-        return linkStore(Receipts.keep(d, edited, review.copy(source = draft.source), paymentId), review.file.store, bankText)
+        return linkStore(Receipts.keep(d, edited, review.copy(source = draft.source), paymentId, inReceiptProfile), review.file.store, bankText)
     }
 
     // --- shared ---

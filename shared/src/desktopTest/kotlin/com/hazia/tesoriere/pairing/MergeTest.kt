@@ -62,7 +62,7 @@ class MergeTest {
     private val coffee = BankRow(on(11), -cents("4.50"), "BAR CENTRALE", null)
 
     private fun recordReceipt(d: ProfileData, file: ReceiptFile, source: PaymentSource = PaymentSource.Savings, id: String = "pay-r") =
-        Receipts.confirm(d, Receipts.setSource(Receipts.open(d, file), source), clock, id)
+        Receipts.confirm(Fixture.receiptApp, d, Receipts.setSource(Receipts.open(d, file), source), clock, id)
 
     /** [rows] recorded on their own, as after a pair suggestion turned down: each under [category], from [source]. */
     private fun recordRows(
@@ -117,8 +117,8 @@ class MergeTest {
 
     // SPEC:R129 SPEC:R39
     @Test fun `R129 a 42_10 receipt and a -42_30 bank payment merge only with the 0_20 filed, into one 42_30 payment`() {
-        val d1 = recordReceipt(world(), receipt("rc-s", "Esselunga", day, line("pasta", "42.10", "ch-groc", "Groceries")))
-        val d = recordRows(d1, BankRow(on(12), -cents("42.30"), "POS ESSELUNGA MI 0423", "F1"), category = "groc")
+        val d1 = recordReceipt(world(), receipt("rc-s", "Granvolta", day, line("pasta", "42.10", "ch-groc", "Groceries")))
+        val d = recordRows(d1, BankRow(on(12), -cents("42.30"), "POS GRANVOLTA MI 0423", "F1"), category = "groc")
         assertEquals(cents("915.60"), d.savingsAmount)
         assertEquals(MergeProblem.DIFFERENCE_UNFILED, Pairing.mergeProblem(d, "pay-r", "pay-b", null))
         assertEquals(d, merge(d))
@@ -136,9 +136,9 @@ class MergeTest {
 
     // SPEC:R129 SPEC:R40
     @Test fun `R129 a merge joins totals and days R37 would not suggest`() {
-        val d1 = recordReceipt(world(), receipt("rc-s", "Esselunga", day, line("pasta", "40.00", "ch-groc", "Groceries")))
-        val d = recordRows(d1, BankRow(on(20), -cents("41.20"), "ESSELUNGA SPA", null), category = "groc")
-        assertNull(Pairing.match(day, cents("40.00"), BankRow(on(20), -cents("41.20"), "ESSELUNGA SPA", null)))
+        val d1 = recordReceipt(world(), receipt("rc-s", "Granvolta", day, line("pasta", "40.00", "ch-groc", "Groceries")))
+        val d = recordRows(d1, BankRow(on(20), -cents("41.20"), "GRANVOLTA SPA", null), category = "groc")
+        assertNull(Pairing.match(day, cents("40.00"), BankRow(on(20), -cents("41.20"), "GRANVOLTA SPA", null)))
         val m = merge(d, difference = "fun")
         assertEquals(cents("41.20"), m.payments.single().total)
         assertEquals(cents("958.80"), m.savingsAmount)
@@ -146,8 +146,8 @@ class MergeTest {
 
     // SPEC:R129 SPEC:R54
     @Test fun `R129 a bank payment charged to a card merged into a receipt from Savings takes the card back down and Savings pays`() {
-        val d1 = recordReceipt(world(), receipt("rc-s", "Esselunga", day, line("pasta", "42.10", "ch-groc", "Groceries")))
-        val d = recordRows(d1, BankRow(on(12), -cents("42.30"), "POS ESSELUNGA MI 0423", null), category = "groc", source = PaymentSource.Account("card"))
+        val d1 = recordReceipt(world(), receipt("rc-s", "Granvolta", day, line("pasta", "42.10", "ch-groc", "Groceries")))
+        val d = recordRows(d1, BankRow(on(12), -cents("42.30"), "POS GRANVOLTA MI 0423", null), category = "groc", source = PaymentSource.Account("card"))
         assertEquals(cents("42.30"), d.accounts.single { it.id == "card" }.balance)
         assertEquals(cents("957.90"), d.savingsAmount)
         val m = merge(d, difference = "fun")
@@ -158,8 +158,8 @@ class MergeTest {
 
     // SPEC:R129 SPEC:R54
     @Test fun `R129 a bank payment from a Goal short of it, merged, gives the Goal and Savings back their shares once`() {
-        val d1 = recordReceipt(world(tripSaved = "42.10"), receipt("rc-s", "Esselunga", day, line("pasta", "42.30", "ch-groc", "Groceries")))
-        val d = recordRows(d1, BankRow(on(12), -cents("42.30"), "POS ESSELUNGA MI 0423", null), category = "groc", source = PaymentSource.Goal("trip"))
+        val d1 = recordReceipt(world(tripSaved = "42.10"), receipt("rc-s", "Granvolta", day, line("pasta", "42.30", "ch-groc", "Groceries")))
+        val d = recordRows(d1, BankRow(on(12), -cents("42.30"), "POS GRANVOLTA MI 0423", null), category = "groc", source = PaymentSource.Goal("trip"))
         assertEquals(0L, d.goals.single().saved)
         assertEquals(cents("957.50"), d.savingsAmount, "Savings paid the 0.20 the Goal lacked")
         val m = merge(d)
@@ -170,8 +170,8 @@ class MergeTest {
 
     // SPEC:R129 SPEC:R54
     @Test fun `R129 a receipt from a Goal that the merged total leaves short warns GOAL_SHORT and Savings pays the 0_20`() {
-        val d1 = recordReceipt(world(tripSaved = "42.10"), receipt("rc-s", "Esselunga", day, line("pasta", "42.10", "ch-groc", "Groceries")), PaymentSource.Goal("trip"))
-        val d = recordRows(d1, BankRow(on(12), -cents("42.30"), "POS ESSELUNGA MI 0423", null), category = "groc")
+        val d1 = recordReceipt(world(tripSaved = "42.10"), receipt("rc-s", "Granvolta", day, line("pasta", "42.10", "ch-groc", "Groceries")), PaymentSource.Goal("trip"))
+        val d = recordRows(d1, BankRow(on(12), -cents("42.30"), "POS GRANVOLTA MI 0423", null), category = "groc")
         assertEquals(MergeNotice(PaymentNotice.GOAL_SHORT, null), Pairing.mergeNotice(d, "pay-r", "pay-b", "fun"))
         val m = merge(d, difference = "fun")
         val p = m.payments.single()
@@ -183,8 +183,8 @@ class MergeTest {
 
     // SPEC:R129 SPEC:R54
     @Test fun `R129 both payments from one Goal - the bank payment's share returns before the merged payment takes its own, no warning`() {
-        val d1 = recordReceipt(world(tripSaved = "50.00"), receipt("rc-s", "Esselunga", day, line("pasta", "42.10", "ch-groc", "Groceries")), PaymentSource.Goal("trip"))
-        val d = recordRows(d1, BankRow(on(12), -cents("42.30"), "POS ESSELUNGA MI 0423", null), category = "groc", source = PaymentSource.Goal("trip"))
+        val d1 = recordReceipt(world(tripSaved = "50.00"), receipt("rc-s", "Granvolta", day, line("pasta", "42.10", "ch-groc", "Groceries")), PaymentSource.Goal("trip"))
+        val d = recordRows(d1, BankRow(on(12), -cents("42.30"), "POS GRANVOLTA MI 0423", null), category = "groc", source = PaymentSource.Goal("trip"))
         assertEquals(0L, d.goals.single().saved)
         assertEquals(cents("965.60"), d.savingsAmount)
         assertEquals(MergeNotice(null, null), Pairing.mergeNotice(d, "pay-r", "pay-b", "fun"), "the Goal holds 50.00 once the bank payment is removed")

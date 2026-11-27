@@ -65,7 +65,7 @@ sealed interface ReviewNote {
 
 /** Why a review's Confirm is off, as a code, first match in this order (SPEC R115). */
 enum class ReceiptProblem {
-    /** This Profile does not hold the receipt folder (SPEC R112). */
+    /** This Profile is not the receipt Profile the app keeps (SPEC R112). */
     NOT_RECEIPT_PROFILE,
     /** The receipt id was recorded before (SPEC R30). */
     ALREADY_RECORDED,
@@ -173,11 +173,19 @@ object Receipts {
         return sums.filter { it.value != 0L }.map { (c, amount) -> Part(c, amount) }
     }
 
-    /** Why Confirm is off, or null when it is on (SPEC R115). */
-    fun problem(d: ProfileData, r: ReceiptReview): ReceiptProblem? {
-        val s = d.receiptSettings
-        if (s?.folder == null) return ReceiptProblem.NOT_RECEIPT_PROFILE
-        if (r.file.receiptId in s.recordedReceiptIds) return ReceiptProblem.ALREADY_RECORDED
+    /**
+     * Why Confirm is off, or null when it is on (SPEC R115). The receipt Profile is the one [app]
+     * keeps (SPEC R112), whatever [d]'s own receipt settings hold.
+     */
+    fun problem(app: AppState, d: ProfileData, r: ReceiptReview): ReceiptProblem? =
+        if (app.receiptProfileId != d.profileId) ReceiptProblem.NOT_RECEIPT_PROFILE else recordProblem(d, r)
+
+    /**
+     * Why [r] cannot be recorded in [d], the receipt Profile asked about apart: also the check of a
+     * receipt payment restored from the Trash as a pair, which records no new receipt (SPEC R112, R127).
+     */
+    internal fun recordProblem(d: ProfileData, r: ReceiptReview): ReceiptProblem? {
+        if (recorded(d, r.file.receiptId)) return ReceiptProblem.ALREADY_RECORDED
         if (!r.file.currency.equals(d.settings.currency, ignoreCase = true)) return ReceiptProblem.OTHER_CURRENCY
         // an unlinked category blocks only while a line of it is in no category (SPEC R32, owner answer B of 2026-11-25)
         val unlinked = notes(d, r).filterIsInstance<ReviewNote.Unlinked>().mapTo(HashSet()) { it.chatelaineId }
@@ -188,7 +196,14 @@ object Receipts {
         return null
     }
 
-    fun canConfirm(d: ProfileData, r: ReceiptReview): Boolean = problem(d, r) == null
+    fun canConfirm(app: AppState, d: ProfileData, r: ReceiptReview): Boolean = problem(app, d, r) == null
+
+    /**
+     * Whether receipt [receiptId] is recorded in [d] (SPEC R112): among the recorded ids, or held by
+     * a payment in it, so lost recorded ids never let a recorded receipt in again (SPEC R141).
+     */
+    fun recorded(d: ProfileData, receiptId: String): Boolean =
+        d.receiptSettings?.recordedReceiptIds.orEmpty().contains(receiptId) || d.payments.any { it.receiptId == receiptId }
 
     /** The warning the payment would carry, as for any payment: a Goal short of the total, a card whose charges are not logged (SPEC R54, R109). */
     fun notice(d: ProfileData, r: ReceiptReview): PaymentNotice? = Payments.draftNotice(withAdded(d, r), draft(r))
@@ -205,10 +220,10 @@ object Receipts {
      * and every line, and keeps the receipt id, the links, by name or by the user, the added
      * categories and the store's source. While [problem] finds one, [d] comes back unchanged.
      */
-    fun confirm(d: ProfileData, r: ReceiptReview, clock: Clock, id: String): ProfileData {
-        if (problem(d, r) != null) return d
+    fun confirm(app: AppState, d: ProfileData, r: ReceiptReview, clock: Clock, id: String): ProfileData {
+        if (problem(app, d, r) != null) return d
         val written = Payments.record(withAdded(d, r), draft(r), clock, id)
-        return keep(d, written, r, id)
+        return keep(d, written, r, id, inReceiptProfile = true)
     }
 
     /**
@@ -216,18 +231,21 @@ object Receipts {
      * [written] gets the receipt's id and every line; the receipt id, the links, by name (worked
      * out against [before], the Profile the review was opened on) or by the user, and the store's
      * source are kept in the receipt settings. Shared by Confirm and by pairing a receipt with a
-     * bank row's payment.
+     * bank row's payment. Outside the receipt Profile ([inReceiptProfile] false: a pair restored from
+     * the Trash) a Profile with no receipt settings is given none (SPEC R112).
      */
-    internal fun keep(before: ProfileData, written: ProfileData, r: ReceiptReview, paymentId: String): ProfileData {
+    internal fun keep(before: ProfileData, written: ProfileData, r: ReceiptReview, paymentId: String, inReceiptProfile: Boolean): ProfileData {
         val lines = r.file.lines.mapIndexed { i, l ->
             ReceiptLine(l.name, l.pack, l.quantity, l.pricePaid, l.categoryId, l.categoryName, r.lineCategories[i]!!)
         }
         val byName = chatelaineCategories(r).mapNotNull { (cid, name) ->
             if (cid in r.newLinks || keptLink(before, cid) != null) null else byName(before, name)?.let { cid to it }
         }.toMap()
-        val s = written.receiptSettings!!
-        return written.copy(
+        val withLines = written.copy(
             payments = written.payments.map { if (it.id == paymentId) it.copy(receiptId = r.file.receiptId, receiptLines = lines) else it },
+        )
+        val s = written.receiptSettings ?: if (inReceiptProfile) ReceiptSettings(written.profileId) else return withLines
+        return withLines.copy(
             receiptSettings = s.copy(
                 recordedReceiptIds = s.recordedReceiptIds + r.file.receiptId,
                 categoryLinks = s.categoryLinks + byName + r.newLinks,

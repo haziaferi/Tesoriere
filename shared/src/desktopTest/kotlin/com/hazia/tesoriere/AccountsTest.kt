@@ -45,7 +45,7 @@ class AccountsTest {
 
     // SPEC:R90
     @Test fun `R90 12,000_00 at 6_5 percent over 48 months fixed is 284_58 a month, 13,659_84 repaid, 1,659_84 of interest`() {
-        val m = Accounts.loanMath(cents("12,000.00"), 0.065, 48, RateType.FIXED)
+        val m = Accounts.loanMath(cents("12,000.00"), 0.065, 48, RateType.FIXED)!!
         assertEquals(cents("284.58"), m.monthly)
         assertEquals(cents("13,659.84"), m.totalRepaid)
         assertEquals(cents("1,659.84"), m.totalInterest)
@@ -55,7 +55,7 @@ class AccountsTest {
 
     // SPEC:R90
     @Test fun `R90 12,000_00 interest-only at 6_5 percent is 65_00 a month, 3,120_00 repaid and 12,000_00 left`() {
-        val m = Accounts.loanMath(cents("12,000.00"), 0.065, 48, RateType.INTEREST_ONLY)
+        val m = Accounts.loanMath(cents("12,000.00"), 0.065, 48, RateType.INTEREST_ONLY)!!
         assertEquals(cents("65.00"), m.monthly)
         assertEquals(cents("3,120.00"), m.totalRepaid)              // the payments, not payments plus principal
         assertEquals(cents("3,120.00"), m.totalInterest)
@@ -64,7 +64,7 @@ class AccountsTest {
 
     // SPEC:R90
     @Test fun `R90 12,000_00 at 0 percent over 48 months is 250_00 a month`() {
-        assertEquals(cents("250.00"), Accounts.loanMath(cents("12,000.00"), 0.0, 48, RateType.FIXED).monthly)
+        assertEquals(cents("250.00"), Accounts.loanMath(cents("12,000.00"), 0.0, 48, RateType.FIXED)!!.monthly)
     }
 
     // SPEC:R91 SPEC:R87 SPEC:R86
@@ -92,6 +92,27 @@ class AccountsTest {
         assertTrue(Accounts.finished(ended, a))                                  // a Loan is finished when its payment is
     }
 
+    // SPEC:R86 SPEC:R90 SPEC:R141
+    @Test fun `R86 an APR or interest rate of infinity or no number is RATE_NOT_FINITE, takes no loan and the calculator does not throw`() {
+        val clock = TestClock(today)
+        val d = world()
+        for (rate in listOf(Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)) {
+            val draft = card(apr = rate)
+            assertEquals(AccountEditing.AccountProblem.RATE_NOT_FINITE, AccountEditing.problem(d, draft), "$rate")
+            assertEquals(d, AccountEditing.save(d, draft, clock) { Ids().next() }, "$rate")
+            val loan = Account("ln", Fixture.PROFILE, "Loan", type = AccountType.LOAN, interestRate = rate)
+            assertEquals(AccountEditing.AccountProblem.RATE_NOT_FINITE, AccountEditing.problem(d, loan), "$rate")
+            assertEquals(Accounts.LoanProblem.RATE_NOT_FINITE, Accounts.getLoanProblem(d, rate, "c1"), "$rate")
+            assertEquals(d, Accounts.getLoan(d, cents("9,800.00"), rate, 48, RateType.FIXED, "", "", "c1", false, clock) { Ids().next() }, "$rate")
+            // no figure at all, rather than one worked out at a rate no one typed
+            assertNull(Accounts.loanMath(cents("12,000.00"), rate, 48, RateType.FIXED), "$rate")
+        }
+        assertNull(AccountEditing.problem(d, card(apr = 0.2)))
+        assertNull(Accounts.getLoanProblem(d, 0.059, "c1"))
+        assertEquals(Accounts.LoanProblem.CATEGORY_MISSING, Accounts.getLoanProblem(d, 0.059, "nope"))
+        assertEquals(Accounts.LoanProblem.CATEGORY_MISSING, Accounts.getLoanProblem(d, 0.059, ""))
+    }
+
     // SPEC:R91 SPEC:R67
     @Test fun `R91 taking a loan with no category, or one that does not exist, creates nothing`() {
         val clock = TestClock(today)
@@ -109,7 +130,7 @@ class AccountsTest {
 
     // SPEC:R91 SPEC:R55
     @Test fun `R91 saving for 12,000_00 over 48 months on 14 September 2026 is a goal by 14 September 2030 named Savings goal`() {
-        val m = Accounts.loanMath(cents("12,000.00"), 0.065, 48, RateType.FIXED)
+        val m = Accounts.loanMath(cents("12,000.00"), 0.065, 48, RateType.FIXED)!!
         val g = Accounts.saveForItGoal(cents("12,000.00"), m, "", today, "g", Fixture.PROFILE)
         assertEquals(StoredLabels.SAVINGS_GOAL, g.name)
         assertEquals(cents("12,000.00"), g.target); assertEquals(0L, g.saved)

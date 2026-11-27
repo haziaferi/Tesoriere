@@ -335,6 +335,12 @@ object StatementImport {
     /** Spaces, tabs, non-breaking and other Unicode spaces, in runs. */
     private val SPACING = Regex("[\\s\\u00A0\\u2007\\u202F]+")
 
+    /** How many characters of a description a synthetic key keeps (SPEC R26). */
+    const val KEY_TEXT = 40
+
+    /** [s] with each run of spacing made one space, as a synthetic key takes a description (SPEC R26, R138). Ends are not trimmed. */
+    internal fun spacedOnce(s: String): String = s.replace(SPACING, " ")
+
     /**
      * Both keys where the format allows (SPEC R26): the FITID is identity, the synthetic key catches a
      * CSV and an OFX of one period. The description's spacing is made one space and trimmed before
@@ -342,8 +348,8 @@ object StatementImport {
      * a description with single spaces keys as it always did.
      */
     fun keys(r: BankRow): BankKeys {
-        val desc = r.description.replace(SPACING, " ").trim()
-        return BankKeys(r.fitid, "syn:${r.date}|${r.amount.toMajor2()}|${desc.take(40).lowercase()}")
+        val desc = spacedOnce(r.description).trim()
+        return BankKeys(r.fitid, "syn:${r.date}|${r.amount.toMajor2()}|${desc.take(KEY_TEXT).lowercase()}")
     }
 
     /** [k]'s two keys as strings (SPEC R26): `fit:<FITID>` when there is one, then the synthetic key. [withRow] keeps them. */

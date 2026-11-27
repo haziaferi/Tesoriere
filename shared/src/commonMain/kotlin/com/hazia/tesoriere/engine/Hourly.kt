@@ -81,10 +81,23 @@ object Hourly {
         return (g * r).roundToLong() to false
     }
 
-    fun logShift(d: ProfileData, shift: Shift): ProfileData = d.copy(shifts = d.shifts + shift.copy(profileId = d.profileId))
+    /** Why a shift cannot be logged or edited, as a code (SPEC R80). */
+    enum class ShiftProblem {
+        /** Its hours are infinity or not a number: the store cannot keep them, and no pay can be worked out from them (SPEC R141). */
+        HOURS_NOT_FINITE,
+    }
 
+    /** Why [logShift] or [editShift] would refuse [shift], or null when it would take it. */
+    fun shiftProblem(shift: Shift): ShiftProblem? = ShiftProblem.HOURS_NOT_FINITE.takeIf { !shift.hours.isFinite() }
+
+    /** [shift] logged; while [shiftProblem] finds one, [d] comes back unchanged. */
+    fun logShift(d: ProfileData, shift: Shift): ProfileData =
+        if (shiftProblem(shift) != null) d else d.copy(shifts = d.shifts + shift.copy(profileId = d.profileId))
+
+    /** [shift] in place of the shift of its id; while [shiftProblem] finds one, [d] comes back unchanged. */
     fun editShift(d: ProfileData, shift: Shift): ProfileData =
-        d.copy(shifts = d.shifts.map { if (it.id == shift.id) shift.copy(profileId = d.profileId) else it })
+        if (shiftProblem(shift) != null) d
+        else d.copy(shifts = d.shifts.map { if (it.id == shift.id) shift.copy(profileId = d.profileId) else it })
 
     fun removeShift(d: ProfileData, id: String): ProfileData = d.copy(shifts = d.shifts.filterNot { it.id == id })
 
@@ -95,7 +108,7 @@ object Hourly {
      * unchanged ([nothingThisTime] answers a payday that brought nothing).
      */
     fun confirmPayday(d: ProfileData, payday: Payday, arrived: Money, clock: Clock, txId: String): ProfileData {
-        if (confirmPaydayProblem(arrived) != null) return d
+        if (confirmPaydayProblem(payday, arrived) != null) return d
         val hours = payday.hours
         val rate = if (hours > 0) (payday.gross / hours).roundToLong() else null
         val moved = Ledger.logAndMove(
@@ -111,10 +124,17 @@ object Hourly {
     enum class PaydayProblem {
         /** What arrived is not above zero: a confirmed payday has an amount. */
         NO_AMOUNT,
+
+        /** The shifts' hours add up to infinity or to no number: the payday row could not keep them (SPEC R141). */
+        HOURS_NOT_FINITE,
     }
 
     /** Why [confirmPayday] would refuse [arrived], or null when it would confirm it (SPEC R81). */
     fun confirmPaydayProblem(arrived: Money): PaydayProblem? = PaydayProblem.NO_AMOUNT.takeIf { arrived <= 0 }
+
+    /** Why [confirmPayday] would refuse [arrived] for [payday]: [confirmPaydayProblem] of [arrived], then its hours (SPEC R81). */
+    fun confirmPaydayProblem(payday: Payday, arrived: Money): PaydayProblem? =
+        confirmPaydayProblem(arrived) ?: PaydayProblem.HOURS_NOT_FINITE.takeIf { !payday.hours.isFinite() }
 
     /** Why the income type cannot change, as a code (SPEC R79, R83). */
     enum class TypeProblem {
