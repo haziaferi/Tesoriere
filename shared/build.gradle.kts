@@ -42,10 +42,10 @@ kotlin {
             // The entities carry Room's annotations, so the stored shape is the engine's shape (SPEC R141).
             api(libs.androidx.room.runtime)
         }
-        androidMain.dependencies {
-            implementation(libs.androidx.sqlite.framework)
-        }
-        getByName("desktopMain").dependencies {
+        // Both apps reach the store through the bundled SQLite, which deletes nothing (SPEC R144):
+        // Android's AndroidSQLiteDriver opens with the framework's default error handler, which
+        // deletes a database it finds damaged. The guard's read-only probe uses the same library.
+        jvmCommon.dependencies {
             implementation(libs.androidx.sqlite.bundled)
         }
         // The engine's tests run on the desktop JVM (SPEC R43): it is pure Kotlin, and the bundled

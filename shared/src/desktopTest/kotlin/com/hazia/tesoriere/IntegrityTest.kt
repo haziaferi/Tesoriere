@@ -381,4 +381,21 @@ class IntegrityTest {
         val found = sources.flatMap { f -> f.readLines().withIndex().filter { around.containsMatchIn(it.value) }.map { "${f.path}:${it.index + 1}: ${it.value.trim()}" } }
         assertEquals(emptyList(), found)
     }
+
+    // SPEC:R144
+    @Test fun `R144 Android's store opens through the bundled driver alone, never the framework's, whose handler deletes a damaged file`() {
+        val framework = Regex("""\bAndroidSQLiteDriver\b|\bandroid\.database\b|\bSQLiteDatabase\b|\bDatabaseErrorHandler\b|\bFrameworkSQLiteOpenHelperFactory\b|\bopenHelperFactory\b|\bSupportSQLite\w*""")
+        // the matcher itself, so an empty scan cannot pass for a clean one
+        assertTrue(framework.containsMatchIn("Room.databaseBuilder<TesoriereDatabase>(context = app, name = DB_NAME).openFirstConnection(AndroidSQLiteDriver())"))
+        assertTrue(framework.containsMatchIn("val db = SQLiteDatabase.openDatabase(path, null, SQLiteDatabase.OPEN_READONLY, DatabaseErrorHandler { })"))
+        assertFalse(framework.containsMatchIn("openFirstConnection(BundledSQLiteDriver())"))
+        val root = listOf(File(".."), File(".")).first { File(it, "shared/src/androidMain").isDirectory }
+        val android = File(root, "shared/src/androidMain").walkTopDown().filter { it.isFile && it.extension in setOf("kt", "java") }.toList()
+        assertTrue(android.isNotEmpty())
+        val found = android.flatMap { f -> f.readLines().withIndex().filter { framework.containsMatchIn(it.value) }.map { "${f.path}:${it.index + 1}: ${it.value.trim()}" } }
+        assertEquals(emptyList(), found)
+        val opener = android.joinToString("\n") { it.readText() }
+        assertTrue("openFirstConnection(BundledSQLiteDriver())" in opener)
+        assertTrue("BundledRawStore" in opener)
+    }
 }

@@ -39,12 +39,13 @@ import java.nio.file.StandardCopyOption
 /**
  * SPEC R144: a store SQLite cannot read is moved aside, whole, before anything else opens it.
  *
- * It has to come first: Room's `AndroidSQLiteDriver` opens through Android's default error handler,
- * which deletes a database that reports damage on open; `BundledSQLiteDriver` on the desktop deletes
- * nothing, but it throws. Each platform's [RawStore] opens read-only and cannot delete.
+ * It has to come first: both apps open Room through `BundledSQLiteDriver`, which deletes nothing but
+ * throws on a damaged store, so the app would not start. [BundledRawStore] opens read-only and
+ * cannot delete. Android's framework driver is not used: its default error handler deletes a
+ * database that reports damage.
  *
- * Not covered, and said so it is not assumed: damage that first shows while the app runs meets Room's
- * own connection, and on Android its default handler deletes the store.
+ * Damage that first shows while the app runs meets Room's own connection: its query throws, nothing
+ * is deleted, and the next start's guard moves the store aside.
  */
 object Integrity {
 
