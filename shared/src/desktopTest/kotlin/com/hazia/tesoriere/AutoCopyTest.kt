@@ -337,14 +337,39 @@ class AutoCopyTest {
     }
 
     // SPEC:R148 SPEC:R130 SPEC:R141
-    @Test fun `R148 an export naming a record it could not read writes no copy, RECORDS_UNREADABLE, and an export with no file is NOT_MADE`() {
+    @Test fun `R148 an export naming a record it could not read is still copied and owes RECORDS_UNREADABLE once, and an export with no file is NOT_MADE`() {
         val file = com.hazia.tesoriere.engine.BackupFile(exportedAt = "2026-11-27", activeProfileId = "p-1", profiles = emptyList())
         val whole = com.hazia.tesoriere.data.Export.Ok(file, plain, 0, 0, emptyList())
         assertEquals(CopyText.Ready(plain), AutoCopy.outcome(whole))
         val lacking = whole.copy(unreadable = listOf(com.hazia.tesoriere.data.UnreadableRecord("p-1", com.hazia.tesoriere.data.StoredKind.IMPORT_MEMORY, null)))
-        assertEquals(CopyText.Failed(CopyError.RECORDS_UNREADABLE), AutoCopy.outcome(lacking))
+        assertEquals(CopyText.Lacking(plain), AutoCopy.outcome(lacking))
         assertEquals(CopyText.Failed(CopyError.NOT_MADE), AutoCopy.outcome(com.hazia.tesoriere.data.Export.Empty))
         assertEquals(CopyText.Failed(CopyError.NOT_MADE), AutoCopy.outcome(com.hazia.tesoriere.data.Export.Refused(com.hazia.tesoriere.engine.BackupProblem.DAMAGED)))
+        // the copy is written, of everything readable, and a notice is owed
+        val due = weekly.copy(lastCopy = "2026-11-13")
+        assertEquals(CopyText.Ready(plain), AutoCopy.contents(due, (AutoCopy.outcome(lacking) as CopyText.Lacking).text, null, lockOn = false, nov27))
+        assertTrue(AutoCopy.noticeOwed(due, CopyError.RECORDS_UNREADABLE))
+        val written = AutoCopy.afterSuccess(due, nov27, lacking = true)
+        assertEquals("2026-11-27", written.lastCopy)
+        assertEquals(CopyError.RECORDS_UNREADABLE, AutoCopy.lastError(written))
+        assertFalse(AutoCopy.due(written, nov27), "a copy lacking records is a copy written")
+        assertFalse(AutoCopy.noticeOwed(written, CopyError.RECORDS_UNREADABLE), "the next lacking copy owes none")
+        // a run of folder failures and a run of lacking copies each owe their own notice
+        val failing = AutoCopy.afterFailure(due, CopyError.FOLDER_UNREACHABLE)
+        assertTrue(AutoCopy.noticeOwed(failing, CopyError.RECORDS_UNREADABLE))
+        assertTrue(AutoCopy.noticeOwed(written, CopyError.FOLDER_UNREACHABLE))
+        assertTrue(AutoCopy.noticeOwed(written, CopyError.PAUSED_NEEDS_PASSWORD))
+        // a whole copy clears it
+        val clean = AutoCopy.afterSuccess(written, nov27)
+        assertNull(clean.lastError); assertTrue(AutoCopy.noticeOwed(clean, CopyError.RECORDS_UNREADABLE))
+    }
+
+    // SPEC:R148 SPEC:R141
+    @Test fun `R148 beside 20 copies of phone none goes while records are unreadable, and the 6 oldest go after the first whole copy`() {
+        val phone = (0 until 20).map { AutoCopy.fileName(nov27.plusDays(-it), "phone") }.reversed()
+        assertEquals(emptyList(), AutoCopy.stale(phone, "phone", nov27, lacking = true))
+        assertEquals(phone.take(6), AutoCopy.stale(phone, "phone", nov27, lacking = false))
+        assertEquals(phone.take(6), AutoCopy.stale(phone, "phone", nov27))
     }
 
     // SPEC:R148 SPEC:R132

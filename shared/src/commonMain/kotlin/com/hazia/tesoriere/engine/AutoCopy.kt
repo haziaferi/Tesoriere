@@ -30,8 +30,9 @@ import kotlinx.datetime.LocalDate
  *   and with the app lock on and no password nothing is written (Paused), so a plain copy is never
  *   written in place of an encrypted one (SPEC R132); a pause owes a notice as a failure does
  *   ([AutoCopy.afterPause]), so the weekly backup never stops unseen.
- * - [AutoCopy.outcome] reads the export: a file naming records the store cannot read is not
- *   copied (RECORDS_UNREADABLE), and an export with no file is NOT_MADE.
+ * - [AutoCopy.outcome] reads the export: a file naming records the store cannot read is copied
+ *   all the same, owing RECORDS_UNREADABLE's notice, and no old copy is deleted while it lasts
+ *   (owner, 2026-11-27); an export with no file is NOT_MADE.
  * - A refused change gives a code: [AutoCopy.everyProblem] NO_FOLDER, and
  *   [AutoCopy.withoutPasswordProblem] R132's REQUIRED; Sci-Fin's AppStore returned in silence.
  * - An unknown frequency token reads as WEEKLY, since only `off` turns the copy off; Sci-Fin read it
@@ -72,8 +73,9 @@ enum class CopyError(val token: String) {
     NOT_MADE("not_made"),
 
     /**
-     * The export named records the store cannot read (SPEC R130, R141): no copy is written, so the
-     * newest copies, which still hold them, are not pushed out by copies that lack them.
+     * A notice code, not a failure: the export named records the store cannot read (SPEC R130,
+     * R141), and the copy was written of everything else ([CopyText.Lacking], AutoCopy.afterSuccess
+     * with `lacking`); while it lasts no old copy is deleted, so those that still hold the records stay.
      */
     RECORDS_UNREADABLE("records_unreadable"),
 
@@ -102,6 +104,13 @@ enum class CopyProblem {
 sealed interface CopyText {
     /** The file's text: the backup, or its encrypted file under the copies' password. */
     data class Ready(val text: String) : CopyText
+
+    /**
+     * The backup's text from an export that names records the store cannot read (SPEC R141): it
+     * is copied all the same (AutoCopy.contents), recorded with AutoCopy.afterSuccess `lacking`,
+     * owing RECORDS_UNREADABLE's notice, and AutoCopy.stale deletes no old copy while it lasts.
+     */
+    data class Lacking(val text: String) : CopyText
 
     /** A failure to record (AutoCopy.afterFailure). */
     data class Failed(val error: CopyError) : CopyText
@@ -223,9 +232,12 @@ object AutoCopy {
      * The names in [names] to delete after a copy on [today]: this device's own copies beyond the
      * newest [KEPT], oldest first, those dated after today (a clock that ran ahead) counted as the
      * oldest of all, and never the day's own. A name that is not exactly one of [fileName]'s for
-     * this device, a `YYYY-MM-DD` day and this device's name, is never named.
+     * this device, a `YYYY-MM-DD` day and this device's name, is never named. None at all while the
+     * copy just written was [lacking] records the store cannot read (CopyText.Lacking), so the older
+     * copies that still hold them stay; deleting resumes with the first whole copy.
      */
-    fun stale(names: List<String>, device: String, today: LocalDate): List<String> {
+    fun stale(names: List<String>, device: String, today: LocalDate, lacking: Boolean = false): List<String> {
+        if (lacking) return emptyList()
         val tail = "-${deviceName(device)}$SUFFIX"
         val ours = names.distinct().mapNotNull { n ->
             if (!n.startsWith(PREFIX) || !n.endsWith(tail) || n.length < PREFIX.length + tail.length) return@mapNotNull null
@@ -237,12 +249,12 @@ object AutoCopy {
 
     /**
      * The backup a copy writes, from the export (SPEC R130, R148): its plain text when the export
-     * gave a whole file; RECORDS_UNREADABLE when it named records the store cannot read, so a copy
-     * that lacks them never pushes out the copies that hold them; NOT_MADE when the export gave a
-     * code in place of a file or found no Profile.
+     * gave a whole file; the same text as [CopyText.Lacking] when it named records the store cannot
+     * read, copied all the same and owing RECORDS_UNREADABLE's notice (owner, 2026-11-27); NOT_MADE
+     * when the export gave a code in place of a file or found no Profile.
      */
     fun outcome(export: Export): CopyText = when (export) {
-        is Export.Ok -> if (export.unreadable.isEmpty()) CopyText.Ready(export.text) else CopyText.Failed(CopyError.RECORDS_UNREADABLE)
+        is Export.Ok -> if (export.unreadable.isEmpty()) CopyText.Ready(export.text) else CopyText.Lacking(export.text)
         is Export.Refused, Export.Empty -> CopyText.Failed(CopyError.NOT_MADE)
     }
 
@@ -265,9 +277,14 @@ object AutoCopy {
         else -> CopyText.Ready(plain)
     }
 
-    /** [s] after a copy written on [today]: its day recorded, the failure or pause and its notice cleared. */
-    fun afterSuccess(s: CopySchedule, today: LocalDate): CopySchedule =
-        s.copy(lastCopy = today.toString(), lastError = null, failureNotified = false)
+    /**
+     * [s] after a copy written on [today]: its day recorded, the failure or pause and its notice
+     * cleared; for a copy [lacking] records the store cannot read, RECORDS_UNREADABLE recorded as a
+     * notice code instead and the run's notice marked given, as for a failure.
+     */
+    fun afterSuccess(s: CopySchedule, today: LocalDate, lacking: Boolean = false): CopySchedule =
+        if (lacking) s.copy(lastCopy = today.toString(), lastError = CopyError.RECORDS_UNREADABLE.token, failureNotified = true)
+        else s.copy(lastCopy = today.toString(), lastError = null, failureNotified = false)
 
     /** [s] after a failed copy: [error] recorded and the run's notice marked given; the last good copy kept. */
     fun afterFailure(s: CopySchedule, error: CopyError): CopySchedule =
@@ -281,14 +298,20 @@ object AutoCopy {
     fun afterPause(s: CopySchedule): CopySchedule = afterFailure(s, CopyError.PAUSED_NEEDS_PASSWORD)
 
     /**
-     * Whether recording [next] now owes a notice (SPEC R148): the first of a run of failures, or of
-     * a run of pauses; a pause after a failure, or a failure after a pause, starts a run of its own.
-     * With [next] unknown, the first of a run only.
+     * Whether recording [next] now owes a notice (SPEC R148): the first of a run of failures, of
+     * pauses, or of copies lacking records; one of these three after another of them starts a run
+     * of its own. With [next] unknown, the first of a run only.
      */
     fun noticeOwed(s: CopySchedule, next: CopyError? = null): Boolean {
         if (!s.failureNotified) return true
         if (next == null) return false
-        val wasPaused = lastError(s) == CopyError.PAUSED_NEEDS_PASSWORD
-        return wasPaused != (next == CopyError.PAUSED_NEEDS_PASSWORD)
+        return run(lastError(s)) != run(next)
+    }
+
+    /** Which run of notices [e] belongs to: pauses, copies lacking records, or failures (SPEC R148). */
+    private fun run(e: CopyError?): Int = when (e) {
+        CopyError.PAUSED_NEEDS_PASSWORD -> 1
+        CopyError.RECORDS_UNREADABLE -> 2
+        else -> 0
     }
 }
