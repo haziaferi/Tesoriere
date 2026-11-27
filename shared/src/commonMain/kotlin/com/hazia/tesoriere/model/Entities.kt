@@ -217,7 +217,11 @@ data class Settings(
     val lastIncomeDepositDate: LocalDate? = null,
     val lastIncomeLoggedDate: LocalDate? = null,
     val newMonthNotificationEnabled: Boolean = true,
-    /** null until the platform has answered. */
+    /**
+     * null until the platform has answered. A fact of the device, not of the Profile's data: a restore keeps
+     * the device's own value, null for a Profile new to it, a deleted Profile in the file's Trash included,
+     * and a Sci-Fin import reads null (SPEC R136, R143).
+     */
     val notificationPermissionGranted: Boolean? = null,
     val savingsVsOwedEnabled: Boolean = false,
     /** The Science topics (SPEC R18). */
@@ -287,7 +291,11 @@ data class ImportState(
     val lastImportDate: LocalDate? = null,
 )
 
-/** App-wide, above the Profiles: which Profile is open, the storage version, backup dates. */
+/**
+ * App-wide, above the Profiles: which Profile is open, the storage version, backup dates. Device-only but for
+ * [activeProfileId] and [receiptProfileId], the two fields a backup carries (SPEC R130); a restore switches
+ * [profilesEnabled] on for a file of more than one Profile, never from the file (SPEC R143).
+ */
 @Serializable
 @Entity(tableName = "app_state")
 data class AppState(
@@ -352,8 +360,10 @@ data class CopySchedule(
 
 /**
  * One deleted thing in the Trash, kept 30 days (SPEC R18, R121). [payload] is JSON (Trash.encode): what the delete
- * removed and what a restore needs (SPEC R122). Device-only: a backup carries what exists, not what was deleted.
+ * removed and what a restore needs (SPEC R122). A backup carries every item as it is, its delete day with it, so
+ * its 30 days run on, and a restore replaces the device's Trash with the file's (SPEC R130, owner, 2026-11-26).
  */
+@Serializable
 @Entity(tableName = "trash", indices = [Index("profileId")])
 data class TrashItem(
     @PrimaryKey val id: String,

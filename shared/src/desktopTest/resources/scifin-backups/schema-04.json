@@ -1,0 +1,265 @@
+{
+    "schemaVersion": 4,
+    "exportedAt": "2026-03-22",
+    "activeProfileId": "sf-p-1",
+    "profiles": [
+        {
+            "id": "sf-p-1",
+            "name": "Casa Prova",
+            "savings": 125000,
+            "settings": {
+                "profileId": "sf-p-1",
+                "theme": "swiss-blue",
+                "mode": "system",
+                "scale": "md",
+                "density": "comfortable",
+                "reduceMotion": false,
+                "lowDistraction": false,
+                "currency": "EUR",
+                "trendMonths": 12,
+                "incomeEnabled": true,
+                "income": 145000,
+                "incomeCadence": "monthly",
+                "incomePayDate": "2026-03-02",
+                "incomePayDate2": null,
+                "incomeAutoDeposit": false,
+                "incomeEnabledDate": "2026-01-02",
+                "lastIncomeDepositDate": null,
+                "lastIncomeLoggedDate": "2026-03-02",
+                "newMonthNotificationEnabled": true,
+                "notificationPermissionGranted": true,
+                "savingsVsOwedEnabled": false,
+                "onboardingComplete": true,
+                "onboardingStep": null,
+                "goalPromptDismissed": true,
+                "catchUpSummaryPending": true,
+                "catchUpDepositCount": 0,
+                "catchUpDepositTotal": 0,
+                "catchUpMonths": 2,
+                "catchUpSwept": 95000,
+                "catchUpEnded": "Gym\tThis recurring expense has ended."
+            },
+            "importState": {
+                "profileId": "sf-p-1",
+                "importedKeys": [
+                    "fit:F-0302",
+                    "syn:2026-03-03|-12.40|mercato verde",
+                    "syn:2026-03-05|-3.20|pos  caffe del molo"
+                ],
+                "payeeRules": {
+                    "mercato verde": "c-groc",
+                    "pos 0412 bar lunafinta": "c-fun"
+                },
+                "importReminderEnabled": false,
+                "importReminderDay": 1,
+                "lastImportDate": "2026-03-21"
+            },
+            "goals": [
+                {
+                    "id": "g-trip",
+                    "profileId": "sf-p-1",
+                    "name": "Trip",
+                    "icon": "plane",
+                    "saved": 40000,
+                    "target": 120000,
+                    "targetDate": null,
+                    "mode": "amount",
+                    "monthly": 10000
+                }
+            ],
+            "categories": [
+                {
+                    "id": "c-groc",
+                    "profileId": "sf-p-1",
+                    "name": "Groceries",
+                    "icon": "cart",
+                    "planned": 30000,
+                    "spent": 6490,
+                    "lastResetMonth": "2026-03"
+                },
+                {
+                    "id": "c-fun",
+                    "profileId": "sf-p-1",
+                    "name": "Fun",
+                    "icon": "star",
+                    "planned": 8000,
+                    "spent": 0,
+                    "lastResetMonth": "2026-02"
+                }
+            ],
+            "recurringExpenses": [
+                {
+                    "id": "r-rent",
+                    "profileId": "sf-p-1",
+                    "name": "Rent",
+                    "icon": "home",
+                    "amount": 95000,
+                    "cadence": "monthly",
+                    "firstDueDate": "2026-01-01",
+                    "dueDate": "2026-04-01",
+                    "dueDate2": null,
+                    "dueDateAnchorDay": 1,
+                    "dateMode": "fixedDate",
+                    "intervalDays": null,
+                    "apportionedShare": null,
+                    "reminderEnabled": true,
+                    "reminderLeadDays": 3,
+                    "lastSweptMonth": "2026-03",
+                    "endDate": null,
+                    "finishedAt": null,
+                    "linkedAccountId": null
+                }
+            ],
+            "accounts": [
+                {
+                    "id": "a-card",
+                    "profileId": "sf-p-1",
+                    "name": "Orbita card",
+                    "icon": "credit-card",
+                    "type": "credit",
+                    "balance": 34000,
+                    "apr": 0.219,
+                    "linkedRecurringExpenseId": null,
+                    "autoUpdateFromPayments": false,
+                    "principal": null,
+                    "interestRate": null,
+                    "termMonths": null,
+                    "rateType": null,
+                    "originationDate": null
+                }
+            ],
+            "transactions": [
+                {
+                    "id": "t-01",
+                    "profileId": "sf-p-1",
+                    "date": "2026-01-05",
+                    "loggedAt": 1767603600000,
+                    "payee": "Opening balance",
+                    "amount": 30000,
+                    "key": "acct:a-card",
+                    "targetLabel": "Orbita card",
+                    "isIncome": false,
+                    "hoursWorked": null,
+                    "rate": null
+                },
+                {
+                    "id": "t-02",
+                    "profileId": "sf-p-1",
+                    "date": "2026-03-01",
+                    "loggedAt": 1772352000000,
+                    "payee": "Recurring sweep",
+                    "amount": 95000,
+                    "key": "rec:r-rent",
+                    "targetLabel": "Rent",
+                    "isIncome": false,
+                    "hoursWorked": null,
+                    "rate": null
+                },
+                {
+                    "id": "t-03",
+                    "profileId": "sf-p-1",
+                    "date": "2026-03-01",
+                    "loggedAt": 1772352300000,
+                    "payee": "Toward Trip",
+                    "amount": 10000,
+                    "key": "goal:g-trip",
+                    "targetLabel": "Trip",
+                    "isIncome": false,
+                    "hoursWorked": null,
+                    "rate": null
+                },
+                {
+                    "id": "t-04",
+                    "profileId": "sf-p-1",
+                    "date": "2026-03-02",
+                    "loggedAt": 1772452800000,
+                    "payee": "Stipendio",
+                    "amount": 145000,
+                    "key": "savings",
+                    "targetLabel": "Savings",
+                    "isIncome": true,
+                    "hoursWorked": null,
+                    "rate": null
+                },
+                {
+                    "id": "t-05",
+                    "profileId": "sf-p-1",
+                    "date": "2026-03-03",
+                    "loggedAt": 1772562600000,
+                    "payee": "MERCATO VERDE",
+                    "amount": 1240,
+                    "key": "cat:c-groc",
+                    "targetLabel": "Groceries",
+                    "isIncome": false,
+                    "hoursWorked": null,
+                    "rate": null
+                },
+                {
+                    "id": "t-06",
+                    "profileId": "sf-p-1",
+                    "date": "2026-03-10",
+                    "loggedAt": 1773169200000,
+                    "payee": "Groceries",
+                    "amount": 4000,
+                    "key": "cat:c-groc",
+                    "targetLabel": "Groceries",
+                    "isIncome": false,
+                    "hoursWorked": null,
+                    "rate": null
+                },
+                {
+                    "id": "t-07",
+                    "profileId": "sf-p-1",
+                    "date": "2026-02-27",
+                    "loggedAt": 1773349200000,
+                    "payee": "BAR LUNAFINTA",
+                    "amount": 750,
+                    "key": "cat:c-groc",
+                    "targetLabel": "Groceries",
+                    "isIncome": false,
+                    "hoursWorked": null,
+                    "rate": null
+                },
+                {
+                    "id": "t-08",
+                    "profileId": "sf-p-1",
+                    "date": "2026-03-15",
+                    "loggedAt": 1773604800000,
+                    "payee": "Correction",
+                    "amount": 500,
+                    "key": "cat:c-groc",
+                    "targetLabel": "Groceries",
+                    "isIncome": false,
+                    "hoursWorked": null,
+                    "rate": null
+                },
+                {
+                    "id": "t-09",
+                    "profileId": "sf-p-1",
+                    "date": "2026-03-18",
+                    "loggedAt": 1773838800000,
+                    "payee": "Charged",
+                    "amount": 4000,
+                    "key": "acct:a-card",
+                    "targetLabel": "Orbita card",
+                    "isIncome": false,
+                    "hoursWorked": null,
+                    "rate": null
+                },
+                {
+                    "id": "t-10",
+                    "profileId": "sf-p-1",
+                    "date": "2026-03-20",
+                    "loggedAt": 1774000800000,
+                    "payee": "Spent from Trip",
+                    "amount": -6000,
+                    "key": "spend:g-trip",
+                    "targetLabel": "Trip",
+                    "isIncome": false,
+                    "hoursWorked": null,
+                    "rate": null
+                }
+            ]
+        }
+    ]
+}

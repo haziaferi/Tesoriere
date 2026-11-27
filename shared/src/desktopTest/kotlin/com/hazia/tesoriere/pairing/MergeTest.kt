@@ -62,7 +62,7 @@ class MergeTest {
     private val coffee = BankRow(on(11), -cents("4.50"), "BAR CENTRALE", null)
 
     private fun recordReceipt(d: ProfileData, file: ReceiptFile, source: PaymentSource = PaymentSource.Savings, id: String = "pay-r") =
-        Receipts.confirm(d, Receipts.setSource(Receipts.open(d, file), source), clock, id)
+        Receipts.confirm(Fixture.receiptApp, d, Receipts.setSource(Receipts.open(d, file), source), clock, id)
 
     /** [rows] recorded on their own, as after a pair suggestion turned down: each under [category], from [source]. */
     private fun recordRows(

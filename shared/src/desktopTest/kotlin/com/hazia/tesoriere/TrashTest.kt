@@ -224,6 +224,17 @@ class TrashTest {
         assertEquals(TrashTidy(listOf("tr-1"), emptyList()), Trash.tidy(listOf(item), LocalDate(2026, 11, 2)), "gone, not warned, past 30 days")
     }
 
+    // SPEC:R121
+    @Test fun `R121 an item whose day is someday and one whose payload is oops neither go nor are due a notice`() {
+        val good = TrashItem("tr-1", Fixture.PROFILE, "category", "Fun", "2026-10-01", Trash.encode(TrashPayload(categories = listOf(category("fun", "Fun")))))
+        val noDay = good.copy(id = "tr-2", deletedOn = "someday")
+        val noPayload = good.copy(id = "tr-3", payload = "{oops")
+        val t = Trash.tidy(listOf(good, noDay, noPayload), LocalDate(2026, 11, 2))
+        assertEquals(listOf("tr-1"), t.gone)
+        assertEquals(emptyList(), t.warn)
+        assertEquals(listOf("tr-2", "tr-3"), t.unreadable)
+    }
+
     // ---- receipts and Profiles ------------------------------------------------------------------
 
     private fun receiptWorld(): ProfileData = world().copy(receiptSettings = Fixture.receiptSettings())
@@ -233,7 +244,7 @@ class TrashTest {
         id, "Mercato Lume", date, line("pasta", "30.00", "ch-groc", "Groceries"), line("soap", "12.30", "ch-home", "Household"),
     )
 
-    private fun recordReceipt(d: ProfileData, file: ReceiptFile, id: String = "pay-r") = Receipts.confirm(d, Receipts.open(d, file), clock, id)
+    private fun recordReceipt(d: ProfileData, file: ReceiptFile, id: String = "pay-r") = Receipts.confirm(Fixture.receiptApp, d, Receipts.open(d, file), clock, id)
 
     private fun folderOf(vararg names: String) = object : ReceiptFolder {
         override fun names() = names.toList()
@@ -289,12 +300,12 @@ class TrashTest {
         clock.setDay(mar10)
         val folder = folderOf("chatelaine-receipt-rc-1.json")
         val parse: (ByteArray) -> ParseResult = { ParseResult.Ok(shop()) }
-        assertEquals(1, ReceiptPickup.waiting(receiptWorld(), folder, parse))
+        assertEquals(1, ReceiptPickup.waiting(Fixture.receiptApp, receiptWorld(), folder, parse))
         val d1 = recordReceipt(receiptWorld(), shop())
         val (after, _) = assertNotNull(Trash.deletePayment(d1, "pay-r", clock, ids))
         assertTrue(after.payments.isEmpty())
         assertEquals(listOf("rc-1"), after.receiptSettings?.recordedReceiptIds)
-        val pickup = ReceiptPickup.scan(after, folder, parse)
+        val pickup = ReceiptPickup.scan(Fixture.receiptApp, after, folder, parse)
         assertEquals(emptyList(), pickup.ready)
         assertEquals(emptyList(), pickup.refused)
     }
@@ -332,7 +343,7 @@ class TrashTest {
         assertEquals(mapOf("ch-pul" to "pul"), p.categoryLinks)
         assertNull(after.receiptSettings?.categoryLinks?.get("ch-pul"))
         val next = Receipts.open(after, receipt("rc-2", "Mercato Lume", mar10, line("sponge", "3.20", "ch-pul", "Pulizia")))
-        assertEquals(ReceiptProblem.UNLINKED, Receipts.problem(after, next))
+        assertEquals(ReceiptProblem.UNLINKED, Receipts.problem(Fixture.receiptApp, after, next))
     }
 
     // SPEC:R42 SPEC:R122
@@ -341,13 +352,13 @@ class TrashTest {
         val base = receiptWorld().let { it.copy(categories = it.categories + category("pul", "Pulizia")) }
         val first = Receipts.open(base, receipt("rc-1", "Mercato Lume", mar10, line("sponge", "3.20", "ch-pul", "Pulizie")))
         assertEquals(listOf<ReviewNote>(ReviewNote.Unlinked("ch-pul")), Receipts.notes(base, first))
-        val d1 = Receipts.confirm(base, Receipts.link(first, "ch-pul", "pul"), clock, "pay-r")
+        val d1 = Receipts.confirm(Fixture.receiptApp, base, Receipts.link(first, "ch-pul", "pul"), clock, "pay-r")
         val (after, p) = assertNotNull(Trash.deleteCategory(d1, "pul"))
         val back = Trash.restore(after, p, clock, ids)
         assertEquals("pul", back.receiptSettings?.categoryLinks?.get("ch-pul"))
         val next = Receipts.open(back, receipt("rc-2", "Mercato Lume", mar10, line("sponge", "3.20", "ch-pul", "Pulizie")))
         assertEquals(listOf<String?>("pul"), next.lineCategories)
-        assertNull(Receipts.problem(back, next))
+        assertNull(Receipts.problem(Fixture.receiptApp, back, next))
     }
 
     // ---- the owner's answers of 2026-11-25 ------------------------------------------------------
@@ -831,6 +842,34 @@ class TrashTest {
         assertEquals(cents("995.50"), paired.savingsAmount)
     }
 
+    // SPEC:R112 SPEC:R127 SPEC:R126
+    @Test fun `R112 a 4_50 receipt payment in a Profile that no longer holds the folder still comes back as its row's pair at 995_50`() {
+        clock.setDay(mar10)
+        val d = recordReceipt(foodWorld(), coffee())
+        val (after, p) = assertNotNull(Trash.deletePayment(d, "pay-r", clock, ids))
+        // as a Profile restored while another holds the folder keeps its settings with none (SPEC R126)
+        val noFolder = after.copy(receiptSettings = after.receiptSettings!!.copy(folder = null))
+        val (withRow, bankId) = recordRow(noFolder, coffeeRow, "food")
+        assertNull(Trash.restoreProblem(withRow, p, pairWith = bankId))
+        val paired = Trash.restore(withRow, p, clock, ids, pairWith = bankId)
+        assertEquals(1, paired.payments.size)
+        assertEquals("rc-1", paired.payments.single().receiptId)
+        assertEquals(listOf("rc-1"), paired.receiptSettings!!.recordedReceiptIds)
+        assertEquals(cents("995.50"), paired.savingsAmount)
+    }
+
+    // SPEC:R112 SPEC:R127
+    @Test fun `R112 a receipt payment restored as a pair in a Profile with no receipt settings leaves it with none`() {
+        clock.setDay(mar10)
+        val d = recordReceipt(foodWorld(), coffee())
+        val (after, p) = assertNotNull(Trash.deletePayment(d, "pay-r", clock, ids))
+        val (withRow, bankId) = recordRow(after.copy(receiptSettings = null), coffeeRow, "food")
+        val paired = Trash.restore(withRow, p, clock, ids, pairWith = bankId)
+        assertEquals("rc-1", paired.payments.single().receiptId)
+        assertNull(paired.receiptSettings)
+        assertEquals(cents("995.50"), paired.savingsAmount)
+    }
+
     // SPEC:R127 SPEC:R119 SPEC:R118
     @Test fun `R127 a 4_50 bank payment deleted, then its receipt recorded, comes back as the receipt's pair at 995_50 with Food at 4_50`() {
         clock.setDay(mar10)
@@ -886,7 +925,7 @@ class TrashTest {
     @Test fun `R127 the pair's own warning comes with its notice, for a receipt charged to a card whose charges are not logged`() {
         clock.setDay(mar10)
         val base = receiptWorld().copy(accounts = listOf(card(payoffCategoryId = "fun")))
-        val d1 = Receipts.confirm(base, Receipts.setSource(Receipts.open(base, shop()), PaymentSource.Account("card")), clock, "pay-r")
+        val d1 = Receipts.confirm(Fixture.receiptApp, base, Receipts.setSource(Receipts.open(base, shop()), PaymentSource.Account("card")), clock, "pay-r")
         val (after, p) = assertNotNull(Trash.deletePayment(d1, "pay-r", clock, ids))
         val (withRow, bankId) = recordRow(after, BankRow(LocalDate(2026, 3, 12), -cents("42.30"), "POS MERCATO LUME 0423", "FIT-12"), "groc")
         assertEquals(listOf<RestoreNotice>(RestoreNotice.PairAvailable(bankId, PaymentNotice.CHARGES_NOT_LOGGED)), Trash.restoreNotices(withRow, p))
@@ -1014,7 +1053,7 @@ class TrashTest {
         val (b1, b2) = d0.payments
         val (after, p) = assertNotNull(Trash.deletePayment(d0, b2.id, clock, ids))
         val trash = listOf(TrashItem("tr-1", Fixture.PROFILE, "payment", "Bar Centrale", mar10.toString(), Trash.encode(p)))
-        val paired = Pairing.pairReceiptWithPayment(after, b1.id, Receipts.open(after, coffee()), null, clock, "tx-pair")
+        val paired = Pairing.pairReceiptWithPayment(Fixture.receiptApp, after, b1.id, Receipts.open(after, coffee()), null, clock, "tx-pair")
         assertEquals("rc-1", paired.payments.single().receiptId)
         val un = Pairing.unpair(paired, b1.id, clock, "tx-un", trash)
         assertNull(un.payments.single().bankKeys)

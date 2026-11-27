@@ -5,6 +5,7 @@ import com.hazia.tesoriere.Fixture.category
 import com.hazia.tesoriere.Fixture.line
 import com.hazia.tesoriere.Fixture.profile
 import com.hazia.tesoriere.Fixture.receipt
+import com.hazia.tesoriere.model.AppState
 import com.hazia.tesoriere.model.ProfileData
 import kotlinx.datetime.LocalDate
 import java.io.File
@@ -48,26 +49,42 @@ class ReceiptPickupTest {
     @Test fun `R29 three new files give three receipts to review and record nothing`() {
         val d = world()
         val folder = MemoryFolder(mapOf("chatelaine-receipt-rc-c.json" to "c", "chatelaine-receipt-rc-a.json" to "a", "chatelaine-receipt-rc-b.json" to "b"))
-        val p = ReceiptPickup.scan(d, folder, parse)
+        val p = ReceiptPickup.scan(Fixture.receiptApp, d, folder, parse)
         assertEquals(listOf("rc-a", "rc-b", "rc-c"), names(p))
         assertEquals(emptyList(), p.refused)
-        assertEquals(3, ReceiptPickup.waiting(d, folder, parse))
+        assertEquals(3, ReceiptPickup.waiting(Fixture.receiptApp, d, folder, parse))
         assertEquals(world(), d)
     }
 
     // SPEC:R30 SPEC:R116
     @Test fun `R30 a recorded receipt id is not shown again`() {
         val d = world(recorded = listOf("rc-a"))
-        val p = ReceiptPickup.scan(d, MemoryFolder(mapOf("chatelaine-receipt-rc-a.json" to "a", "chatelaine-receipt-rc-b.json" to "b")), parse)
+        val p = ReceiptPickup.scan(Fixture.receiptApp, d, MemoryFolder(mapOf("chatelaine-receipt-rc-a.json" to "a", "chatelaine-receipt-rc-b.json" to "b")), parse)
         assertEquals(listOf("rc-b"), names(p))
         assertEquals(emptyList(), p.refused)
         assertEquals(world(recorded = listOf("rc-a")), d)
     }
 
+    // SPEC:R116 SPEC:R112 SPEC:R141
+    @OptIn(kotlin.time.ExperimentalTime::class)
+    @Test fun `R116 a receipt id a payment holds is not offered again while the recorded ids lack it`() {
+        val d = Fixture.profile().let { p ->
+            p.copy(
+                receiptSettings = Fixture.receiptSettings(),
+                payments = listOf(com.hazia.tesoriere.payments.Payment(
+                    "pay-a", Fixture.PROFILE, day, kotlin.time.Instant.parse("2026-11-24T10:00:00Z"), 240, com.hazia.tesoriere.payments.PaymentSource.Savings,
+                    "Mercato Lume", listOf(com.hazia.tesoriere.payments.Part("groc", 240)), receiptId = "rc-a",
+                )),
+            )
+        }
+        val p = ReceiptPickup.scan(Fixture.receiptApp, d, MemoryFolder(mapOf("chatelaine-receipt-rc-a.json" to "a", "chatelaine-receipt-rc-b.json" to "b")), parse)
+        assertEquals(listOf("rc-b"), names(p))
+    }
+
     // SPEC:R30 SPEC:R116
     @Test fun `R30 format version 2 is refused naming version 2`() {
         val d = world()
-        val p = ReceiptPickup.scan(d, MemoryFolder(mapOf("chatelaine-receipt-rc-v2.json" to "v2", "chatelaine-receipt-rc-v3.json" to "v3-ok")), parse)
+        val p = ReceiptPickup.scan(Fixture.receiptApp, d, MemoryFolder(mapOf("chatelaine-receipt-rc-v2.json" to "v2", "chatelaine-receipt-rc-v3.json" to "v3-ok")), parse)
         assertEquals(emptyList(), p.ready)
         assertEquals(
             listOf<Pair<String, Refusal>>("chatelaine-receipt-rc-v2.json" to Refusal.NewerFormat(2), "chatelaine-receipt-rc-v3.json" to Refusal.NewerFormat(3)),
@@ -79,17 +96,17 @@ class ReceiptPickupTest {
     // SPEC:R30 SPEC:R116 SPEC:R47
     @Test fun `R30 a USD receipt in a EUR Profile is refused naming both`() {
         val d = world()
-        val p = ReceiptPickup.scan(d, MemoryFolder(mapOf("chatelaine-receipt-rc-usd.json" to "usd")), parse)
+        val p = ReceiptPickup.scan(Fixture.receiptApp, d, MemoryFolder(mapOf("chatelaine-receipt-rc-usd.json" to "usd")), parse)
         assertEquals(emptyList(), p.ready)
         assertEquals(listOf<Pair<String, Refusal>>("chatelaine-receipt-rc-usd.json" to Refusal.OtherCurrency("USD", "EUR")), p.refused)
-        assertEquals(0, ReceiptPickup.waiting(d, MemoryFolder(mapOf("chatelaine-receipt-rc-usd.json" to "usd")), parse))
+        assertEquals(0, ReceiptPickup.waiting(Fixture.receiptApp, d, MemoryFolder(mapOf("chatelaine-receipt-rc-usd.json" to "usd")), parse))
         assertEquals(world(), d)
     }
 
     // SPEC:R30 SPEC:R116
     @Test fun `R30 an unreadable file is refused`() {
         val d = world()
-        val p = ReceiptPickup.scan(d, MemoryFolder(mapOf("chatelaine-receipt-rc-x.json" to "not a receipt")), parse)
+        val p = ReceiptPickup.scan(Fixture.receiptApp, d, MemoryFolder(mapOf("chatelaine-receipt-rc-x.json" to "not a receipt")), parse)
         assertEquals(emptyList(), p.ready)
         assertEquals(listOf<Pair<String, Refusal>>("chatelaine-receipt-rc-x.json" to Refusal.Unreadable), p.refused)
         assertEquals(world(), d)
@@ -97,7 +114,7 @@ class ReceiptPickupTest {
 
     // SPEC:R116 SPEC:R30
     @Test fun `R116 a receipt id twice in one scan is offered once`() {
-        val p = ReceiptPickup.scan(world(), MemoryFolder(mapOf("copy-of-rc-a.json" to "a-again", "chatelaine-receipt-rc-a.json" to "a")), parse)
+        val p = ReceiptPickup.scan(Fixture.receiptApp, world(), MemoryFolder(mapOf("copy-of-rc-a.json" to "a-again", "chatelaine-receipt-rc-a.json" to "a")), parse)
         assertEquals(listOf("rc-a"), names(p))
         assertEquals(emptyList(), p.refused)
     }
@@ -105,17 +122,19 @@ class ReceiptPickupTest {
     // SPEC:R116
     @Test fun `R116 a name not ending in json is not read`() {
         val folder = MemoryFolder(mapOf("chatelaine-receipt-rc-b.part" to "b", "notes.txt" to "c", "chatelaine-receipt-rc-a.json" to "a"))
-        val p = ReceiptPickup.scan(world(), folder, parse)
+        val p = ReceiptPickup.scan(Fixture.receiptApp, world(), folder, parse)
         assertEquals(listOf("rc-a"), names(p))
         assertEquals(emptyList(), p.refused)
         assertEquals(listOf("chatelaine-receipt-rc-a.json"), folder.reads)
     }
 
     // SPEC:R116 SPEC:R112
-    @Test fun `R116 a Profile that does not hold the receipt folder scans nothing`() {
+    @Test fun `R116 a Profile the app does not keep as the receipt Profile scans nothing, even with a folder in its own settings`() {
         val folder = MemoryFolder(mapOf("chatelaine-receipt-rc-a.json" to "a"))
-        val p = ReceiptPickup.scan(profile(), folder, parse)
-        assertEquals(Pickup(emptyList(), emptyList()), p)
+        val other = AppState(activeProfileId = Fixture.PROFILE, receiptProfileId = "p-other")
+        assertEquals(Pickup(emptyList(), emptyList()), ReceiptPickup.scan(other, world(), folder, parse))
+        assertEquals(Pickup(emptyList(), emptyList()), ReceiptPickup.scan(AppState(activeProfileId = Fixture.PROFILE), world(), folder, parse))
+        assertEquals(0, ReceiptPickup.waiting(other, world(), folder, parse))
         assertEquals(emptyList(), folder.reads)
     }
 
@@ -131,20 +150,20 @@ class ReceiptPickupTest {
                 else -> parse(it)
             }
         }
-        val p = ReceiptPickup.scan(world(), folder, throwing)
+        val p = ReceiptPickup.scan(Fixture.receiptApp, world(), folder, throwing)
         assertEquals(listOf("rc-a"), names(p))
         assertEquals(
             listOf<Pair<String, Refusal>>("chatelaine-receipt-rc-1.json" to Refusal.Unreadable, "chatelaine-receipt-rc-2.json" to Refusal.Unreadable),
             p.refused,
         )
-        assertEquals(1, ReceiptPickup.waiting(world(), folder, throwing))
+        assertEquals(1, ReceiptPickup.waiting(Fixture.receiptApp, world(), folder, throwing))
     }
 
     // SPEC:R116 SPEC:R117
     @Test fun `R116 a file of 3,000 nested arrays read by the real parser is refused and the scan goes on`() {
         val deep = """{"format":1,"x":""" + "[".repeat(3000)
         val folder = MemoryFolder(mapOf("chatelaine-receipt-rc-1.json" to deep, "chatelaine-receipt-rc-2.json" to "a"))
-        val p = ReceiptPickup.scan(world(), folder) { if (it.decodeToString() == "a") parse(it) else ReceiptFileFormat.parse(it) }
+        val p = ReceiptPickup.scan(Fixture.receiptApp, world(), folder) { if (it.decodeToString() == "a") parse(it) else ReceiptFileFormat.parse(it) }
         assertEquals(listOf("rc-a"), names(p))
         assertEquals(listOf<Pair<String, Refusal>>("chatelaine-receipt-rc-1.json" to Refusal.Unreadable), p.refused)
     }
@@ -159,7 +178,7 @@ class ReceiptPickupTest {
             val folder = FileReceiptFolder(dir)
             assertNull(folder.read("chatelaine-receipt-rc-big.json"))
             assertEquals(ReceiptFileFormat.MAX_BYTES, folder.read("chatelaine-receipt-rc-cap.json")!!.size)
-            val p = ReceiptPickup.scan(world(), folder, ReceiptFileFormat::parse)
+            val p = ReceiptPickup.scan(Fixture.receiptApp, world(), folder, ReceiptFileFormat::parse)
             assertEquals(
                 listOf<Pair<String, Refusal>>("chatelaine-receipt-rc-big.json" to Refusal.Unreadable, "chatelaine-receipt-rc-cap.json" to Refusal.Unreadable),
                 p.refused,
@@ -190,7 +209,7 @@ class ReceiptPickupTest {
             assertNull(folder.read("missing.json"))
             assertNull(folder.read("inner"))
             assertNull(folder.read("../outside.json"))
-            assertEquals(listOf("rc-a"), names(ReceiptPickup.scan(world(), folder, parse)))
+            assertEquals(listOf("rc-a"), names(ReceiptPickup.scan(Fixture.receiptApp, world(), folder, parse)))
             assertEquals(setOf("chatelaine-receipt-rc-a.json", "chatelaine-receipt-rc-b.part", "zz-notes.txt", "inner"), dir.list()!!.toSet())
             assertEquals("a", File(dir, "chatelaine-receipt-rc-a.json").readText())
             assertTrue(File(dir, "chatelaine-receipt-rc-b.part").exists())

@@ -322,3 +322,72 @@ Not a source of current rules: `SPEC.md` is. One line per change, newest at the 
 - 2026-11-26 · R129 · added · merging a receipt payment and a bank payment, both recorded, into one pair; the bank payment removed, not trashed · owner
 - 2026-11-26 · R40 · changed · pairing by hand also works between two payments both recorded already, as R129 says · owner
 - 2026-11-26 · R129 · changed · a merge removing a payment whose Goal or Account is in the Trash settles it; that restore is refused, Unpair notwithstanding · owner
+- 2026-11-26 · R130 · added · the backup file: every Profile whole and the Trash as at the export; a restore replaces both · owner
+- 2026-11-26 · R131 · added · reading a backup file whole, with a code for each refusal · builder
+- 2026-11-26 · R132 · added · a backup password with its hint, and a code for each problem · builder
+- 2026-11-26 · R133 · added · the encrypted file, its envelope bound to its app, day and hint, and its codes · builder
+- 2026-11-26 · R130 · changed · the receipt Profile in the file; the folder travels; a restore switches Profiles on for a file of more than one · builder
+- 2026-11-26 · R131 · changed · orphan Trash items left out; Trash records checked as live ones; null only where nothing may be held; encrypted false is plain; receipt Profile · builder
+- 2026-11-26 · R132 · changed · no password while the app lock is on is REQUIRED, decided by the export's check · builder
+- 2026-11-26 · R133 · changed · an export day not of YYYY-MM-DD is DAMAGED · builder
+- 2026-11-26 · R131 · changed · ids checked in the Trash: a deleted Profile's records, payments and removed rows; not other deleted records · builder
+- 2026-11-26 · R134 · added · reading a Sci-Fin backup: no app or no version is Sci-Fin's schema 1, refusals as codes · builder
+- 2026-11-26 · R135 · added · what a Sci-Fin ledger row becomes: payments for cat:, spend: and card charges, Correction rows and sweeps kept · builder
+- 2026-11-26 · R136 · added · a Sci-Fin Profile's new ids, its month mark, Accounts on, no catch-up summary carried · builder
+- 2026-11-26 · R137 · added · a category for each Sci-Fin recurring expense before Confirm · builder
+- 2026-11-26 · R138 · added · Sci-Fin's import memory as plain R26 keys, payee rules under rule names · builder
+- 2026-11-26 · R134 · changed · a Profile with no settings or holding a data object, a blank id, a key naming no id and a spend: row of zero or above are DAMAGED · builder
+- 2026-11-26 · R135 · changed · Starting balance rows stay adjustments; a linked card's sweeps go to R139 · builder
+- 2026-11-26 · R136 · changed · adding beside another Profile switches Profiles on · builder
+- 2026-11-26 · R137 · changed · Confirm also waits for R139's card categories · builder
+- 2026-11-26 · R138 · changed · a synthetic key kept once per Sci-Fin row it stands for; a new FITID twin arrives recorded · builder
+- 2026-11-26 · R139 · added · a Sci-Fin card's fixed payment: a transfer while charges are logged, else charges not logged under a payoff category the review asks for · owner
+- 2026-11-26 · R51 · changed · spend: rows from a Sci-Fin backup become payments (R135) · builder
+- 2026-11-26 · R139 · changed · every card with no charge logged and payoff rows, linked or not; hand payoffs' savings rows filed too; a card with neither needs no category · owner
+- 2026-11-26 · R135 · changed · a card's savings payoff rows go to R139 · builder
+- 2026-11-26 · R137 · changed · Confirm waits for the cards R139 asks a category for · builder
+- 2026-11-26 · R139 · changed · payoffs before a card's first charge filed under a payoff category; Correction, Account closed, Loan finished rows no payment · builder
+- 2026-11-26 · R138 · changed · a known limit named: a hand-logged row with the bank's exact text counts as one more · builder
+- 2026-11-26 · R139 · changed · acceptance: a sweep before the first charge of the same month counts beside that charge · builder
+- 2026-11-26 · R140 · added · Profiles: separate pools; create, switch, rename and delete with codes; the switch on once two Profiles exist · builder
+- 2026-11-26 · R141 · added · one SQLite database; a Profile read and written whole, with its Trash change, in one transaction; unreadable values read as missing · builder
+- 2026-11-26 · R142 · added · every schema version exported with a migration from the one before; version 1 changed in place · builder
+- 2026-11-26 · R143 · added · restoring a backup in one transaction: Profiles, Trash less expired items, open and receipt Profile, switch; lock and copy untouched · builder
+- 2026-11-26 · R112 · changed · the receipt Profile is the one the app keeps, never judged from a Profile's own settings; a pair restore records no new receipt · builder
+- 2026-11-26 · R141 · changed · a payment's bank keys that cannot be read read as none · builder
+- 2026-11-26 · R141 · changed · a value that cannot be read is left as stored, never deleted by a write; a stale or clashing write refused with a code · builder
+- 2026-11-26 · R112 · changed · a payment's receipt id counts as recorded beside the recorded ids · builder
+- 2026-11-26 · R116 · changed · a payment's receipt id counts as recorded; only the receipt Profile the app keeps scans · builder
+- 2026-11-26 · R130 · changed · an export whose file would not read back whole gives a code, not a file · builder
+- 2026-11-26 · R141 · changed · every write starts from the Profile as stored; ID_TWICE; a Profile deleted takes its unreadable records · builder
+- 2026-11-26 · R130 · changed · an export leaves out each record and Trash item that would not read back, naming how many · builder
+- 2026-11-26 · R121 · changed · items whose day or payload cannot be read are named apart and block nothing · builder
+- 2026-11-26 · R130 · changed · an export repairs a payment whose parts no longer add up and a folder outside the receipt Profile, and leaves out orphan Trash items, counted · builder
+- 2026-11-26 · R142 · changed · the destructive fallback weighed and left out: no store is emptied or deleted to open it · builder
+- 2026-11-26 · R144 · added · the damaged-file guard: a store SQLite cannot read moved aside whole, a notice of codes and figures · builder
+- 2026-11-26 · R145 · added · migration snapshots by VACUUM INTO; a newer store left alone; failed snapshot, migration or open give codes · builder
+- 2026-11-27 · R144 · changed · only damage moves a store, BUSY and NOT_CHECKED otherwise; a move safe across a crash, leftover logs moved; a list of notices, an unreadable one owed · builder
+- 2026-11-27 · R145 · changed · version and snapshot through the read-only open; a snapshot written as a part file and renamed once whole · builder
+- 2026-11-27 · R146 · added · the app lock: a PIN of 4 to 6 digits 0 to 9 as a salted hash, waits after wrong PINs, a hint never the PIN, an unreadable row matching nothing · builder
+- 2026-11-27 · R146 · changed · an unreadable row is DAMAGED and a new PIN is asked for; gate, leaving and count are phase 2's; the count saved first and never wrapping · owner
+- 2026-11-27 · R147 · added · the forgotten-PIN erase: the store in one transaction, then the snapshots folder and notices; chosen folders kept; codes for each failure · owner
+- 2026-11-27 · R121 · changed · the forgotten-PIN erase also takes an item before its 30 days · builder
+- 2026-11-27 · R144 · changed · each copy and notice stays until the forgotten-PIN erase · builder
+- 2026-11-27 · R145 · changed · a snapshot is kept until the forgotten-PIN erase · builder
+- 2026-11-27 · R146 · changed · the gate tries a PIN typed at any length of 4 to 6; the stored digit count only shapes the field · builder
+- 2026-11-27 · R147 · changed · never past the store's folder: links and junctions removed alone; a blocked checkpoint is STORE_NOT_COMPACTED; runs to its end once begun · builder
+- 2026-11-27 · R146 · changed · owner answers A/B kept; builder fixes 2 · owner
+- 2026-11-27 · R147 · changed · owner answers A/B kept; builder fixes 2 · owner
+- 2026-11-27 · R148 · added · the automatic copy: weekly once a folder is chosen (R01); safe on a moved clock or bad token; named by day and device; 14 kept; failure codes · builder
+- 2026-11-27 · R148 · changed · turnOn gives weekly, a folder keeps the frequency; an unreadable sealed password writes nothing; later-dated copies go first; names lowercased; refusals coded · builder
+- 2026-11-27 · R130 · changed · an export names each record the store cannot read; notifications granted is the device's own · builder
+- 2026-11-27 · R143 · changed · a restore over records the store cannot read is refused with UNREADABLE_ON_DEVICE until the user agrees; notifications granted kept from the device · builder
+- 2026-11-27 · R141 · changed · unreadable records named at export, deleted by a restore only once agreed; a Trash restore refused with ID_IN_USE or ID_TWICE · builder
+- 2026-11-27 · R136 · changed · notifications granted reads false on a Sci-Fin import · builder
+- 2026-11-27 · R138 · changed · the fixture's made-up payee renamed to BAR LUNAFINTA · builder
+- 2026-11-27 · R148 · changed · NOT_MADE for a backup that could not be made · builder
+- 2026-11-27 · R136 · changed · notifications granted reads as not yet answered (null) on a Sci-Fin import, not false · builder
+- 2026-11-27 · R143 · changed · a Profile new to the device, the file's Trash included, reads notifications as not yet answered · builder
+- 2026-11-27 · R130 · changed · notifications wording follows R143: device's value, else not yet answered · builder
+- 2026-11-27 · R130 · changed · an export with no readable app state opens the first Profile by name, no receipt Profile · builder
+- 2026-11-27 · R143 · changed · the agreement names the records agreed to; a list not the store's at the restore is refused again · builder

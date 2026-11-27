@@ -1,5 +1,6 @@
 package com.hazia.tesoriere.receipts
 
+import com.hazia.tesoriere.model.AppState
 import com.hazia.tesoriere.model.ProfileData
 
 /*
@@ -44,12 +45,13 @@ object ReceiptPickup {
     /**
      * Reads the receipt folder for Profile [d] (SPEC R116): only names ending in `.json`, in name
      * order, each sorted by the first check that fits. A recorded receipt id, or one met in an
-     * earlier file of this scan, is left out. Nothing is written; a Profile that does not hold the
-     * receipt folder (SPEC R112) scans nothing.
+     * earlier file of this scan, is left out. Nothing is written; a Profile other than the receipt
+     * Profile [app] keeps (SPEC R112) scans nothing, whatever its own receipt settings hold.
      */
-    fun scan(d: ProfileData, folder: ReceiptFolder, parse: (ByteArray) -> ParseResult): Pickup {
-        val settings = d.receiptSettings?.takeIf { it.folder != null } ?: return Pickup(emptyList(), emptyList())
-        val recorded = settings.recordedReceiptIds.toHashSet()
+    fun scan(app: AppState, d: ProfileData, folder: ReceiptFolder, parse: (ByteArray) -> ParseResult): Pickup {
+        if (app.receiptProfileId != d.profileId) return Pickup(emptyList(), emptyList())
+        // a payment's receipt id counts as recorded too (SPEC R112, R141)
+        val recorded = (d.receiptSettings?.recordedReceiptIds.orEmpty() + d.payments.mapNotNull { it.receiptId }).toHashSet()
         val seen = HashSet<String>()
         val ready = mutableListOf<ReceiptFile>()
         val refused = mutableListOf<Pair<String, Refusal>>()
@@ -76,5 +78,5 @@ object ReceiptPickup {
     }
 
     /** How many receipts wait for review: the ones a scan finds ready (SPEC R29, R116). */
-    fun waiting(d: ProfileData, folder: ReceiptFolder, parse: (ByteArray) -> ParseResult): Int = scan(d, folder, parse).ready.size
+    fun waiting(app: AppState, d: ProfileData, folder: ReceiptFolder, parse: (ByteArray) -> ParseResult): Int = scan(app, d, folder, parse).ready.size
 }

@@ -26,7 +26,7 @@ sealed class TransactionKey(val stored: String) {
     data class CategoryKey(val id: String) : TransactionKey("cat:$id")
     data class RecurringKey(val id: String) : TransactionKey("rec:$id")
     data class AccountKey(val id: String) : TransactionKey("acct:$id")
-    /** Money spent out of a Goal in Sci-Fin; only read from a Sci-Fin backup (SPEC R19, R51). */
+    /** Money out of a Goal for a payment off an Account (SPEC R51, R89); a Sci-Fin backup's become payments (SPEC R135). */
     data class GoalSpendKey(val id: String) : TransactionKey("spend:$id")
 
     companion object {

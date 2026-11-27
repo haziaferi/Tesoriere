@@ -1,0 +1,231 @@
+package com.hazia.tesoriere.engine
+
+import com.hazia.tesoriere.model.CopySchedule
+import kotlinx.datetime.LocalDate
+
+/*
+ * Ported from Sci-Fin native/shared/src/commonMain/kotlin/app/scifin/app/CopyPlace.kt at 2892110
+ * (CopyEvery), with the engine half of app/AppSession.kt's runCopy and app/AppStore.kt's copy
+ * settings at the same commit. Sci-Fin's app/LocalCopies.kt is the forgotten-PIN erase, which is
+ * ProfileRepository.eraseStore and data/Erase.kt (SPEC R147), so nothing of it is ported here.
+ *
+ * The automatic copy (SPEC R148): a backup file (SPEC R130) written daily or weekly into a folder
+ * the user chose, off on a fresh install (SPEC R18), app-wide and device-only, never in a backup.
+ * Turning it on ([AutoCopy.turnOn]) chooses a folder and weekly: that is R01's weekly backup.
+ *
+ * Kept as in Sci-Fin: choosing a folder ([AutoCopy.withFolder]) keeps the frequency, so a folder
+ * chosen while the copy is off leaves it off; Sci-Fin's setCopyEvery, which asked for the folder
+ * when turning it on, is [AutoCopy.turnOn].
+ *
+ * Changed from Sci-Fin:
+ * - A copy's name holds the device as well as the day, `tesoriere-copy-<day>-<device>.json`, with
+ *   the device made safe for a file name and lowercased ([AutoCopy.deviceName]), so two names never
+ *   differ only in case; [AutoCopy.stale] names only this device's own copies beyond the newest 14,
+ *   those dated after today counted as the oldest, never the day's own. Sci-Fin named a copy by its
+ *   day alone and deleted every copy of its own beyond 14, another device's included, and kept
+ *   copies dated after today as the newest.
+ * - [AutoCopy.contents] takes the schedule: a sealed password the key store no longer gives back is
+ *   PASSWORD_UNREADABLE, and with the app lock on and no password nothing is written (Paused), so a
+ *   plain copy is never written in place of an encrypted one (SPEC R132).
+ * - A refused change gives a code: [AutoCopy.everyProblem] NO_FOLDER, and
+ *   [AutoCopy.withoutPasswordProblem] R132's REQUIRED; Sci-Fin's AppStore returned in silence.
+ * - An unknown frequency token reads as WEEKLY, since only `off` turns the copy off; Sci-Fin read it
+ *   as OFF, which would stop the copies unseen.
+ * - A last copy after today (the clock moved back) or one that is not a `YYYY-MM-DD` day makes a
+ *   copy due; Sci-Fin held the copy back until the clock passed the last copy.
+ * - A failure is a code ([CopyError]) stored as its token, not a sentence; a stored failure of no
+ *   known token reads as NOT_WRITTEN.
+ * - The copies' password is checked with BackupCrypto.exportProblem, R132's codes; Sci-Fin's
+ *   AppStore checked it with passwordProblem and refused in place.
+ * - CopyEvery has no label (SPEC R16). CopyPlace (the folder, writing and listing, the key store),
+ *   CopyFolder, CopyOutcome and the run itself are platform work for phase 2 (SPEC R44).
+ * - Section references are replaced by SPEC rule numbers.
+ */
+
+/** How often the automatic copy runs (SPEC R148), its stored token and its days between copies. */
+enum class CopyEvery(val token: String, val days: Int) {
+    OFF("off", 0), DAILY("daily", 1), WEEKLY("weekly", 7);
+
+    companion object {
+        /** The frequency a stored token names; any token but `off` that is not known reads as [WEEKLY]. */
+        fun of(token: String): CopyEvery = entries.firstOrNull { it.token == token } ?: WEEKLY
+    }
+}
+
+/** Why the last copy was not written (SPEC R148), and its stored token. */
+enum class CopyError(val token: String) {
+    /** The folder cannot be reached or read: moved, removed, or the app's access withdrawn. */
+    FOLDER_UNREACHABLE("folder_unreachable"),
+
+    /** The copy could not be written: the folder is read-only or full. */
+    NOT_WRITTEN("not_written"),
+
+    /** The copies' password cannot be read back from this device's key store. */
+    PASSWORD_UNREADABLE("password_unreadable"),
+
+    /** The backup itself could not be made: the export gave a code in place of a file, or found no Profile (SPEC R130). */
+    NOT_MADE("not_made");
+
+    companion object {
+        /** The failure a stored token names; a token not known still records a failure, [NOT_WRITTEN]. */
+        fun of(token: String): CopyError = entries.firstOrNull { it.token == token } ?: NOT_WRITTEN
+    }
+}
+
+/** Why a change to the schedule is refused (SPEC R148). */
+enum class CopyProblem {
+    /** The copy cannot be on with no folder chosen; the app asks for one first. */
+    NO_FOLDER,
+}
+
+/** What a copy writes, or why it writes nothing (SPEC R148). */
+sealed interface CopyText {
+    /** The file's text: the backup, or its encrypted file under the copies' password. */
+    data class Ready(val text: String) : CopyText
+
+    /** A failure to record (AutoCopy.afterFailure). */
+    data class Failed(val error: CopyError) : CopyText
+
+    /** The app lock is on and the copies have no password: nothing is written, nothing is a failure (SPEC R132). */
+    data object Paused : CopyText
+}
+
+object AutoCopy {
+    const val PREFIX = "tesoriere-copy-"
+    const val SUFFIX = ".json"
+
+    /** This device's copies kept in the folder; older ones of its own are deleted. */
+    const val KEPT = 14
+
+    /** The longest device name a copy's name holds. */
+    const val DEVICE_MAX = 32
+
+    /** A copy's name when the device gives no name. */
+    const val NO_DEVICE = "device"
+
+    /** The frequency of [s]; no row is [CopyEvery.OFF]. */
+    fun every(s: CopySchedule?): CopyEvery = s?.let { CopyEvery.of(it.every) } ?: CopyEvery.OFF
+
+    /** The day of the last copy written, or null when none is recorded or it is not a `YYYY-MM-DD` day. */
+    fun lastCopy(s: CopySchedule?): LocalDate? = s?.lastCopy?.let(BackupJson::day)
+
+    /** The last attempt's failure, or null after a success or before any attempt. */
+    fun lastError(s: CopySchedule?): CopyError? = s?.lastError?.let(CopyError::of)
+
+    /**
+     * Whether a copy is due on [today] (SPEC R148): on, with a folder, and with no last copy that can
+     * be trusted (none, unreadable, or after today) or at least its days since the last.
+     */
+    fun due(s: CopySchedule?, today: LocalDate): Boolean {
+        if (s?.folder == null) return false
+        val every = every(s)
+        if (every == CopyEvery.OFF) return false
+        val last = lastCopy(s) ?: return true
+        return last > today || last.daysTo(today) >= every.days
+    }
+
+    /** Whether the copies are held back: on, with the app lock on and no password of their own (SPEC R132). */
+    fun paused(s: CopySchedule?, lockOn: Boolean): Boolean =
+        s != null && lockOn && s.sealedPassword == null && every(s) != CopyEvery.OFF
+
+    /**
+     * [s] with the folder chosen, at the frequency it had, off included, as in Sci-Fin; the last
+     * failure cleared, since the new folder has not failed.
+     */
+    fun withFolder(s: CopySchedule?, folder: String, label: String): CopySchedule =
+        (s ?: CopySchedule()).copy(folder = folder, folderLabel = label, lastError = null, failureNotified = false)
+
+    /** Turning the copy on: the folder chosen and the copy weekly, which is R01's weekly backup. */
+    fun turnOn(s: CopySchedule?, folder: String, label: String): CopySchedule =
+        withFolder(s, folder, label).copy(every = CopyEvery.WEEKLY.token)
+
+    /** Why [s] cannot be set to [every]: on with no folder chosen is NO_FOLDER; null when it can. */
+    fun everyProblem(s: CopySchedule?, every: CopyEvery): CopyProblem? =
+        if (every != CopyEvery.OFF && s?.folder == null) CopyProblem.NO_FOLDER else null
+
+    /** [s] at [every]; unchanged when [everyProblem] gives a code. */
+    fun withEvery(s: CopySchedule?, every: CopyEvery): CopySchedule {
+        val base = s ?: CopySchedule()
+        return if (everyProblem(s, every) != null) base else base.copy(every = every.token)
+    }
+
+    /** What stops [password] from protecting the copies: R132's check for an export, the same codes. */
+    fun passwordProblem(lockOn: Boolean, password: String?, again: String, hint: String): PasswordProblem? =
+        BackupCrypto.exportProblem(lockOn, password, again, hint)
+
+    /** [s] with the password the key store sealed and its hint, kept trimmed. The caller checked [passwordProblem]. */
+    fun withPassword(s: CopySchedule?, sealed: String, hint: String): CopySchedule =
+        (s ?: CopySchedule()).copy(sealedPassword = sealed, hint = hint.trim())
+
+    /** Why the copies cannot go back to plain: R132's REQUIRED while the app lock is on; null when they can. */
+    fun withoutPasswordProblem(lockOn: Boolean): PasswordProblem? = if (lockOn) PasswordProblem.REQUIRED else null
+
+    /** [s] back to plain copies; unchanged when [withoutPasswordProblem] gives a code. */
+    fun withoutPassword(s: CopySchedule, lockOn: Boolean): CopySchedule =
+        if (withoutPasswordProblem(lockOn) != null) s else s.copy(sealedPassword = null, hint = null)
+
+    /**
+     * [device] as a copy's name holds it: its ASCII letters lowercased, its digits, `-` and `_`, every
+     * other character `_`, at most [DEVICE_MAX]; [NO_DEVICE] when it is empty. No name made so holds a
+     * character a file name on Android or Windows cannot, nor a dot, and no two differ only in case.
+     */
+    fun deviceName(device: String): String {
+        if (device.isEmpty()) return NO_DEVICE
+        return device.map { c ->
+            when (c) {
+                in 'A'..'Z' -> c + ('a' - 'A')
+                in 'a'..'z', in '0'..'9', '-', '_' -> c
+                else -> '_'
+            }
+        }.joinToString("").take(DEVICE_MAX)
+    }
+
+    /**
+     * The copy's name for [today] from [device]: one per day and device name, so no copy replaces
+     * one of another day; a second copy on the same day from the same device replaces the day's.
+     */
+    fun fileName(today: LocalDate, device: String): String = "$PREFIX$today-${deviceName(device)}$SUFFIX"
+
+    /**
+     * The names in [names] to delete after a copy on [today]: this device's own copies beyond the
+     * newest [KEPT], oldest first, those dated after today (a clock that ran ahead) counted as the
+     * oldest of all, and never the day's own. A name that is not exactly one of [fileName]'s for
+     * this device, a `YYYY-MM-DD` day and this device's name, is never named.
+     */
+    fun stale(names: List<String>, device: String, today: LocalDate): List<String> {
+        val tail = "-${deviceName(device)}$SUFFIX"
+        val ours = names.distinct().mapNotNull { n ->
+            if (!n.startsWith(PREFIX) || !n.endsWith(tail) || n.length < PREFIX.length + tail.length) return@mapNotNull null
+            BackupJson.day(n.substring(PREFIX.length, n.length - tail.length))?.let { it to n }
+        }.sortedWith(compareBy<Pair<LocalDate, String>> { it.first <= today }.thenBy { it.first })
+        val own = fileName(today, device)
+        return ours.dropLast(KEPT).map { it.second }.filter { it != own }
+    }
+
+    /**
+     * What a copy of [s] writes on [today] (SPEC R148), given the backup's [plain] text (SPEC R130),
+     * the password the key store gave back for [s]'s sealed one ([unsealed], null when it gave none)
+     * and whether the app lock is on: with a sealed password, the encrypted file of SPEC R133 under
+     * it and [s]'s hint, or PASSWORD_UNREADABLE when none came back; with none, nothing while the
+     * lock is on (Paused, SPEC R132), else the plain text. A copy is never plain while [s] holds a
+     * sealed password, and [unsealed] is not used when it holds none.
+     */
+    fun contents(s: CopySchedule, plain: String, unsealed: String?, lockOn: Boolean, today: LocalDate): CopyText = when {
+        s.sealedPassword != null ->
+            if (unsealed.isNullOrEmpty()) CopyText.Failed(CopyError.PASSWORD_UNREADABLE)
+            else CopyText.Ready(BackupCrypto.encrypt(plain, unsealed, s.hint.orEmpty(), today))
+        lockOn -> CopyText.Paused
+        else -> CopyText.Ready(plain)
+    }
+
+    /** [s] after a copy written on [today]: its day recorded, the failure and its notice cleared. */
+    fun afterSuccess(s: CopySchedule, today: LocalDate): CopySchedule =
+        s.copy(lastCopy = today.toString(), lastError = null, failureNotified = false)
+
+    /** [s] after a failed copy: [error] recorded and the run's notice marked given; the last good copy kept. */
+    fun afterFailure(s: CopySchedule, error: CopyError): CopySchedule =
+        s.copy(lastError = error.token, failureNotified = true)
+
+    /** Whether a failure now owes a notice: the first of a run of failures (SPEC R148). */
+    fun noticeOwed(s: CopySchedule): Boolean = !s.failureNotified
+}

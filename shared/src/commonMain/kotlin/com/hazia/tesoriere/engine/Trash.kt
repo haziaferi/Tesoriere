@@ -60,8 +60,9 @@ import kotlinx.serialization.json.Json
  *   (SPEC R54), refuses the restore with a code ([RestoreProblem], owner answer of 2026-11-25).
  *   A payment whose other side of a pair was recorded while it was in the Trash, a receipt's or a
  *   bank row's, is noted ([RestoreNotice.PairAvailable]) and may come back as that payment's pair,
- *   through Pairing.pairReceiptWithPayment or Pairing.pairBankWithPayment, so the purchase counts
- *   once; a receipt side keeps its own parts (SPEC R127).
+ *   through Pairing.pairReceiptIn or Pairing.pairBankWithPayment, so the purchase counts
+ *   once; a receipt side keeps its own parts (SPEC R127), and is paired in its own Profile, the
+ *   receipt Profile or not, since it records no new receipt (SPEC R112).
  * - A category's delete removes its category links and keeps them ([TrashPayload.categoryLinks]),
  *   and takes another category for the recurring expenses and Accounts that file under it (SPEC
  *   R42, R123); restore brings the links back, never the moved expenses.
@@ -162,8 +163,12 @@ sealed interface RestoreNotice {
     data class PairAvailable(val paymentId: String, val notice: PaymentNotice? = null) : RestoreNotice
 }
 
-/** What the Trash's daily look finds (SPEC R121): items to go for good, and items due their one notice. Trash item ids. */
-data class TrashTidy(val gone: List<String>, val warn: List<String>)
+/**
+ * What the Trash's daily look finds (SPEC R121): items to go for good, items due their one notice,
+ * and apart the items whose day or payload cannot be read, which block nothing and can be deleted
+ * for good. Trash item ids.
+ */
+data class TrashTidy(val gone: List<String>, val warn: List<String>, val unreadable: List<String> = emptyList())
 
 object Trash {
     const val KEPT_DAYS = 30
@@ -180,19 +185,21 @@ object Trash {
 
     /**
      * The daily look at the Trash (SPEC R121): items 30 days old or more go; items 20 days old or
-     * more, not yet warned and not going, are due their one notice. An item whose day cannot be
-     * read is left alone. Marking an item warned and removing one are the caller's.
+     * more, not yet warned and not going, are due their one notice. An item whose day or payload
+     * cannot be read is named apart, and neither goes nor is due a notice. Marking an item warned and
+     * removing one are the caller's.
      */
     fun tidy(items: List<TrashItem>, today: LocalDate): TrashTidy {
-        val gone = ArrayList<String>(); val warn = ArrayList<String>()
+        val gone = ArrayList<String>(); val warn = ArrayList<String>(); val unreadable = ArrayList<String>()
         for (t in items) {
-            val on = runCatching { LocalDate.parse(t.deletedOn) }.getOrNull() ?: continue
+            val on = runCatching { LocalDate.parse(t.deletedOn) }.getOrNull()
+            if (on == null || decode(t.payload) == null) { unreadable += t.id; continue }
             when {
                 expired(on, today) -> gone += t.id
                 !t.warned && warnDue(on, today) -> warn += t.id
             }
         }
-        return TrashTidy(gone, warn)
+        return TrashTidy(gone, warn, unreadable)
     }
 
     /** The ids of Profile [profileId]'s categories in the Trash, for Spending's deleted slices (SPEC R124). */
@@ -506,7 +513,7 @@ object Trash {
                 val named = pay.parts.filter { !it.difference }.mapNotNull { it.categoryId } + pay.receiptLines.map { it.categoryId }
                 if (named.any { it !in live } && (replacement == null || replacement !in live)) return RestoreProblem.CATEGORY_MISSING
                 val (review, parts) = receiptSideOf(d, pay, replacement) ?: return RestoreProblem.CANNOT_PAIR
-                RestoreProblem.CANNOT_PAIR.takeIf { Pairing.receiptPairProblem(unrecorded(d, pay), pairWith, review, differenceFor(d, pay, differenceCategoryId), parts) != null }
+                RestoreProblem.CANNOT_PAIR.takeIf { Pairing.receiptPairProblemIn(unrecorded(d, pay), pairWith, review, differenceFor(d, pay, differenceCategoryId), parts) != null }
             }
             // the receipt payment completed may hold a part under a category gone: [replacement] takes its place (SPEC R119)
             Side.BANK -> when (Pairing.bankPairProblem(unimported(d, pay), pairWith, reviewRow(pay), differenceCategoryId, twinRows(d, p, pay), replacement)) {
@@ -520,7 +527,7 @@ object Trash {
 
     /**
      * [pay] back as the pair of [pairWith] (SPEC R119, R127). A receipt side completes a bank row's
-     * payment through Pairing.pairReceiptWithPayment, with its own parts less any difference part,
+     * payment through Pairing.pairReceiptIn, with its own parts less any difference part,
      * its lines in the categories they were filed under, a category gone taking [replacement], and
      * the links kept; a bank row's payment completes a receipt payment through
      * Pairing.pairBankWithPayment, with its keys and its amount. The recorded receipt ids and the
@@ -533,10 +540,10 @@ object Trash {
     ): ProfileData = when (sideOf(pay)) {
         Side.RECEIPT -> {
             val (review, parts) = requireNotNull(receiptSideOf(d, pay, replacement))
-            val paired = Pairing.pairReceiptWithPayment(unrecorded(d, pay), pairWith, review, differenceFor(d, pay, differenceCategoryId), clock, txId, parts)
+            val paired = Pairing.pairReceiptIn(unrecorded(d, pay), pairWith, review, differenceFor(d, pay, differenceCategoryId), clock, txId, parts)
             val keys = pay.bankKeys?.let { StatementImport.withoutRow(d.importState.importedKeys, d.payments, it) } ?: d.importState.importedKeys
             paired.copy(
-                receiptSettings = paired.receiptSettings?.copy(recordedReceiptIds = d.receiptSettings!!.recordedReceiptIds),
+                receiptSettings = paired.receiptSettings?.let { s -> s.copy(recordedReceiptIds = d.receiptSettings?.recordedReceiptIds ?: s.recordedReceiptIds) },
                 importState = paired.importState.copy(importedKeys = keys),
             )
         }

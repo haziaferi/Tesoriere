@@ -44,7 +44,7 @@ class OpenReviewTest {
     }
 
     private fun recordReceipt(d: ProfileData, id: String) =
-        Receipts.confirm(d, Receipts.setSource(Receipts.open(d, receipt("rc-$id", "Bar Centrale", day, line("caffe", "4.50", "ch-food", "Food"))), PaymentSource.Savings), clock, id)
+        Receipts.confirm(Fixture.receiptApp, d, Receipts.setSource(Receipts.open(d, receipt("rc-$id", "Bar Centrale", day, line("caffe", "4.50", "ch-food", "Food"))), PaymentSource.Savings), clock, id)
 
     /** The first coffee recorded from a statement as B-1, then deleted to the Trash, which keeps its row recorded (SPEC R125). */
     private fun deletedCoffee(a: BankRow): Pair<ProfileData, com.hazia.tesoriere.engine.TrashPayload> {

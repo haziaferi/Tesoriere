@@ -2,6 +2,7 @@ package com.hazia.tesoriere
 
 import com.hazia.tesoriere.engine.Recurring
 import com.hazia.tesoriere.model.Cadence
+import com.hazia.tesoriere.model.AppState
 import com.hazia.tesoriere.model.Category
 import com.hazia.tesoriere.model.DateMode
 import com.hazia.tesoriere.model.Goal
@@ -61,6 +62,9 @@ object Fixture {
 
     /** The receipt settings of the receipt Profile (SPEC R112), with a made-up folder handle. */
     fun receiptSettings(folder: String? = "folder-handle-1") = ReceiptSettings(PROFILE, folder)
+
+    /** The app's state, which keeps [PROFILE] as the receipt Profile (SPEC R112). */
+    val receiptApp = AppState(activeProfileId = PROFILE, receiptProfileId = PROFILE)
 
     /** One receipt line as Chatelaine's spec, rule 123, has it: [price] is the whole line's price paid. */
     fun line(name: String, price: String, chatelaineId: String, chatelaineName: String, pack: String? = null, quantity: Int = 1) =
