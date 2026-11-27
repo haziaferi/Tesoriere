@@ -232,7 +232,7 @@ object Backup {
                 }
             }
             leftOut += d.transactions.size - rows.size
-            val s = d.receiptSettings
+            val s = recording(d.profileId, d.receiptSettings, d.payments.filter { repairedPayment(it) == null })
             val settings = if (s?.folder != null && d.profileId != receipt) { repaired++; s.copy(folder = null) } else s
             d.copy(transactions = rows, payments = pays, receiptSettings = settings)
         }
@@ -294,6 +294,18 @@ object Backup {
         else -> pay.copy(parts = listOf(Part(null, pay.total)))
     }
 
+    /**
+     * [s] of Profile [profileId] with the receipt id of each payment in [dropped] among its recorded
+     * receipts (SPEC R30), so a receipt whose payment an export leaves out is never offered again;
+     * receipt settings made for them when there were none, and [s] as it is when none adds an id.
+     */
+    private fun recording(profileId: String, s: ReceiptSettings?, dropped: List<Payment>): ReceiptSettings? {
+        val held = s?.recordedReceiptIds.orEmpty()
+        val more = dropped.mapNotNull { it.receiptId }.distinct().filter { it !in held }
+        if (more.isEmpty()) return s
+        return (s ?: ReceiptSettings(profileId)).copy(recordedReceiptIds = held + more)
+    }
+
     /** A Trash payload with its payments repaired, how many were, and how many 0.00 ones a deleted Profile dropped. */
     private class RepairedPayload(val payload: TrashPayload, val repaired: Int, val dropped: Int)
 
@@ -321,6 +333,7 @@ object Backup {
                     }
                     r
                 },
+                receiptSettings = recording(tp.profile.id, tp.receiptSettings, tp.payments.filter { repairedPayment(it) == null }),
             )
         }
         if (repaired + dropped == 0) return RepairedPayload(p, 0, 0)

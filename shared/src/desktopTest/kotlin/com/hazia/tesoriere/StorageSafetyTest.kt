@@ -385,6 +385,50 @@ class StorageSafetyTest {
         }
     }
 
+    // SPEC:R130 SPEC:R30 SPEC:R126
+    @Test fun `R130 a deleted Profile's 0_00 payment of receipt rc-b that does not add up is dropped, and rc-b stays recorded so the receipt is not offered again`() {
+        val b = ProfileData.fresh("p-b", "B").let { d ->
+            d.copy(
+                categories = listOf(Category("b-groc", "p-b", "Groceries")),
+                payments = listOf(
+                    Payment("pay-z", "p-b", nov26, at, 0, PaymentSource.Savings, "Shop", listOf(Part("b-groc", cents("1.00")))).copy(receiptId = "rc-b"),
+                    Payment("pay-b2", "p-b", nov26, at, cents("8.00"), PaymentSource.Savings, "Shop", listOf(Part("b-groc", cents("8.00")))),
+                ),
+            )
+        }
+        val item = com.hazia.tesoriere.model.TrashItem(
+            "tr-b", "p-b", ProfileRepository.PROFILE_KIND, "B", "2026-11-20",
+            Trash.encode(com.hazia.tesoriere.engine.TrashPayload(profile = com.hazia.tesoriere.engine.TrashedProfile.of(b))),
+        )
+        val ok = withRepo(TestDb.file()) { repo, db ->
+            repo.createProfile("A", "p-a")
+            db.dao().insertTrashItem(item)
+            assertIs<Export.Ok>(repo.backupFile(nov26))
+        }
+        assertEquals(1, ok.leftOut)
+        val read = assertIs<BackupResult.Ok>(Backup.validate(ok.text)).backup
+        withRepo(TestDb.file()) { repo, db ->
+            assertEquals(Applied.Restored, Backup.apply(db, read, nov26))
+            val back = assertIs<TrashRestore.Restored>(repo.restore("tr-b")).data
+            assertEquals(listOf("pay-b2"), back.payments.map { it.id })
+            assertEquals(listOf("rc-b"), back.receiptSettings!!.recordedReceiptIds)
+        }
+    }
+
+    // SPEC:R130 SPEC:R30
+    @Test fun `R130 a Profile's 0_00 payment of receipt rc-1 that does not add up is left out, and rc-1 stays recorded in the file`() {
+        val file = TestDb.file()
+        withRepo(file) { repo, _ -> repo.save(profileA(repo.createProfile("A", "p-a")).let { it.copy(receiptSettings = it.receiptSettings!!.copy(recordedReceiptIds = emptyList())) }) }
+        TestDb.damage(file, "UPDATE payments SET total = 0 WHERE id = 'pay-2'")
+        withRepo(file) { repo, _ ->
+            val ok = assertIs<Export.Ok>(repo.backupFile(nov26))
+            assertEquals(1, ok.leftOut)
+            val a = assertIs<BackupResult.Ok>(Backup.validate(ok.text)).backup.profiles.single()
+            assertEquals(listOf("pay-1"), a.payments.map { it.id })
+            assertEquals(listOf("rc-1"), a.receiptSettings!!.recordedReceiptIds)
+        }
+    }
+
     // SPEC:R130 SPEC:R112
     @Test fun `R130 a Profile that is not the receipt Profile but names a folder exports with no folder`() {
         withRepo(TestDb.file()) { repo, db ->

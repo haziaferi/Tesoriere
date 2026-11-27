@@ -25,6 +25,7 @@ import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFails
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
@@ -380,6 +381,28 @@ class IntegrityTest {
             .flatMap { app -> app.walkTopDown().filter { it.isFile && it.extension in setOf("kt", "java") && "build" !in it.relativeTo(app).invariantSeparatorsPath.split('/') }.toList() }
         val found = sources.flatMap { f -> f.readLines().withIndex().filter { around.containsMatchIn(it.value) }.map { "${f.path}:${it.index + 1}: ${it.value.trim()}" } }
         assertEquals(emptyList(), found)
+    }
+
+    // SPEC:R144
+    @Test fun `R144 damage Room meets past the guard reaches the repository's caller as a SQLiteException and deletes nothing`() {
+        val file = TestDb.file()
+        healthy(file)
+        val pages = file.length()
+        RandomAccessFile(file, "rw").use { f -> f.seek(4096L); f.write(ByteArray((pages - 4096).toInt()) { 0x5A }) }
+        val before = file.readBytes()
+        val db = com.hazia.tesoriere.data.buildTesoriereDatabase(file)
+        val e = try {
+            assertFails { runBlocking { ProfileRepository(db, TestClock(day), Ids("d")::next).load("p-ana") } }
+        } finally {
+            db.close()
+        }
+        assertTrue(generateSequence(e) { it.cause }.any { it is SQLiteException }, "$e")
+        assertTrue(file.isFile)
+        assertContentEquals(before, file.readBytes())
+        assertFalse(snapshots(file).exists())
+        // the guard of the next start, in a new process, moves it aside, as the CHECK_FAILED case
+        // shows; a guard run in this same process gave NOT_MOVED on Windows, most likely as the
+        // failed open still holds the file, which is why the app restarts rather than reopens
     }
 
     // SPEC:R144
